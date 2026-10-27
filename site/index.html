@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deseret Docket</title>
+<meta name="robots" content="noindex">
+
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<style>
+/* Layout: legislative-tracker workbench; white masthead, slate-blue ground, serif bill titles over sans data */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface-2:#f0f2f6; --ink:#1b2738; --muted:#5b6676; --line:#dfe3ea; --field:#b9c0cb;
+  --link:#1e5591; --accent:#1f3a5f; --on-accent:#ffffff; --bar:#1f3a5f; --on-bar:#ffffff;
+  --green:#1f7a3f; --green-bg:#e8f1e9; --green-line:#9cc7a6;
+  --red:#b42318; --red-bg:#fff5f4; --red-line:#f2b8b5;
+  --amber:#fff4d6; --amber-line:#f0c95a; --amber-ink:#8a5a00;
+  --blue-bg:#f2f7fc; --blue-line:#b7cde6; --mark:#fff0a8; --mark-ink:#1b2738;
+  --toast:#1b2738; --on-toast:#ffffff; --honey:#e3a52a; --honey-line:#8a5a00;
+  --crim:#b3222a; --crim-bg:#fdecec; --civil:#1d5fae; --civil-bg:#e8f0fb; --pp:#6b3ea6; --pp-bg:#f2ebfa; --app:#b85a0a; --app-bg:#fdefe2;
+  --hp:#a0125c; --hp-bg:#fbe6f0; --pri:#7d5c00; --pri-bg:#fff2bf; --watch:#0a6e68; --watch-bg:#dff3f1; --nr:#5b6676; --nr-bg:#eef0f3;
+  --serif:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11161e; --surface:#19202b; --surface-2:#222b38; --ink:#e4e9f0; --muted:#9aa5b4; --line:#2c3644; --field:#475365;
+  --link:#8ab8ee; --accent:#7fa6d6; --on-accent:#0f1620; --bar:#0b1018; --on-bar:#e4e9f0;
+  --green:#7cc98f; --green-bg:#16301f; --green-line:#2f6b40;
+  --red:#f08a80; --red-bg:#341a18; --red-line:#6e2e28;
+  --amber:#33280f; --amber-line:#7a5d1c; --amber-ink:#f0c95a;
+  --blue-bg:#172536; --blue-line:#2f4a6b; --mark:#5c4d10; --mark-ink:#fff6cf;
+  --toast:#e4e9f0; --on-toast:#11161e; --honey:#e8b04a; --honey-line:#f3d08a; --crim:#ff8a8f; --crim-bg:#3a1719; --civil:#86b6f2; --civil-bg:#142a45; --pp:#c4a2f2; --pp-bg:#2a1d3f; --app:#f7ad6a; --app-bg:#3a2510; --hp:#f58ac0; --hp-bg:#3c1429; --pri:#f2cf5b; --pri-bg:#3a3010; --watch:#6fd6cc; --watch-bg:#11332f; --nr:#9aa5b4; --nr-bg:#232b37; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161e; --surface:#19202b; --surface-2:#222b38; --ink:#e4e9f0; --muted:#9aa5b4; --line:#2c3644; --field:#475365;
+  --link:#8ab8ee; --accent:#7fa6d6; --on-accent:#0f1620; --bar:#0b1018; --on-bar:#e4e9f0;
+  --green:#7cc98f; --green-bg:#16301f; --green-line:#2f6b40;
+  --red:#f08a80; --red-bg:#341a18; --red-line:#6e2e28;
+  --amber:#33280f; --amber-line:#7a5d1c; --amber-ink:#f0c95a;
+  --blue-bg:#172536; --blue-line:#2f4a6b; --mark:#5c4d10; --mark-ink:#fff6cf;
+  --toast:#e4e9f0; --on-toast:#11161e; --honey:#e8b04a; --honey-line:#f3d08a; --crim:#ff8a8f; --crim-bg:#3a1719; --civil:#86b6f2; --civil-bg:#142a45; --pp:#c4a2f2; --pp-bg:#2a1d3f; --app:#f7ad6a; --app-bg:#3a2510; --hp:#f58ac0; --hp-bg:#3c1429; --pri:#f2cf5b; --pri-bg:#3a3010; --watch:#6fd6cc; --watch-bg:#11332f; --nr:#9aa5b4; --nr-bg:#232b37; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5}
+a{color:var(--link)}
+:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+button,input,select,textarea{font:inherit;color:inherit}
+.gut{padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.demo-bar{background:var(--bar);color:var(--on-bar);font-size:13px;padding-block:6px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.demo-bar b{font-weight:600}
+.demo-bar button{background:var(--on-bar);color:var(--bar);border:0;border-radius:4px;padding:3px 10px;font-size:13px;cursor:pointer;font-weight:600}
+.demo-bar button.ghost{background:transparent;color:var(--on-bar);border:1px solid var(--on-bar)}
+.demo-bar .sp{flex:1}
+header.top{background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:stretch;column-gap:24px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-weight:600;font-size:18px;color:var(--ink);text-decoration:none;padding-block:14px}
+.brand svg{width:28px;height:28px;flex:none}
+.brand svg .band{fill:var(--honey);stroke:var(--honey-line);stroke-width:.8}
+.brand svg .door{fill:var(--ink)}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
+nav.tabs a{display:flex;align-items:center;padding:0 10px;color:var(--muted);text-decoration:none;font-size:17px;border-bottom:3px solid transparent;min-height:58px}
+nav.tabs a:hover{color:var(--ink)}
+nav.tabs a.on{color:var(--ink);font-weight:500;border-bottom-color:var(--accent)}
+.right{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:14px}
+select,.field input,.field textarea,.addrow input,.login input,.side textarea{background:var(--surface);border:1px solid var(--field);border-radius:5px}
+.right select{padding:4px 8px;border-radius:4px}
+.right .user{font-weight:600;text-decoration:none;color:var(--ink)}
+.linkbtn{background:none;border:0;color:var(--link);text-decoration:underline;cursor:pointer;padding:0;font-size:inherit}
+main{max-width:1132px;padding-block:28px 80px}
+h1{font-family:var(--serif);font-size:34px;line-height:1.15;margin:8px 0;font-weight:700;text-wrap:balance}
+h2{font-family:var(--serif);font-size:21px;margin:0 0 6px;font-weight:600}
+.lede{color:var(--muted);max-width:740px;margin:0 0 20px}
+.muted{color:var(--muted)} .small{font-size:14px}
+.stats{display:flex;gap:28px;margin:20px 0 40px;font-size:14px}
+.stats div span{display:block;color:var(--muted)}
+form.filters{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px}
+.field label{display:block;font-weight:600;font-size:15px;margin-bottom:6px}
+.field select,.field input,.field textarea{padding:9px 12px;min-height:42px}
+.field.grow{flex:1;min-width:200px}.field.grow input{width:100%}
+.btn{background:var(--surface);border:1px solid var(--field);border-radius:5px;padding:8px 16px;cursor:pointer;font-weight:500}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.sm{padding:3px 10px;font-size:13px}
+.btn.on{background:var(--green-bg);border-color:var(--green-line);color:var(--green)}
+.plain{font-weight:600;padding:8px 6px;background:none;border:0;color:var(--link);cursor:pointer}
+.csvbox{width:100%;min-height:140px;font-family:ui-monospace,Menlo,monospace;font-size:12px;margin-bottom:16px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:14px;color:var(--muted);font-weight:500;padding:8px 8px 8px 0;border-bottom:1px solid var(--line);vertical-align:bottom}
+td{padding:16px 8px 16px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.billnum{font-weight:700;text-decoration:none;color:var(--ink);font-size:17px}
+.billnum:hover{text-decoration:underline}
+.btitle{font-family:var(--serif);font-size:18px;margin:2px 0}
+.sub{font-size:14px;color:var(--muted)}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid}
+.tag.priority{color:var(--red);border-color:var(--red-line);background:var(--red-bg)}
+.tag.watching{color:var(--link);border-color:var(--blue-line);background:var(--blue-bg)}
+.tag.notrel{color:var(--muted);border-color:var(--line);background:var(--surface-2)}
+.tag.changed{color:var(--amber-ink);border-color:var(--amber-line);background:var(--amber)}
+.match{color:var(--green);font-size:13px;font-weight:600;display:block;margin-bottom:4px}
+.pager{display:flex;gap:12px;align-items:center;margin-top:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.card.soon{border-color:var(--amber-line);background:var(--amber)}
+.update{margin-bottom:12px}
+.update .when{font-size:13px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:40px;max-width:900px}
+.grid2>div{min-width:0}
+.wl-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.wl-row .term{flex:1;font-family:var(--serif);font-size:17px}
+.wl-row.paused .term{color:var(--muted);text-decoration:line-through}
+.addrow{display:flex;gap:8px;margin-top:12px}.addrow input{flex:1;min-width:0;padding:9px 12px}
+.opts label{display:flex;gap:10px;align-items:center;margin:8px 0}
+.opts input{width:17px;height:17px}
+hr{border:0;border-top:1px solid var(--line);margin:28px 0}
+.detail{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:32px;align-items:start}
+.detail section{padding:20px 0;border-top:1px solid var(--line)}
+.where{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 16px;margin:16px 0 8px;max-width:720px}
+.where .lbl{font-size:13px;color:var(--muted)}
+.where .now{font-family:var(--serif);font-size:19px;font-weight:600;margin-right:10px}
+.side{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;position:sticky;top:16px}
+.side h3{margin:0;font-family:var(--serif);font-size:17px}
+.radio{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:7px 12px;margin:8px 0;cursor:pointer}
+.radio.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.radio.pri{color:var(--red)}
+.side textarea{width:100%;min-height:120px;padding:8px;resize:vertical}
+table.compact td,table.compact th{padding:6px 8px 6px 0;font-size:14px}
+mark{background:var(--mark);color:var(--mark-ink);padding:0 1px}
+s.struck{color:var(--red)}
+.ver{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px}
+.ver div b{display:block}
+.docs ul{margin:4px 0 12px;padding-left:18px}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom, 0px));left:50%;transform:translateX(-50%);background:var(--toast);color:var(--on-toast);padding:10px 18px;border-radius:6px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+.toast.show{opacity:1}
+.login{max-width:380px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:28px}
+.login input{width:100%;padding:9px 12px;margin-bottom:14px}
+.diff-add{background:var(--green-bg);border-left:3px solid var(--green);padding:6px 10px;margin:6px 0}
+.diff-del{background:var(--red-bg);border-left:3px solid var(--red);padding:6px 10px;margin:6px 0;text-decoration:line-through;color:var(--red)}
+.diff-mod{background:var(--blue-bg);border-left:3px solid var(--link);padding:6px 10px;margin:6px 0}
+.b-criminal{--c:var(--crim);--cbg:var(--crim-bg)} .b-civil{--c:var(--civil);--cbg:var(--civil-bg)} .b-pp{--c:var(--pp);--cbg:var(--pp-bg)} .b-appellate{--c:var(--app);--cbg:var(--app-bg)}
+.f-high{--c:var(--hp);--cbg:var(--hp-bg)} .f-priority{--c:var(--pri);--cbg:var(--pri-bg)} .f-watching{--c:var(--watch);--cbg:var(--watch-bg)} .f-notrelevant{--c:var(--nr);--cbg:var(--nr-bg)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.bk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;line-height:1.4;white-space:nowrap}
+.bk::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+.bk:hover{border-color:var(--c);color:var(--c)}
+.bk.on{background:var(--cbg);border-color:var(--c);color:var(--c);box-shadow:0 0 0 1px var(--c) inset}
+span.bk{cursor:default}
+.tag.f-high,.tag.f-priority,.tag.f-watching,.tag.f-notrelevant{color:var(--c);border-color:var(--c);background:var(--cbg)}
+.tag.f-high{font-weight:700}
+.radio.f-high,.radio.f-priority,.radio.f-watching,.radio.f-notrelevant{color:var(--c)}
+.radio.f-high.sel,.radio.f-priority.sel,.radio.f-watching.sel,.radio.f-notrelevant.sel{border-color:var(--c);box-shadow:0 0 0 1px var(--c) inset;background:var(--cbg)}
+.bucketbar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.bucketbar .bk{font-size:14px;padding:5px 12px}
+.bk.all{--c:var(--ink);--cbg:var(--surface-2)}
+.sidegroup{margin-top:14px}
+.sidegroup>b{display:block;font-size:14px;margin-bottom:6px}
+
+.tag.agm{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.disc{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:14px 16px;margin-bottom:12px}
+.disc.hasag{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset}
+.disc .kicker{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.disc h3{font-family:var(--serif);font-size:17px;margin:2px 0 4px;font-weight:600}
+.disc .links{display:flex;flex-wrap:wrap;gap:14px;font-size:14px;margin:6px 0}
+.disc ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.disc li{display:grid;grid-template-columns:4.2em minmax(0,1fr);gap:8px;font-size:14px}
+.disc li a.ts{font-variant-numeric:tabular-nums;text-decoration:none}
+.agbox{background:var(--surface-2);border-left:3px solid var(--ink);border-radius:4px;padding:8px 12px;margin-top:10px}
+.agbox b{font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+.disc details{margin-top:10px}
+.disc summary{cursor:pointer;color:var(--link);font-size:14px}
+.tx{max-height:420px;overflow:auto;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+.tx p{margin:0 0 6px;font-size:14px;display:grid;grid-template-columns:4.2em minmax(0,1fr);gap:8px}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+@media (max-width:820px){
+  .detail,.grid2{grid-template-columns:1fr}
+  .side{position:static}
+  table.resp thead{display:none}
+  table.resp tr{display:block;border-bottom:1px solid var(--line);padding:12px 0}
+  table.resp td{display:block;border:0;padding:3px 0}
+  h1{font-size:28px}
+  nav.tabs a{min-height:44px;font-size:15px}
+  .right{margin-left:0;padding-bottom:10px}
+}
+</style>
+</head>
+<body>
+<div class="demo-bar gut">
+  <b>Deseret Docket</b><span id="dataNote">Loading bills from the Utah Legislature…</span>
+  <span class="sp"></span>
+  <button class="ghost" id="resetBtn" title="Clear your divisions, flags, notes and watch list in this browser">Reset my settings</button>
+</div>
+<div id="app"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+/* ===================== HELPERS ===================== */
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const pd=s=>{if(!s)return null;const m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);return m?new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0)):null};
+const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const fmtMD=d=>`${d.getMonth()+1}/${d.getDate()}`;
+const fmtMDY=d=>`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+const fmtLong=d=>`${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+function fmtTime(d){let h=d.getHours(),m=String(d.getMinutes()).padStart(2,'0');const ap=h>=12?'pm':'am';h=h%12||12;return `${h}:${m} ${ap}`}
+const TODAY=new Date();TODAY.setHours(0,0,0,0);
+const todayStr=ymd(TODAY);
+
+/* ===================== DATA ===================== */
+let INDEX=null; const BILLS={}, BYKEY={}, TEXT={}, TEXTSTATE={};
+async function getJSON(p){const r=await fetch(p,{cache:'no-cache'});if(!r.ok)throw new Error(p+' '+r.status);return r.json()}
+function toBill(session,r){return {key:`${session}/${r.n}`,session,num:r.n,title:r.t,sponsor:r.sp,floor:r.fl,version:r.ver,act:r.act,own:r.own,date:pd(r.date),description:r.gd,hist:r.hist,vers:r.vers,docs:r.docs,ag:r.ag||[],secs:r.secs||[],subj:r.subj||[],ch:r.ch||[],tx:r.tx||[],agm:r.agm||0,txc:r.txc}}
+const TX={};
+function loadTx(session,chunk){const k=session+'/'+chunk;if(!TX[k])TX[k]=getJSON(`data/${session}/tx-${chunk}.json`);return TX[k]}
+async function loadSession(s){
+  if(BILLS[s]) return;
+  const meta=INDEX.sessions.find(x=>x.id===s);
+  if(!meta||!meta.count){BILLS[s]=[];return}
+  const rows=await getJSON(`data/${s}/bills.json`);
+  BILLS[s]=rows.map(r=>toBill(s,r)); BILLS[s].forEach(b=>BYKEY[b.key]=b);
+  TEXT[s]={}; TEXTSTATE[s]={loaded:0,total:meta.textFiles||0};
+  for(let i=0;i<(meta.textFiles||0);i++){
+    getJSON(`data/${s}/text-${i}.json`).then(chunk=>{Object.assign(TEXT[s],chunk);TEXTSTATE[s].loaded++;matchCache.clear();if(TEXTSTATE[s].loaded===TEXTSTATE[s].total)setNote();route(true)}).catch(()=>{TEXTSTATE[s].loaded++;setNote()});
+  }
+}
+function textReady(s){const t=TEXTSTATE[s];return !t||t.loaded>=t.total}
+
+/* ===================== STATE (per browser) ===================== */
+const LS='deseret-docket-v2';
+// When hosted behind the Deseret Docket login, the server sets a readable docket_user cookie.
+const SERVER_USER=(document.cookie.match(/(?:^|;\s*)docket_user=([^;]+)/)||[])[1]?decodeURIComponent(document.cookie.match(/(?:^|;\s*)docket_user=([^;]+)/)[1]):null;
+const LSKEY=SERVER_USER?LS+':'+SERVER_USER:LS;
+const BUCKETS=[['criminal','Criminal'],['civil','Civil'],['pp','Public Protection'],['appellate','Appellate']];
+const BUCKET_NAME=Object.fromEntries(BUCKETS);
+const FLAGS=[['high','High priority'],['priority','Priority'],['watching','Watching'],['notrelevant','Not relevant']];
+const FLAG_NAME=Object.fromEntries(FLAGS);
+function defaultState(){return {v:3,user:SERVER_USER||'demo-user',signedIn:true,session:null,terms:[],codes:[],opts:{struck:true,defsOnly:false,titlesOnly:false},flags:{},buckets:{},notes:{}}}
+let S; try{S=JSON.parse(localStorage.getItem(LSKEY))||defaultState()}catch(e){S=defaultState()}
+if(!S.v||S.v<3){ // one-time cleanup of the old automatic settings
+  S.terms=(S.terms||[]).filter(x=>x.t.toLowerCase()!=='consumer protection');
+  if(S.flags&&S.flags['2026GS/HB0377']==='priority') delete S.flags['2026GS/HB0377'];
+  S.buckets=S.buckets||{}; S.v=3;
+  try{localStorage.setItem(LSKEY,JSON.stringify(S))}catch(e){}
+}
+S.buckets=S.buckets||{};
+if(SERVER_USER){S.user=SERVER_USER;S.signedIn=true}
+function save(){try{localStorage.setItem(LSKEY,JSON.stringify(S))}catch(e){}}
+
+/* ===================== MATCHING ===================== */
+function termRe(t){const parts=t.trim().split(/\s+/).map(p=>p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));return new RegExp(`\\b${parts.join('\\s+')}\\b`,'i')}
+const STRIP_ALL=/[\u0001\u0002]/g, CUT_STRUCK=/\u0001[^\u0002]*\u0002/g;
+const matchCache=new Map(); let sig='';
+function settingsSig(){return JSON.stringify([S.terms,S.codes,S.opts])}
+function matchesFor(b){
+  const sg=settingsSig(); if(sg!==sig){matchCache.clear();sig=sg}
+  if(matchCache.has(b.key)) return matchCache.get(b.key);
+  const out=[]; const terms=S.terms.filter(x=>x.on).map(x=>[x.t,termRe(x.t)]);
+  if(terms.length){
+    const passages=TEXT[b.session]?.[b.num];
+    let pool;
+    if(!passages||S.opts.titlesOnly){
+      pool=[['Title',b.title,''],['General description',b.description||'','']];
+      if(passages) pool.push(...passages.filter(p=>p[0]==='Highlighted provisions'));
+    } else pool=passages;
+    for(const [t,re] of terms){
+      for(const p of pool){
+        if(S.opts.defsOnly && !S.opts.titlesOnly && !p[2].includes('d')) continue;
+        const txt=S.opts.struck?p[1].replace(STRIP_ALL,''):p[1].replace(CUT_STRUCK,' ');
+        if(re.test(txt)) out.push({term:t,where:p[0],raw:p[1],inDef:p[2].includes('d'),struck:!re.test(p[1].replace(CUT_STRUCK,' '))});
+      }
+    }
+  }
+  for(const c of S.codes.filter(x=>x.on)) for(const code of b.secs) if(code===c.t||code.startsWith(c.t+'-')) out.push({term:'Code '+c.t,where:'Section '+code,raw:`Amends, enacts or repeals Section ${code}.`,code:true});
+  matchCache.set(b.key,out); return out;
+}
+const flagOf=b=>S.flags[b.key]||'none';
+const bucketOf=b=>S.buckets[b.key]||null;
+const onList=b=>matchesFor(b).length>0||flagOf(b)!=='none'||!!bucketOf(b);
+const changedToday=b=>b.ch.some(c=>c[0].slice(0,10)===todayStr);
+function meetings(session){
+  const map=new Map();
+  for(const b of BILLS[session]||[]) for(const a of b.ag){
+    const k=a.id||a.date+a.committee; if(!map.has(k)) map.set(k,{...a,d:pd(a.date),bills:[]}); map.get(k).bills.push(b.num);
+  }
+  return [...map.values()];
+}
+function nextHearing(b){const now=new Date();return b.ag.map(a=>({...a,d:pd(a.date)})).filter(a=>a.d&&a.d>=TODAY).sort((x,y)=>x.d-y.d)[0]}
+const soon=h=>(h.d-TODAY)/864e5<=3;
+const needsAttention=b=>flagOf(b)==='high'||flagOf(b)==='priority'||changedToday(b)||(nextHearing(b)&&soon(nextHearing(b)));
+function placesText(m){if(!m.length)return '';const anyDef=m.some(x=>x.inDef);return `${m.length} place${m.length>1?'s':''}${anyDef?', in definitions':''}`}
+function nextCheck(){
+  const slots=[7,13,17,20]; const d=new Date();
+  for(let i=0;i<8;i++){const day=new Date(d.getFullYear(),d.getMonth(),d.getDate()+i);if(day.getDay()===0||day.getDay()===6)continue;for(const h of slots){const t=new Date(day);t.setHours(h,0,0,0);if(t>d)return t}}
+}
+
+/* ===================== UI ===================== */
+const app=document.getElementById('app');
+const $=id=>document.getElementById(id);
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),2400)}
+function setNote(){
+  if(!INDEX){return}
+  const u=new Date(INDEX.updated); const s=S.session;
+  const txt=textReady(s)?'':` · Loading bill text (${TEXTSTATE[s].loaded} of ${TEXTSTATE[s].total})…`;
+  $('dataNote').textContent=`Live data from the Utah Legislature, last checked ${ymd(u)===todayStr?'today':fmtLong(u)} at ${fmtTime(u)}. Your divisions, flags, notes and watch list stay in this browser.${txt}`;
+}
+const billLink=b=>`#bill-${b.session}-${b.num}`;
+function flagTag(b){const f=flagOf(b);return FLAG_NAME[f]?`<span class="tag f-${f}">${FLAG_NAME[f]}</span>`:''}
+function agTag(b){return b.agm?`<span class="tag agm" title="The Attorney General came up ${b.agm} time${b.agm>1?'s':''} in hearing or floor transcripts">AG mentioned</span>`:''}
+function bucketTag(b){const k=bucketOf(b);return k?`<span class="bk on b-${k}">${BUCKET_NAME[k]}</span>`:''}
+function bucketChips(b){const cur=bucketOf(b);return `<div class="chips" role="group" aria-label="Division for ${esc(b.num)}">${BUCKETS.map(([k,l])=>`<button type="button" class="bk b-${k} ${cur===k?'on':''}" data-bucket="${b.key}|${k}" aria-pressed="${cur===k}" title="${cur===k?'Remove from '+l:'Put in '+l}">${l}</button>`).join('')}</div>`}
+const sponsorLine=b=>esc(b.sponsor)+(b.version&&b.version!=='Introduced'?', '+esc(b.version):'');
+function hearingShort(h){if(!h)return '';return `<span${soon(h)?' class="tag changed"':''}>${WD[h.d.getDay()].slice(0,3)} ${fmtMD(h.d)}</span><div class="sub">${fmtTime(h.d)}</div>`}
+const LOGO=`<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="band" x="10.2" y="2.6" width="3.6" height="2.4" rx="1.2"/><rect class="band" x="8.4" y="5" width="7.2" height="3.1" rx="1.55"/><rect class="band" x="6.6" y="8.1" width="10.8" height="3.3" rx="1.65"/><rect class="band" x="5.1" y="11.4" width="13.8" height="3.4" rx="1.7"/><rect class="band" x="4" y="14.8" width="16" height="3.6" rx="1.8"/><rect class="band" x="3" y="18.4" width="18" height="2.4" rx=".6"/><path class="door" d="M10.3 18.4v-1.2a1.7 1.7 0 0 1 3.4 0v1.2z"/></svg>`;
+function shell(active,inner){
+  const tabs=[['updates','Updates'],['bills','My bills'],['all','All bills'],['hearings','Hearings'],['watchlist','Watch list']];
+  return `<header class="top gut"><a class="brand" href="#updates">${LOGO}Deseret Docket</a>
+  <nav class="tabs">${tabs.map(([h,l])=>`<a href="#${h}" class="${active===h?'on':''}">${l}</a>`).join('')}</nav>
+  <div class="right"><select id="sessSel" aria-label="Session">${INDEX.sessions.map(s=>`<option value="${s.id}" ${s.id===S.session?'selected':''}>${s.id}</option>`).join('')}</select>
+  <a class="user" href="#account">${esc(S.user)}</a><button class="linkbtn" id="signOut">Sign out</button></div></header><main class="gut">${inner}</main>`;
+}
+function emptySession(){return `<p class="lede">No bills have been numbered for ${esc(S.session)} yet. They'll appear here automatically once the Legislature starts releasing them.</p>`}
+const textNotice=()=>textReady(S.session)?'':`<p class="small muted">Still loading bill text (${TEXTSTATE[S.session].loaded} of ${TEXTSTATE[S.session].total} files). Until it finishes, matches are based on titles and summaries.</p>`;
+
+/* ---------- pages ---------- */
+function pageUpdates(){
+  const bills=(BILLS[S.session]||[]).filter(b=>onList(b)&&flagOf(b)!=='notrelevant');
+  const items=bills.flatMap(b=>b.ch.filter(c=>c[0].slice(0,10)===todayStr).map(c=>({b,c}))).sort((x,y)=>y.c[0].localeCompare(x.c[0]));
+  const u=new Date(INDEX.updated), nc=nextCheck();
+  const stats=`<div class="stats"><div><span>Last checked</span><b>${ymd(u)===todayStr?'today':fmtLong(u)} at ${fmtTime(u)}</b></div><div><span>Next check</span><b>${nc?(ymd(nc)===todayStr?'today':WD[nc.getDay()])+' at '+fmtTime(nc):'—'}</b></div></div>`;
+  let body;
+  if(!items.length) body=`<p class="lede">Nothing on your list has changed yet today. This board empties at midnight, but every bill's page keeps its complete history.</p>${stats}
+   <p class="lede">When a bill you follow changes committee, gets a substitute, is scheduled for a hearing or gains new documents, it shows up here. In the meantime, <a href="#bills">your bills</a> lists where each one stands.</p>`;
+  else body=`<p class="lede">${items.length} change${items.length>1?'s':''} to bills on your list today. This board empties at midnight; each bill's page keeps its full history.</p>${stats}
+   ${items.map(({b,c})=>`<div class="card update"><div class="when">${fmtTime(pd(c[0]))} · ${esc(c[1])}</div><a class="billnum" href="${billLink(b)}">${esc(b.num)}</a> ${bucketTag(b)} ${flagTag(b)} ${c[1]==='AG mentioned'?'<span class="tag agm">AG mentioned</span>':''}<div class="btitle">${esc(b.title)}</div><div>${esc(c[2])}</div></div>`).join('')}`;
+  return shell('updates',`<h1>Today's updates</h1>${body}`);
+}
+
+let myFilter='all',myFind='',myBucket='any';
+function pageMyBills(){
+  const all=(BILLS[S.session]||[]).filter(onList);
+  const F={all:['All except not relevant',b=>flagOf(b)!=='notrelevant'],attention:['Needs attention',b=>flagOf(b)!=='notrelevant'&&needsAttention(b)],changed:['Changed today',changedToday],high:['High priority',b=>flagOf(b)==='high'],agm:['AG mentioned in a hearing',b=>flagOf(b)!=='notrelevant'&&b.agm>0],priority:['Priority',b=>flagOf(b)==='priority'],watching:['Watching',b=>flagOf(b)==='watching'],notrelevant:['Not relevant',b=>flagOf(b)==='notrelevant']};
+  const BF={any:b=>true,none:b=>!bucketOf(b)}; BUCKETS.forEach(([k])=>BF[k]=b=>bucketOf(b)===k);
+  const base=all.filter(F[myFilter][1]);
+  const q=myFind.toLowerCase();
+  const rows=base.filter(BF[myBucket]).filter(b=>!q||[b.num,b.title,b.sponsor,S.notes[b.key]||'',b.own,b.act,BUCKET_NAME[bucketOf(b)]||'',FLAG_NAME[flagOf(b)]||''].join(' ').toLowerCase().includes(q));
+  const bar=`<div class="bucketbar" role="group" aria-label="Filter by division">${[['any','All divisions','all'],...BUCKETS.map(([k,l])=>[k,l,'b-'+k]),['none','No division','f-notrelevant']].map(([k,l,c])=>`<button type="button" class="bk ${c} ${myBucket===k?'on':''}" data-mybucket="${k}" aria-pressed="${myBucket===k}">${l} (${base.filter(BF[k]).length})</button>`).join('')}</div>`;
+  const empty=!all.length?`<div class="card"><h2>Your list is empty</h2><p>Bills land here when you put them in a division, flag them, or when they match a search term. Start from <a href="#all">All bills</a> and press <b>Criminal</b>, <b>Civil</b>, <b>Public Protection</b> or <b>Appellate</b> on any bill, or add words to your <a href="#watchlist">watch list</a>.</p></div>`:'';
+  return shell('bills',`<h1>My bills</h1><p class="lede">Bills in ${esc(S.session)} you've sorted into a division or flagged, plus any that match your watch list. Nobody else sees this list.</p>${textNotice()}
+  ${(BILLS[S.session]||[]).length?(empty||`<form class="filters" id="myForm"><div class="field"><label for="myShow">Show</label><select id="myShow">${Object.entries(F).map(([k,[l,f]])=>`<option value="${k}" ${k===myFilter?'selected':''}>${l} (${all.filter(f).length})</option>`).join('')}</select></div>
+  <div class="field grow"><label for="myFind">Find</label><input id="myFind" value="${esc(myFind)}" placeholder="Bill, title, sponsor, committee, division or note"></div>
+  <button class="btn">Apply</button><button type="button" class="plain" id="csv">Copy CSV</button></form><textarea class="csvbox" id="csvBox" hidden readonly aria-label="CSV of your bills"></textarea>
+  ${bar}
+  ${rows.length?`<table class="resp"><thead><tr><th style="width:34%">Bill</th><th>Where it is</th><th>Your terms</th><th>Next hearing</th><th style="width:22%">Division</th></tr></thead><tbody>
+  ${rows.map(b=>{const m=matchesFor(b);return `<tr><td><a class="billnum" href="${billLink(b)}">${esc(b.num)}</a> ${flagTag(b)} ${agTag(b)} ${changedToday(b)?'<span class="tag changed">Changed today</span>':''}
+   <div class="btitle">${esc(b.title)}</div><div class="sub">${sponsorLine(b)}</div>${S.notes[b.key]?`<div class="sub">Note: ${esc(S.notes[b.key].slice(0,80))}</div>`:''}</td>
+   <td>${esc(b.act)}<div class="sub">${esc(b.own)}</div></td>
+   <td>${m.length?esc([...new Set(m.map(x=>x.term))].join(', '))+`<div class="sub">${placesText(m)}</div>`:'<span class="sub">Added by you</span>'}</td>
+   <td>${hearingShort(nextHearing(b))}</td><td>${bucketChips(b)}</td></tr>`}).join('')}</tbody></table>`:`<p class="muted">No bills match.</p>`}`):emptySession()}`);
+}
+
+let allFilter='all',allFind='',allSort='number',allPage=1;
+function pageAll(){
+  const bills=BILLS[S.session]||[];
+  const F={all:['Every bill',()=>true],changed:['Changed today',changedToday],hearings:['Hearing in the next week',b=>{const h=nextHearing(b);return h&&(h.d-TODAY)/864e5<=7}],agm:['AG mentioned in a hearing',b=>b.agm>0],mine:['On my list',onList],notmine:['Not on my list',b=>!onList(b)],...Object.fromEntries(BUCKETS.map(([k,l])=>['b-'+k,[l,b=>bucketOf(b)===k]]))};
+  const q=allFind.toLowerCase().trim().replace(/^(hb|sb|hcr|scr|hjr|sjr|hr|sr)\.?\s*(\d+)$/,(m,a,n)=>a+n.padStart(4,'0'));
+  let rows=bills.filter(F[allFilter][1]).filter(b=>!q||[b.num,b.title,b.sponsor,b.own,b.act].join(' ').toLowerCase().includes(q));
+  if(allSort==='recent') rows.sort((a,b)=>(b.date||0)-(a.date||0)); else rows.sort((a,b)=>a.num.localeCompare(b.num));
+  const per=100,pages=Math.max(1,Math.ceil(rows.length/per)); allPage=Math.min(allPage,pages);
+  const slice=rows.slice((allPage-1)*per,allPage*per);
+  return shell('all',`<h1>All bills</h1><p class="lede">Every bill in ${esc(S.session)} (${bills.length} bills). Sort a bill into <b>Criminal</b>, <b>Civil</b>, <b>Public Protection</b> or <b>Appellate</b> to add it to your list; press the same division again to take it out, or another one to move it.</p>${textNotice()}
+  ${bills.length?`<form class="filters" id="allForm"><div class="field"><label for="allShow">Show</label><select id="allShow">${Object.entries(F).map(([k,[l,f]])=>`<option value="${k}" ${k===allFilter?'selected':''}>${l} (${bills.filter(f).length})</option>`).join('')}</select></div>
+  <div class="field grow"><label for="allFind">Find</label><input type="search" id="allFind" value="${esc(allFind)}" placeholder="HB 101, title, sponsor, committee or status"></div>
+  <div class="field"><label for="allSort">Sort</label><select id="allSort"><option value="number">Bill number</option><option value="recent" ${allSort==='recent'?'selected':''}>Most recent action</option></select></div>
+  <button class="btn">Apply</button></form>
+  <p class="small muted">${rows.length?`${(allPage-1)*per+1}–${Math.min(allPage*per,rows.length)} of ${rows.length} bills`:'No bills match.'}</p>
+  <table class="resp"><thead><tr><th style="width:38%">Bill</th><th>Where it is</th><th>Next hearing</th><th style="width:26%">Division</th></tr></thead><tbody>
+  ${slice.map(b=>{const m=matchesFor(b);return `<tr><td><a class="billnum" href="${billLink(b)}">${esc(b.num)}</a> ${flagTag(b)} ${agTag(b)}<div class="btitle">${esc(b.title)}</div><div class="sub">${sponsorLine(b)}</div></td>
+  <td>${esc(b.own)}<div class="sub">${esc(b.act)}${b.date?', '+fmtMD(b.date):''}</div></td><td>${hearingShort(nextHearing(b))}</td>
+  <td>${m.length?'<span class="match">Matches your terms</span>':''}${bucketChips(b)}</td></tr>`}).join('')}</tbody></table>
+  ${pages>1?`<div class="pager">${allPage>1?'<button class="btn sm" data-page="-1">Previous</button>':''}<span class="small">Page ${allPage} of ${pages}</span>${allPage<pages?'<button class="btn sm" data-page="1">Next</button>':''}</div>`:''}`:emptySession()}`);
+}
+
+function pageHearings(){
+  const mine=new Set((BILLS[S.session]||[]).filter(b=>onList(b)&&flagOf(b)!=='notrelevant').map(b=>b.num));
+  const hs=meetings(S.session).filter(h=>h.d&&h.d>=TODAY&&h.bills.some(n=>mine.has(n))).sort((a,b)=>a.d-b.d);
+  const body=hs.length?hs.map(h=>`<div class="card update ${soon(h)?'soon':''}"><div class="when">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${soon(h)?' · <b>within 3 days</b>':''}</div>
+   <h2>${esc(h.committee)}</h2>${h.bills.filter(n=>mine.has(n)).map(n=>{const b=BYKEY[S.session+'/'+n];return `<div><a class="billnum" href="${billLink(b)}">${esc(n)}</a> ${esc(b.title)} ${bucketTag(b)} ${flagTag(b)}</div>`}).join('')}
+   ${h.url?`<a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a>`:''}</div>`).join('')
+   :`<p>None of your bills is on an upcoming committee agenda.</p>`;
+  return shell('hearings',`<h1>Hearings</h1><p class="lede">Committee agendas that include a bill on your list, soonest first. Agendas are rechecked with each update on weekdays at 7 am, 1 pm, 5 pm and 8 pm, and anything coming up within three days is highlighted.</p>${body}`);
+}
+
+function pageWatch(){
+  const row=(x,i,kind)=>`<div class="wl-row ${x.on?'':'paused'}"><input type="checkbox" id="wl-${kind}-${i}" ${x.on?'checked':''} data-toggle="${kind}:${i}" title="${x.on?'Searching for this. Click to pause.':'Paused. Click to resume.'}"><label class="term" for="wl-${kind}-${i}">${esc(x.t)}</label><button class="linkbtn small" data-remove="${kind}:${i}">Remove</button></div>`;
+  const count=(BILLS[S.session]||[]).filter(b=>matchesFor(b).length).length;
+  return shell('watchlist',`<h1>Watch list</h1><p class="lede">Every bill in the session is checked against whatever you tick below. Your list is private and stays in this browser. Changes apply right away, and the search runs on Deseret Docket's own copy of the bills, so it doesn't count against the Legislature's request limits.</p>${textNotice()}
+  <div class="grid2"><div><h2>Words and phrases</h2><p class="small muted">Optional. Matches whole words in any capitalization, even when a phrase wraps onto the next line. Leave this empty if you only want the bills you sort into divisions.</p>
+   ${S.terms.map((x,i)=>row(x,i,'terms')).join('')||'<p class="small muted">Nothing yet.</p>'}
+   <form class="addrow" id="addTerm"><input id="termIn" placeholder="e.g. deceptive trade practice" aria-label="Add a word or phrase"><button class="btn">Add</button></form></div>
+  <div><h2>Utah Code chapters</h2><p class="small muted">Catches bills that amend, enact or repeal anything under a title, chapter or section even if your words never appear. <b>13</b> covers all of Title 13; <b>13-11</b> covers 13-11-1, 13-11-4.5 and so on.</p>
+   ${S.codes.map((x,i)=>row(x,i,'codes')).join('')||'<p class="small muted">Nothing yet.</p>'}
+   <form class="addrow" id="addCode"><input id="codeIn" placeholder="e.g. 13-11" aria-label="Add a Utah Code title, chapter or section"><button class="btn">Add</button></form></div></div>
+  <hr><h2>Search options</h2><form class="opts" id="optsForm">
+   <label><input type="checkbox" name="struck" ${S.opts.struck?'checked':''}> Count language a bill strikes out of existing code</label>
+   <label><input type="checkbox" name="defsOnly" ${S.opts.defsOnly?'checked':''}> Only count matches inside definitions</label>
+   <label><input type="checkbox" name="titlesOnly" ${S.opts.titlesOnly?'checked':''}> Search titles and summaries only, not the full text</label>
+   <button class="btn" style="margin-top:8px">Save options</button></form>
+   <p class="small muted" style="margin-top:20px">Currently matching <b>${count}</b> bills in ${esc(S.session)}.</p>`);
+}
+
+function pageAccount(){
+  if(SERVER_USER) return shell('',`<h1>Your account</h1><p>Signed in as <b>${esc(SERVER_USER)}</b>. Your divisions, flags, notes and watch list are saved in this browser under your username.</p>
+  <p class="small muted">To change a password, the site owner makes a new password line with <code>make_password.py</code> and updates the <code>DOCKET_USERS</code> setting in Cloudflare.</p><p><a class="btn" href="/logout">Sign out</a></p>`);
+  return shell('',`<h1>Your account</h1><p>Signed in as <b>${esc(S.user)}</b>. Your name, divisions, flags, notes and watch list are saved only in this browser.</p>
+  <form id="nameForm" style="max-width:420px" class="filters"><div class="field grow"><label for="nameIn">Display name</label><input id="nameIn" value="${esc(S.user)}"></div><button class="btn">Save</button></form>`);
+}
+
+function snippet(raw,term){
+  const re=termRe(term); const plain=raw.replace(STRIP_ALL,''); const m=re.exec(plain); if(!m) return esc(plain.slice(0,160));
+  // map plain index back to raw index
+  const map=[];for(let i=0;i<raw.length;i++){if(raw[i]!=='\u0001'&&raw[i]!=='\u0002')map.push(i)}
+  const a=Math.max(0,m.index-80),z=Math.min(plain.length,m.index+m[0].length+80);
+  const ra=map[a],rz=z<plain.length?map[z]:raw.length,ms=map[m.index],me=map[m.index+m[0].length-1]+1;
+  const render=s=>{let out='',st=false;for(const ch of s){if(ch==='\u0001'){if(!st){out+='<s class="struck">';st=true}}else if(ch==='\u0002'){if(st){out+='</s>';st=false}}else out+=esc(ch)}return out+(st?'</s>':'')};
+  // track struck state at ra
+  let open=false;for(let i=0;i<ra;i++){if(raw[i]==='\u0001')open=true;else if(raw[i]==='\u0002')open=false}
+  const pre=(open?'\u0001':'');
+  return (a>0?'…':'')+render(pre+raw.slice(ra,ms))+'<mark>'+render(raw.slice(ms,me))+'</mark>'+render(raw.slice(me,rz))+(z<plain.length?'…':'');
+}
+const clock=s=>{s=Math.max(0,Math.floor(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=String(s%60).padStart(2,'0');return h?`${h}:${String(m).padStart(2,'0')}:${x}`:`${m}:${x}`};
+const vAt=(t,sec)=>t.video?`${t.video}#t=${Math.max(0,Math.floor(sec))}s`:t.page;
+const AG_JS=/\b(?:(?:assistant|deputy|chief deputy|solicitor)\s+)?attorney\s*-?\s*general(?:'s)?(?:\s+office)?\b|\bAG'?s\s+office\b|\bthe\s+A\.?\s?G\.?(?!\s*(?:land|lands|side|sector|community|department|dept|systems?|business|committees?|leasing|optimization|advisory|wildlife|resources?|industry|producers?|water|operations?|uses?|commissioner|interests?|exemptions?|economy|areas?|groups?|world|folks|people|loans?|programs?|board|lobby|organizations?)\b)(?=[\s,.;:!?]|$)|\bA\.G\.(?=\s)|\bsolicitor\s+general\b|\boffice\s+of\s+the\s+attorney\b/gi;
+const markAG=t=>esc(t).replace(AG_JS,m=>`<mark>${m}</mark>`);
+function discussionSection(b){
+  const list=b.tx.slice().sort((x,y)=>(y.date||'').localeCompare(x.date||'')||(y.t0||0)-(x.t0||0));
+  const intro=`<p class="small muted">From the Legislature's committee and floor recordings. Notes come from the official meeting timeline; transcripts are Vimeo's auto-generated captions and can contain errors. Any mention of the Attorney General is flagged.</p>`;
+  if(!list.length) return `<section><h2>What was discussed</h2>${intro}<p class="small muted">No committee or floor discussion recorded for this bill yet.</p></section>`;
+  const body=list.map((t,i)=>{const d=pd(t.date);const mins=t.t1&&t.t0!=null?Math.max(1,Math.round((t.t1-t.t0)/60)):null;
+    const status=t.status==='ok'?`${mins?mins+' min · ':''}${(t.words||0).toLocaleString()} words transcribed`:t.status==='nocap'?'Video found. Captions aren\'t ready yet; Deseret Docket checks again with each update.':'The meeting video doesn\'t mark where this bill came up yet.';
+    return `<div class="disc ${t.ag&&t.ag.length?'hasag':''}"><div class="kicker">${t.kind==='floor'?'Floor debate':'Committee hearing'} · ${d?fmtLong(d):''}</div>
+    <h3>${esc(t.label)}</h3>${t.item?`<div class="small">${esc(t.item)}</div>`:''}<div class="small muted">${status}</div>
+    <div class="links">${t.t0!=null&&t.video?`<a href="${esc(vAt(t,t.t0))}" target="_blank" rel="noopener">Watch from ${clock(t.t0)}</a>`:''}<a href="${esc(t.page)}" target="_blank" rel="noopener">Meeting page</a></div>
+    ${t.ag&&t.ag.length?`<div class="agbox"><b>Attorney General mentioned (${t.ag.length})</b><ul>${t.ag.map(a=>`<li><a class="ts" href="${esc(vAt(t,a[0]))}" target="_blank" rel="noopener">${clock(a[0])}</a><span>${markAG(a[1])}</span></li>`).join('')}</ul></div>`:''}
+    ${t.notes&&t.notes.length?`<ul>${t.notes.map(n=>`<li><a class="ts" href="${esc(vAt(t,n[0]))}" target="_blank" rel="noopener">${clock(n[0])}</a><span>${esc(n[2])}</span></li>`).join('')}</ul>`:''}
+    ${t.status==='ok'&&b.txc!=null?`<details data-tx="${esc(b.session)}|${b.txc}|${esc(b.num)}|${esc(t.key)}"><summary>Read the transcript</summary><div class="tx">Loading…</div></details>`:''}</div>`}).join('');
+  return `<section><h2>What was discussed</h2>${intro}${body}</section>`;
+}
+function pageBill(session,num){
+  const b=BYKEY[`${session}/${num}`]; if(!b) return shell('',`<h1>Not found</h1><p>No bill ${esc(num)} in ${esc(session)}.</p>`);
+  const m=matchesFor(b),f=flagOf(b);
+  const hs=b.ag.map(a=>({...a,d:pd(a.date)})).filter(a=>a.d).sort((x,y)=>y.d-x.d);
+  const yr=session.slice(0,4);
+  return shell('bills',`<a class="small" href="#bills">My bills</a>
+  <div class="small" style="font-weight:700;margin-top:6px">${esc(b.num)}</div><h1>${esc(b.title)}</h1>
+  <div class="muted">${esc(b.sponsor)}${b.floor?'; floor sponsor '+esc(b.floor):''}</div>
+  <div class="where"><div class="lbl">Where it is now</div><span class="now">${esc(b.own)}</span><span>${esc(b.act)}${b.date?', '+fmtMDY(b.date):''}</span></div>
+  <a class="small" href="https://le.utah.gov/~${yr}/bills/static/${esc(b.num)}.html" target="_blank" rel="noopener">Open on le.utah.gov</a>
+  <div class="detail" style="margin-top:20px"><div>
+   <section><h2>General description</h2><p style="font-family:var(--serif)">${esc(b.description||'No description yet.')}</p>${b.subj.length?`<p class="small muted">Subjects: ${esc(b.subj.join(', '))}</p>`:''}</section>
+   <section><h2>What has changed</h2>${b.ch.length?`<div class="tablewrap"><table class="compact"><tbody>${b.ch.slice().reverse().map(x=>{const d=pd(x[0]);return `<tr><td style="white-space:nowrap">${fmtMDY(d)} ${fmtTime(d)}</td><td><b>${esc(x[1])}</b>: ${esc(x[2])}</td></tr>`}).join('')}</tbody></table></div>`:'<p class="small muted">No changes recorded since Deseret Docket started tracking this bill.</p>'}</section>
+   ${discussionSection(b)}
+   <section><h2>Where your terms appear</h2>${!textReady(session)&&!TEXT[session]?.[num]?'<p class="small muted">Loading bill text…</p>':''}${m.length?`<p class="small muted">${m.length} place${m.length>1?'s':''} in ${esc(b.version||'the bill')}.</p>
+    <div class="tablewrap"><table class="compact"><thead><tr><th>Term</th><th>Where</th><th>Text</th></tr></thead><tbody>${m.slice(0,200).map(x=>`<tr><td><b>${esc(x.term)}</b>${x.inDef?' <span class="tag watching">definition</span>':''}${x.struck?' <span class="tag priority">struck</span>':''}</td><td>${esc(x.where)}</td><td>${x.code?esc(x.raw):snippet(x.raw,x.term)}</td></tr>`).join('')}</tbody></table></div>${m.length>200?`<p class="small muted">Showing the first 200.</p>`:''}`:'<p class="small muted">None of your active terms or code chapters appear in this bill.</p>'}</section>
+   <section><h2>Versions</h2><div class="ver">${b.vers.map(v=>{const d=pd(v[1]);return `<div><b>${esc(v[0])}</b><span class="small muted">${d?fmtLong(d):''}</span></div>`}).join('')||'<span class="small muted">None yet.</span>'}</div></section>
+   <section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card ${h.d>=TODAY&&soon(h)?'soon':''}" style="margin-bottom:8px"><b>${esc(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>
+   <section><h2>Status and votes</h2><div class="tablewrap"><table class="compact"><thead><tr><th>Date</th><th>Action</th><th>Location</th><th>Vote</th></tr></thead><tbody>${b.hist.map(h=>{const d=pd(h[0]);return `<tr><td>${d?fmtMDY(d):''}</td><td>${esc(h[1])}</td><td>${esc(h[2])}</td><td>${esc(h[3])}</td></tr>`}).join('')}</tbody></table></div></section>
+   <section class="docs"><h2>Documents</h2>${b.docs.map(g=>`<b>${esc(g[0])}</b><ul>${g[1].map(i=>{const d=pd(i[1]);return `<li><a href="${esc(i[2])}" target="_blank" rel="noopener">${esc(i[0])}</a>${d?', '+MONTHS[d.getMonth()]+' '+d.getDate():''}</li>`}).join('')}</ul>`).join('')||'<p class="small muted">None yet.</p>'}</section>
+  </div>
+  <aside class="side"><h3>Your division, flag and note</h3><div class="small muted">Private to you.</div>
+   <div class="sidegroup"><b>Division</b>${bucketChips(b)}</div>
+   <div class="sidegroup"><b>Flag</b>${[['none','No flag'],...FLAGS].map(([v,l])=>`<label class="radio ${v==='none'?'':'f-'+v} ${f===v?'sel':''}"><input type="radio" name="flag" value="${v}" ${f===v?'checked':''}> ${l}</label>`).join('')}</div>
+   <label for="noteIn" style="display:block;font-weight:600;margin:12px 0 6px">Note</label><textarea id="noteIn">${esc(S.notes[b.key]||'')}</textarea>
+   <button class="btn primary" id="saveNote" style="margin-top:8px">Save</button>
+   <p class="small muted"><b>High priority</b> and <b>Priority</b> keep a bill under Needs attention. <b>Not relevant</b> hides it from your updates and your list.</p></aside></div>`);
+}
+
+function pageLogin(){
+  return `<div class="login"><div class="brand" style="padding:0">${LOGO}<span style="font-size:26px">Deseret Docket</span></div><p class="small muted">Type any name to sign in. There's no password; your settings stay in this browser.</p>
+  <form id="loginForm"><label for="lu" style="font-weight:600">Name</label><input id="lu" value="${esc(S.user)}" autocomplete="off"><button class="btn primary" style="width:100%">Sign in</button></form></div>`;
+}
+
+/* ===================== ROUTER & EVENTS ===================== */
+let curKey=null, lastHash=null;
+function route(soft){
+  if(!INDEX) return;
+  if(soft && document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  if(!S.signedIn){app.innerHTML=pageLogin();bind();return}
+  const h=location.hash.slice(1)||'updates'; const parts=h.split('-'); const view=parts[0]; curKey=null;
+  const y=scrollY; let html;
+  if(view==='updates') html=pageUpdates();
+  else if(view==='bills') html=pageMyBills();
+  else if(view==='all') html=pageAll();
+  else if(view==='hearings') html=pageHearings();
+  else if(view==='watchlist') html=pageWatch();
+  else if(view==='account') html=pageAccount();
+  else if(view==='bill'){curKey=parts[1]+'/'+parts.slice(2).join('-');html=pageBill(parts[1],parts.slice(2).join('-'))}
+  else html=shell('','<h1>Not found</h1>');
+  app.innerHTML=html; bind();
+  if(soft) scrollTo(0,y);
+  const titles={updates:'Updates',bills:'My bills',all:'All bills',hearings:'Hearings',watchlist:'Watch list',account:'Account',bill:parts.slice(2).join('-')};
+  document.title=(titles[view]?titles[view]+' · ':'')+'Deseret Docket';
+}
+function bind(){
+  $('sessSel')&&($('sessSel').onchange=async e=>{S.session=e.target.value;save();allPage=1;await loadSession(S.session);setNote();if(location.hash.startsWith('#bill-'))location.hash='#bills';else route()});
+  $('signOut')&&($('signOut').onclick=()=>{if(SERVER_USER){location.href='/logout';return}S.signedIn=false;save();route()});
+  $('loginForm')&&($('loginForm').onsubmit=e=>{e.preventDefault();S.user=$('lu').value.trim()||'demo-user';S.signedIn=true;save();location.hash='#updates';route()});
+  $('myForm')&&($('myForm').onsubmit=e=>{e.preventDefault();myFilter=$('myShow').value;myFind=$('myFind').value;route()});
+  $('myShow')&&($('myShow').onchange=e=>{myFilter=e.target.value;myFind=$('myFind').value;route()});
+  $('csv')&&($('csv').onclick=()=>copyCSV());
+  $('allForm')&&($('allForm').onsubmit=e=>{e.preventDefault();allFilter=$('allShow').value;allFind=$('allFind').value;allSort=$('allSort').value;allPage=1;route()});
+  $('allShow')&&($('allShow').onchange=()=>$('allForm').requestSubmit());
+  $('allSort')&&($('allSort').onchange=()=>$('allForm').requestSubmit());
+  document.querySelectorAll('[data-bucket]').forEach(btn=>btn.onclick=()=>{const [k,bk]=btn.dataset.bucket.split('|');const num=k.split('/')[1];
+    if(S.buckets[k]===bk){delete S.buckets[k];toast(`${num} removed from ${BUCKET_NAME[bk]}`)}else{const from=S.buckets[k];S.buckets[k]=bk;toast(from?`${num} moved from ${BUCKET_NAME[from]} to ${BUCKET_NAME[bk]}`:`${num} added to ${BUCKET_NAME[bk]}`)}
+    save();route(true)});
+  document.querySelectorAll('[data-mybucket]').forEach(btn=>btn.onclick=()=>{myBucket=btn.dataset.mybucket;route(true)});
+  document.querySelectorAll('[data-page]').forEach(btn=>btn.onclick=()=>{allPage+=+btn.dataset.page;route();scrollTo(0,0)});
+  document.querySelectorAll('[data-toggle]').forEach(cb=>cb.onchange=()=>{const [k,i]=cb.dataset.toggle.split(':');S[k][i].on=cb.checked;save();route()});
+  document.querySelectorAll('[data-remove]').forEach(btn=>btn.onclick=()=>{const [k,i]=btn.dataset.remove.split(':');S[k].splice(i,1);save();route()});
+  $('addTerm')&&($('addTerm').onsubmit=e=>{e.preventDefault();const v=$('termIn').value.trim().replace(/\s+/g,' ');if(!v)return;if(S.terms.some(x=>x.t.toLowerCase()===v.toLowerCase())){toast('Already on your list');return}S.terms.push({t:v,on:true});save();route();toast(`Now searching for “${v}”`)});
+  $('addCode')&&($('addCode').onsubmit=e=>{e.preventDefault();const v=$('codeIn').value.trim().replace(/^title\s+/i,'');if(!/^\d+[A-Za-z]?(-\d+[A-Za-z]?(-\d+(\.\d+)?)?)?$/.test(v)){toast('Use a format like 13, 13-11 or 13-11-4.5');return}if(S.codes.some(x=>x.t===v))return;S.codes.push({t:v,on:true});save();route()});
+  $('optsForm')&&($('optsForm').onsubmit=e=>{e.preventDefault();const f=e.target;['struck','defsOnly','titlesOnly'].forEach(k=>S.opts[k]=f[k].checked);save();route();toast('Options saved')});
+  document.querySelectorAll('input[name=flag]').forEach(r=>r.onchange=()=>{if(r.value==='none')delete S.flags[curKey];else S.flags[curKey]=r.value;save();route(true);toast('Flag saved')});
+  $('saveNote')&&($('saveNote').onclick=()=>{const v=$('noteIn').value.trim();if(v)S.notes[curKey]=v;else delete S.notes[curKey];save();toast('Note saved')});
+  document.querySelectorAll('details[data-tx]').forEach(dt=>dt.addEventListener('toggle',async()=>{
+    if(!dt.open||dt.dataset.done) return; dt.dataset.done=1;
+    const [sess,chunk,num,key]=dt.dataset.tx.split('|'); const box=dt.querySelector('.tx');
+    try{const c=await loadTx(sess,chunk);const lines=(c[num]||{})[key]||[];const b=BYKEY[sess+'/'+num];const t=b.tx.find(x=>x.key===key);
+      box.innerHTML=lines.length?lines.map(l=>`<p><a class="ts" href="${esc(vAt(t,l[0]))}" target="_blank" rel="noopener">${clock(l[0])}</a><span>${markAG(l[1])}</span></p>`).join(''):'<p>No transcript text.</p>'}
+    catch(e){box.textContent='The transcript didn\'t load. Close and reopen to try again.';delete dt.dataset.done}
+  }));
+  $('nameForm')&&($('nameForm').onsubmit=e=>{e.preventDefault();S.user=$('nameIn').value.trim()||S.user;save();route();toast('Saved')});
+}
+function copyCSV(){
+  const rows=(BILLS[S.session]||[]).filter(onList).filter(b=>flagOf(b)!=='notrelevant');
+  const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const lines=[['Bill','Title','Sponsor','Version','Action','Location','Date','Division','Flag','AG mentions','Terms','Places','Next hearing','Note'].join(',')];
+  rows.forEach(b=>{const m=matchesFor(b),h=nextHearing(b);lines.push([b.num,b.title,b.sponsor,b.version,b.act,b.own,b.date?fmtMDY(b.date):'',BUCKET_NAME[bucketOf(b)]||'',FLAG_NAME[flagOf(b)]||'',b.agm||'',[...new Set(m.map(x=>x.term))].join('; '),m.length,h?fmtMDY(h.d):'',S.notes[b.key]||''].map(q).join(','))});
+  const csv=lines.join('\n');const box=$('csvBox');box.value=csv;
+  const show=()=>{box.hidden=false;box.focus();box.select();toast('Select all and copy the CSV below')};
+  try{navigator.clipboard.writeText(csv).then(()=>toast(`Copied ${rows.length} bills as CSV. Paste into Excel or Sheets.`),show)}catch(e){show()}
+}
+let resetArm=0;
+$('resetBtn').onclick=()=>{const btn=$('resetBtn');if(!resetArm){resetArm=setTimeout(()=>{resetArm=0;btn.textContent='Reset my settings'},4000);btn.textContent='Click again to reset';return}
+  clearTimeout(resetArm);resetArm=0;btn.textContent='Reset my settings';const sess=S.session;S=defaultState();S.session=sess;save();matchCache.clear();myFilter='all';myFind='';allFilter='all';allFind='';location.hash='#updates';route();toast('Settings reset')};
+window.addEventListener('hashchange',()=>{route();scrollTo(0,0)});
+
+(async()=>{
+  try{
+    INDEX=await getJSON('data/index.json');
+    const ids=INDEX.sessions.map(s=>s.id);
+    if(!S.session||!ids.includes(S.session)) S.session=(INDEX.sessions.find(s=>s.count>0)||INDEX.sessions[0]).id;
+    await loadSession(S.session); setNote(); route();
+  }catch(e){
+    app.innerHTML=`<main class="gut"><h1>Couldn't load bill data</h1><p class="lede">The data files didn't load (${esc(e.message)}). Reload the page to try again.</p></main>`;
+    $('dataNote').textContent='Data unavailable';
+  }
+})();
+</script>
+
+</body>
+</html>
