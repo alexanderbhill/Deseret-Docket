@@ -1,0 +1,43 @@
+name: Update Deseret Docket
+
+on:
+  schedule:
+    # Weekdays, Mountain Standard Time (UTC-7): 6:40 am, 12:40 pm, 4:40 pm, 7:40 pm.
+    # GitHub only uses UTC, so during daylight saving time these run one hour later.
+    - cron: "40 13,19,23 * * 1-5"
+    - cron: "40 2 * * 2-6"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency: docket-update
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pull latest bills and meeting transcripts from the Legislature
+        env:
+          LEG_TOKEN: ${{ secrets.LEG_TOKEN }}
+        run: |
+          mkdir -p site/data
+          python3 -I update_docket.py "$LEG_TOKEN" new-data --prev site/data
+          rm -f new-data/CHANGED.txt
+          rm -rf site/data && mv new-data site/data
+
+      # Cloudflare Pages is connected to this repository, so pushing the new data publishes the site.
+      - name: Save and publish the new data
+        run: |
+          git config user.name "docket-bot"
+          git config user.email "docket-bot@users.noreply.github.com"
+          git add -A site/data
+          git commit -m "Data update $(date -u +%Y-%m-%dT%H:%MZ)" || echo "No changes"
+          git push
