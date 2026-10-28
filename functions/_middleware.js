@@ -23,13 +23,13 @@ function safeEqual(a, b) {
 }
 
 function parseUsers(env) {
+  // Forgiving: ignores quotes, spaces and line breaks (a long line that wrapped when it was copied
+  // from Terminal still works), and any extra text pasted around the login lines.
   const users = new Map();
-  for (const line of String(env.DOCKET_USERS || "").split(/[\n,]+/)) {
-    const parts = line.trim().split(":");
-    if (parts.length === 5 && parts[1] === "pbkdf2") {
-      users.set(parts[0].toLowerCase(), { iter: +parts[2], salt: parts[3], hash: parts[4].toLowerCase() });
-    }
-  }
+  const flat = String(env.DOCKET_USERS || "").replace(/["'\s]+/g, "");
+  const re = /([a-z0-9._-]{2,40}):pbkdf2:(\d+):([0-9a-f]{32}):([0-9a-f]{64})/gi;
+  let m;
+  while ((m = re.exec(flat))) users.set(m[1].toLowerCase(), { iter: +m[2], salt: m[3].toLowerCase(), hash: m[4].toLowerCase() });
   return users;
 }
 
@@ -99,8 +99,12 @@ export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
 
-  if (!env.SESSION_SECRET || parseUsers(env).size === 0) {
-    return new Response("Deseret Docket is locked: set DOCKET_USERS and SESSION_SECRET in the Cloudflare Pages settings, then redeploy.", { status: 503, headers: { "Content-Type": "text/plain" } });
+  const problems = [];
+  if (!env.DOCKET_USERS) problems.push("DOCKET_USERS is missing");
+  else if (parseUsers(env).size === 0) problems.push("DOCKET_USERS has no valid login lines (each should look like name:pbkdf2:100000:… from make_password.py)");
+  if (!env.SESSION_SECRET) problems.push("SESSION_SECRET is missing");
+  if (problems.length) {
+    return new Response(`Deseret Docket is locked: ${problems.join("; ")}. Fix it in the Cloudflare Pages settings (Variables and secrets), then redeploy.`, { status: 503, headers: { "Content-Type": "text/plain" } });
   }
 
   if (url.pathname === "/logout") {
