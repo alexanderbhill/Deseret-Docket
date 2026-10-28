@@ -138,9 +138,10 @@ export async function onRequest(context) {
 
   const user = await sessionUser(request, env);
   if (!user) {
-    if (url.pathname.startsWith("/data/")) return new Response("Sign in required", { status: 401 });
+    if (url.pathname.startsWith("/data/") || url.pathname.startsWith("/api/")) return new Response("Sign in required", { status: 401 });
     return Response.redirect(new URL(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, url), 302);
   }
+  context.data.user = user; // read by functions/api for the team list
   const res = await next();
   const out = new Response(res.body, res);
   out.headers.set("Cache-Control", "private, no-cache");
