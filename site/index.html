@@ -217,7 +217,7 @@ async function loadSession(s){
   BILLS[s]=rows.map(r=>toBill(s,r)); BILLS[s].forEach(b=>BYKEY[b.key]=b);
   TEXT[s]={}; TEXTSTATE[s]={loaded:0,total:meta.textFiles||0};
   for(let i=0;i<(meta.textFiles||0);i++){
-    getJSON(`data/${s}/text-${i}.json`).then(chunk=>{Object.assign(TEXT[s],chunk);TEXTSTATE[s].loaded++;matchCache.clear();if(TEXTSTATE[s].loaded===TEXTSTATE[s].total)setNote();route(true)}).catch(()=>{TEXTSTATE[s].loaded++;setNote()});
+    getJSON(`data/${s}/text-${i}.json`).then(chunk=>{Object.assign(TEXT[s],chunk);TEXTSTATE[s].loaded++;matchCache.clear();if(TEXTSTATE[s].loaded===TEXTSTATE[s].total)setNote();if(booted)route(true)}).catch(()=>{TEXTSTATE[s].loaded++;setNote()});
   }
 }
 function textReady(s){const t=TEXTSTATE[s];return !t||t.loaded>=t.total}
@@ -242,6 +242,60 @@ if(!S.v||S.v<3){ // one-time cleanup of the old automatic settings
 S.buckets=S.buckets||{};
 if(SERVER_USER){S.user=SERVER_USER;S.signedIn=true}
 function save(){try{localStorage.setItem(LSKEY,JSON.stringify(S))}catch(e){}}
+
+/* ===================== TEAM LIST (hosted site with sign-in) ===================== */
+// Signed in on the hosted site: divisions, flags, notes and the watch list live on the server and are shared.
+const TEAM={on:!!SERVER_USER,ready:false,meta:{},watchMeta:null,err:null,importable:null};
+const LOCAL_BEFORE_TEAM=JSON.parse(JSON.stringify(S));
+async function api(path,body){
+  const opt=body?{method:'POST',headers:{'Content-Type':'application/json','X-Docket':'1'},body:JSON.stringify(body),credentials:'same-origin'}:{credentials:'same-origin',cache:'no-store'};
+  const r=await fetch('/api/'+path,opt); const j=await r.json().catch(()=>({}));
+  if(r.status===401){location.href='/login?next='+encodeURIComponent(location.pathname);throw new Error('Signed out')}
+  if(!r.ok) throw new Error(j.error||('error '+r.status)); return j;
+}
+function applyTeam(st){
+  S.buckets={};S.flags={};S.notes={};TEAM.meta=st.bills||{};
+  for(const [k,v] of Object.entries(TEAM.meta)){if(v.division)S.buckets[k]=v.division;if(v.flag)S.flags[k]=v.flag;if(v.note)S.notes[k]=v.note}
+  if(st.watch){S.terms=st.watch.terms;S.codes=st.watch.codes;S.opts=st.watch.opts;TEAM.watchMeta={by:st.watch.by,at:st.watch.at}}
+  else{S.terms=[];S.codes=[];TEAM.watchMeta=null}
+  matchCache.clear();
+}
+let teamSig='';
+async function pullTeam(soft){
+  if(!TEAM.on) return;
+  try{
+    const st=await api('state'); TEAM.ready=true; TEAM.err=null;
+    const sig=JSON.stringify([st.bills,st.watch]);
+    if(TEAM.importable===null){
+      const L=LOCAL_BEFORE_TEAM; let done=false; try{done=!!localStorage.getItem(LSKEY+':imported')}catch(e){}
+      const teamEmpty=!Object.keys(st.bills||{}).length&&!(st.watch&&(st.watch.terms.length||st.watch.codes.length));
+      const localHas=Object.keys(L.buckets||{}).length+Object.keys(L.flags||{}).length+Object.keys(L.notes||{}).length+(L.terms||[]).length+(L.codes||[]).length;
+      TEAM.importable=!done&&teamEmpty&&localHas>0;
+    }
+    if(sig!==teamSig){teamSig=sig;applyTeam(st);save();if(soft)route(true)}
+  }catch(e){TEAM.err=e.message;setNote();if(soft)route(true)}
+}
+function teamBill(key,patch){
+  if(!TEAM.on) return;
+  api('bill',{key,...patch}).then(()=>{const m=TEAM.meta[key]=TEAM.meta[key]||{};const now=new Date().toISOString();
+    if('division' in patch){m.division=patch.division;m.divBy=SERVER_USER;m.divAt=now}
+    if('flag' in patch){m.flag=patch.flag;m.flagBy=SERVER_USER;m.flagAt=now}
+    if('note' in patch){m.note=patch.note;m.noteBy=SERVER_USER;m.noteAt=now}
+    if(location.hash.startsWith('#bill-')) route(true);
+  }).catch(e=>toast(`Couldn't save that for the team (${e.message}). Reload the page and try again.`));
+}
+function teamWatch(){
+  if(!TEAM.on) return;
+  api('watch',{terms:S.terms,codes:S.codes,opts:S.opts}).then(r=>{TEAM.watchMeta={by:r.watch.by,at:r.watch.at}})
+    .catch(e=>toast(`Couldn't save the watch list for the team (${e.message}). Reload and try again.`));
+}
+const whoWhen=(by,at)=>{if(!by)return '';const d=at?new Date(at):null;return `${esc(by===SERVER_USER?'you':by)}${d?' · '+MONTHS[d.getMonth()]+' '+d.getDate()+', '+fmtTime(d):''}`};
+function importBanner(){
+  if(!TEAM.on||!TEAM.importable) return '';
+  const L=LOCAL_BEFORE_TEAM,n=new Set([...Object.keys(L.buckets||{}),...Object.keys(L.flags||{}),...Object.keys(L.notes||{})]).size;
+  return `<div class="card" style="margin-bottom:18px"><b>Bring your saved bills into the team list?</b><p class="small" style="margin:4px 0 10px">This browser has ${n} bill${n===1?'':'s'} you sorted or flagged${(L.terms||[]).length?' and a watch list':''} from before the list was shared. Add them so the whole team sees them.</p>
+  <button class="btn primary" id="doImport">Add to the team list</button> <button class="btn" id="skipImport">Not now</button></div>`;
+}
 
 /* ===================== MATCHING ===================== */
 function termRe(t){const parts=t.trim().split(/\s+/).map(p=>p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));return new RegExp(`\\b${parts.join('\\s+')}\\b`,'i')}
@@ -298,7 +352,8 @@ function setNote(){
   if(!INDEX){return}
   const u=new Date(INDEX.updated); const s=S.session;
   const txt=textReady(s)?'':` · Loading bill text (${TEXTSTATE[s].loaded} of ${TEXTSTATE[s].total})…`;
-  $('dataNote').textContent=`Live data from the Utah Legislature, last checked ${ymd(u)===todayStr?'today':fmtLong(u)} at ${fmtTime(u)}. Your divisions, flags, notes and watch list stay in this browser.${txt}`;
+  const mine=TEAM.on?(TEAM.err?` Team list unavailable: ${TEAM.err}`:' Divisions, flags, notes and the watch list are shared with your team.'):' Your divisions, flags, notes and watch list stay in this browser.';
+  $('dataNote').textContent=`Live data from the Utah Legislature, last checked ${ymd(u)===todayStr?'today':fmtLong(u)} at ${fmtTime(u)}.${mine}${txt}`;
 }
 const billLink=b=>`#bill-${b.session}-${b.num}`;
 function flagTag(b){const f=flagOf(b);return FLAG_NAME[f]?`<span class="tag f-${f}">${FLAG_NAME[f]}</span>`:''}
@@ -342,7 +397,7 @@ function pageMyBills(){
   const rows=base.filter(BF[myBucket]).filter(b=>!q||[b.num,b.title,b.sponsor,S.notes[b.key]||'',b.own,b.act,BUCKET_NAME[bucketOf(b)]||'',FLAG_NAME[flagOf(b)]||''].join(' ').toLowerCase().includes(q));
   const bar=`<div class="bucketbar" role="group" aria-label="Filter by division">${[['any','All divisions','all'],...BUCKETS.map(([k,l])=>[k,l,'b-'+k]),['none','No division','f-notrelevant']].map(([k,l,c])=>`<button type="button" class="bk ${c} ${myBucket===k?'on':''}" data-mybucket="${k}" aria-pressed="${myBucket===k}">${l} (${base.filter(BF[k]).length})</button>`).join('')}</div>`;
   const empty=!all.length?`<div class="card"><h2>Your list is empty</h2><p>Bills land here when you put them in a division, flag them, or when they match a search term. Start from <a href="#all">All bills</a> and press <b>Criminal</b>, <b>Civil</b>, <b>Public Protection</b> or <b>Appellate</b> on any bill, or add words to your <a href="#watchlist">watch list</a>.</p></div>`:'';
-  return shell('bills',`<h1>My bills</h1><p class="lede">Bills in ${esc(S.session)} you've sorted into a division or flagged, plus any that match your watch list. Nobody else sees this list.</p>${textNotice()}
+  return shell('bills',`<h1>My bills</h1><p class="lede">Bills in ${esc(S.session)} ${TEAM.on?'your team has':"you've"} sorted into a division or flagged, plus any that match ${TEAM.on?'the team':'your'} watch list. ${TEAM.on?'Everyone who signs in sees and edits this list.':'Nobody else sees this list.'}</p>${importBanner()}${textNotice()}
   ${(BILLS[S.session]||[]).length?(empty||`<form class="filters" id="myForm"><div class="field"><label for="myShow">Show</label><select id="myShow">${Object.entries(F).map(([k,[l,f]])=>`<option value="${k}" ${k===myFilter?'selected':''}>${l} (${all.filter(f).length})</option>`).join('')}</select></div>
   <div class="field grow"><label for="myFind">Find</label><input id="myFind" value="${esc(myFind)}" placeholder="Bill, title, sponsor, committee, division or note"></div>
   <button class="btn">Apply</button><button type="button" class="plain" id="csv">Copy CSV</button></form><textarea class="csvbox" id="csvBox" hidden readonly aria-label="CSV of your bills"></textarea>
@@ -390,7 +445,7 @@ function pageHearings(){
 function pageWatch(){
   const row=(x,i,kind)=>`<div class="wl-row ${x.on?'':'paused'}"><input type="checkbox" id="wl-${kind}-${i}" ${x.on?'checked':''} data-toggle="${kind}:${i}" title="${x.on?'Searching for this. Click to pause.':'Paused. Click to resume.'}"><label class="term" for="wl-${kind}-${i}">${esc(x.t)}</label><button class="linkbtn small" data-remove="${kind}:${i}">Remove</button></div>`;
   const count=(BILLS[S.session]||[]).filter(b=>matchesFor(b).length).length;
-  return shell('watchlist',`<h1>Watch list</h1><p class="lede">Every bill in the session is checked against whatever you tick below. Your list is private and stays in this browser. Changes apply right away, and the search runs on Deseret Docket's own copy of the bills, so it doesn't count against the Legislature's request limits.</p>${textNotice()}
+  return shell('watchlist',`<h1>Watch list</h1><p class="lede">Every bill in the session is checked against whatever you tick below. ${TEAM.on?`This watch list is shared with your team${TEAM.watchMeta&&TEAM.watchMeta.by?` (last changed by ${whoWhen(TEAM.watchMeta.by,TEAM.watchMeta.at)})`:''}.`:'Your list is private and stays in this browser.'} Changes apply right away, and the search runs on Deseret Docket's own copy of the bills, so it doesn't count against the Legislature's request limits.</p>${textNotice()}
   <div class="grid2"><div><h2>Words and phrases</h2><p class="small muted">Optional. Matches whole words in any capitalization, even when a phrase wraps onto the next line. Leave this empty if you only want the bills you sort into divisions.</p>
    ${S.terms.map((x,i)=>row(x,i,'terms')).join('')||'<p class="small muted">Nothing yet.</p>'}
    <form class="addrow" id="addTerm"><input id="termIn" placeholder="e.g. deceptive trade practice" aria-label="Add a word or phrase"><button class="btn">Add</button></form></div>
@@ -406,7 +461,7 @@ function pageWatch(){
 }
 
 function pageAccount(){
-  if(SERVER_USER) return shell('',`<h1>Your account</h1><p>Signed in as <b>${esc(SERVER_USER)}</b>. Your divisions, flags, notes and watch list are saved in this browser under your username.</p>
+  if(SERVER_USER) return shell('',`<h1>Your account</h1><p>Signed in as <b>${esc(SERVER_USER)}</b>. Divisions, flags, notes and the watch list are shared with everyone who signs in.</p>
   <p class="small muted">To change a password, the site owner makes a new password line with <code>make_password.py</code> and updates the <code>DOCKET_USERS</code> setting in Cloudflare.</p><p><a class="btn" href="/logout">Sign out</a></p>`);
   return shell('',`<h1>Your account</h1><p>Signed in as <b>${esc(S.user)}</b>. Your name, divisions, flags, notes and watch list are saved only in this browser.</p>
   <form id="nameForm" style="max-width:420px" class="filters"><div class="field grow"><label for="nameIn">Display name</label><input id="nameIn" value="${esc(S.user)}"></div><button class="btn">Save</button></form>`);
@@ -463,11 +518,13 @@ function pageBill(session,num){
    <section><h2>Status and votes</h2><div class="tablewrap"><table class="compact"><thead><tr><th>Date</th><th>Action</th><th>Location</th><th>Vote</th></tr></thead><tbody>${b.hist.map(h=>{const d=pd(h[0]);return `<tr><td>${d?fmtMDY(d):''}</td><td>${esc(h[1])}</td><td>${esc(h[2])}</td><td>${esc(h[3])}</td></tr>`}).join('')}</tbody></table></div></section>
    <section class="docs"><h2>Documents</h2>${b.docs.map(g=>`<b>${esc(g[0])}</b><ul>${g[1].map(i=>{const d=pd(i[1]);return `<li><a href="${esc(i[2])}" target="_blank" rel="noopener">${esc(i[0])}</a>${d?', '+MONTHS[d.getMonth()]+' '+d.getDate():''}</li>`}).join('')}</ul>`).join('')||'<p class="small muted">None yet.</p>'}</section>
   </div>
-  <aside class="side"><h3>Your division, flag and note</h3><div class="small muted">Private to you.</div>
-   <div class="sidegroup"><b>Division</b>${bucketChips(b)}</div>
-   <div class="sidegroup"><b>Flag</b>${[['none','No flag'],...FLAGS].map(([v,l])=>`<label class="radio ${v==='none'?'':'f-'+v} ${f===v?'sel':''}"><input type="radio" name="flag" value="${v}" ${f===v?'checked':''}> ${l}</label>`).join('')}</div>
+  <aside class="side"><h3>${TEAM.on?'Team division, flag and note':'Your division, flag and note'}</h3><div class="small muted">${TEAM.on?'Shared with everyone who signs in.':'Private to you.'}</div>
+   <div class="sidegroup"><b>Division</b>${bucketChips(b)}${TEAM.on&&TEAM.meta[b.key]&&TEAM.meta[b.key].divBy?`<div class="small muted" style="margin-top:4px">Set by ${whoWhen(TEAM.meta[b.key].divBy,TEAM.meta[b.key].divAt)}</div>`:''}</div>
+   <div class="sidegroup"><b>Flag</b>${TEAM.on&&TEAM.meta[b.key]&&TEAM.meta[b.key].flagBy?`<div class="small muted">Set by ${whoWhen(TEAM.meta[b.key].flagBy,TEAM.meta[b.key].flagAt)}</div>`:''}${[['none','No flag'],...FLAGS].map(([v,l])=>`<label class="radio ${v==='none'?'':'f-'+v} ${f===v?'sel':''}"><input type="radio" name="flag" value="${v}" ${f===v?'checked':''}> ${l}</label>`).join('')}</div>
    <label for="noteIn" style="display:block;font-weight:600;margin:12px 0 6px">Note</label><textarea id="noteIn">${esc(S.notes[b.key]||'')}</textarea>
+   ${TEAM.on&&TEAM.meta[b.key]&&TEAM.meta[b.key].noteBy?`<div class="small muted">Last edited by ${whoWhen(TEAM.meta[b.key].noteBy,TEAM.meta[b.key].noteAt)}</div>`:''}
    <button class="btn primary" id="saveNote" style="margin-top:8px">Save</button>
+   ${TEAM.on?`<details class="sidegroup" id="teamLog" data-key="${esc(b.key)}"><summary class="small" style="cursor:pointer;color:var(--link)">Team history</summary><div class="small muted" id="teamLogBody">Loading…</div></details>`:''}
    <p class="small muted"><b>High priority</b> and <b>Priority</b> keep a bill under Needs attention. <b>Not relevant</b> hides it from your updates and your list.</p></aside></div>`);
 }
 
@@ -509,16 +566,16 @@ function bind(){
   $('allSort')&&($('allSort').onchange=()=>$('allForm').requestSubmit());
   document.querySelectorAll('[data-bucket]').forEach(btn=>btn.onclick=()=>{const [k,bk]=btn.dataset.bucket.split('|');const num=k.split('/')[1];
     if(S.buckets[k]===bk){delete S.buckets[k];toast(`${num} removed from ${BUCKET_NAME[bk]}`)}else{const from=S.buckets[k];S.buckets[k]=bk;toast(from?`${num} moved from ${BUCKET_NAME[from]} to ${BUCKET_NAME[bk]}`:`${num} added to ${BUCKET_NAME[bk]}`)}
-    save();route(true)});
+    save();teamBill(k,{division:S.buckets[k]||null});route(true)});
   document.querySelectorAll('[data-mybucket]').forEach(btn=>btn.onclick=()=>{myBucket=btn.dataset.mybucket;route(true)});
   document.querySelectorAll('[data-page]').forEach(btn=>btn.onclick=()=>{allPage+=+btn.dataset.page;route();scrollTo(0,0)});
-  document.querySelectorAll('[data-toggle]').forEach(cb=>cb.onchange=()=>{const [k,i]=cb.dataset.toggle.split(':');S[k][i].on=cb.checked;save();route()});
-  document.querySelectorAll('[data-remove]').forEach(btn=>btn.onclick=()=>{const [k,i]=btn.dataset.remove.split(':');S[k].splice(i,1);save();route()});
-  $('addTerm')&&($('addTerm').onsubmit=e=>{e.preventDefault();const v=$('termIn').value.trim().replace(/\s+/g,' ');if(!v)return;if(S.terms.some(x=>x.t.toLowerCase()===v.toLowerCase())){toast('Already on your list');return}S.terms.push({t:v,on:true});save();route();toast(`Now searching for “${v}”`)});
-  $('addCode')&&($('addCode').onsubmit=e=>{e.preventDefault();const v=$('codeIn').value.trim().replace(/^title\s+/i,'');if(!/^\d+[A-Za-z]?(-\d+[A-Za-z]?(-\d+(\.\d+)?)?)?$/.test(v)){toast('Use a format like 13, 13-11 or 13-11-4.5');return}if(S.codes.some(x=>x.t===v))return;S.codes.push({t:v,on:true});save();route()});
-  $('optsForm')&&($('optsForm').onsubmit=e=>{e.preventDefault();const f=e.target;['struck','defsOnly','titlesOnly'].forEach(k=>S.opts[k]=f[k].checked);save();route();toast('Options saved')});
-  document.querySelectorAll('input[name=flag]').forEach(r=>r.onchange=()=>{if(r.value==='none')delete S.flags[curKey];else S.flags[curKey]=r.value;save();route(true);toast('Flag saved')});
-  $('saveNote')&&($('saveNote').onclick=()=>{const v=$('noteIn').value.trim();if(v)S.notes[curKey]=v;else delete S.notes[curKey];save();toast('Note saved')});
+  document.querySelectorAll('[data-toggle]').forEach(cb=>cb.onchange=()=>{const [k,i]=cb.dataset.toggle.split(':');S[k][i].on=cb.checked;save();teamWatch();route()});
+  document.querySelectorAll('[data-remove]').forEach(btn=>btn.onclick=()=>{const [k,i]=btn.dataset.remove.split(':');S[k].splice(i,1);save();teamWatch();route()});
+  $('addTerm')&&($('addTerm').onsubmit=e=>{e.preventDefault();const v=$('termIn').value.trim().replace(/\s+/g,' ');if(!v)return;if(S.terms.some(x=>x.t.toLowerCase()===v.toLowerCase())){toast('Already on your list');return}S.terms.push({t:v,on:true});save();teamWatch();route();toast(`Now searching for “${v}”`)});
+  $('addCode')&&($('addCode').onsubmit=e=>{e.preventDefault();const v=$('codeIn').value.trim().replace(/^title\s+/i,'');if(!/^\d+[A-Za-z]?(-\d+[A-Za-z]?(-\d+(\.\d+)?)?)?$/.test(v)){toast('Use a format like 13, 13-11 or 13-11-4.5');return}if(S.codes.some(x=>x.t===v))return;S.codes.push({t:v,on:true});save();teamWatch();route()});
+  $('optsForm')&&($('optsForm').onsubmit=e=>{e.preventDefault();const f=e.target;['struck','defsOnly','titlesOnly'].forEach(k=>S.opts[k]=f[k].checked);save();teamWatch();route();toast('Options saved')});
+  document.querySelectorAll('input[name=flag]').forEach(r=>r.onchange=()=>{if(r.value==='none')delete S.flags[curKey];else S.flags[curKey]=r.value;save();teamBill(curKey,{flag:r.value==='none'?null:r.value});route(true);toast('Flag saved')});
+  $('saveNote')&&($('saveNote').onclick=()=>{const v=$('noteIn').value.trim();if(v)S.notes[curKey]=v;else delete S.notes[curKey];save();teamBill(curKey,{note:v});toast(TEAM.on?'Note saved for the team':'Note saved')});
   document.querySelectorAll('details[data-tx]').forEach(dt=>dt.addEventListener('toggle',async()=>{
     if(!dt.open||dt.dataset.done) return; dt.dataset.done=1;
     const [sess,chunk,num,key]=dt.dataset.tx.split('|'); const box=dt.querySelector('.tx');
@@ -526,6 +583,16 @@ function bind(){
       box.innerHTML=lines.length?lines.map(l=>`<p><a class="ts" href="${esc(vAt(t,l[0]))}" target="_blank" rel="noopener">${clock(l[0])}</a><span>${markAG(l[1])}</span></p>`).join(''):'<p>No transcript text.</p>'}
     catch(e){box.textContent='The transcript didn\'t load. Close and reopen to try again.';delete dt.dataset.done}
   }));
+  $('doImport')&&($('doImport').onclick=async()=>{const L=LOCAL_BEFORE_TEAM,bills={};
+    for(const k of new Set([...Object.keys(L.buckets||{}),...Object.keys(L.flags||{}),...Object.keys(L.notes||{})]))bills[k]={division:(L.buckets||{})[k]||null,flag:(L.flags||{})[k]||null,note:(L.notes||{})[k]||''};
+    try{const r=await api('import',{bills,watch:{terms:L.terms||[],codes:L.codes||[],opts:L.opts||{}}});try{localStorage.setItem(LSKEY+':imported','1')}catch(e){}
+      TEAM.importable=false;teamSig='';applyTeam(r);save();toast(`Added ${r.imported} bill${r.imported===1?'':'s'} to the team list`);route()}catch(e){toast(`Couldn't add them (${e.message}). Try again.`)}});
+  $('skipImport')&&($('skipImport').onclick=()=>{try{localStorage.setItem(LSKEY+':imported','skipped')}catch(e){}TEAM.importable=false;route()});
+  const tl=$('teamLog'); if(tl) tl.addEventListener('toggle',async()=>{if(!tl.open||tl.dataset.done)return;tl.dataset.done=1;
+    const label={'division:none':'removed the division','flag:none':'removed the flag','note:edited':'edited the note','note:cleared':'cleared the note'};
+    try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));
+      $('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>{const [kind,val]=x.what.split(':');const txt=label[x.what]||(kind==='division'?'moved it to '+(BUCKET_NAME[val]||val):kind==='flag'?'flagged it '+(FLAG_NAME[val]||val):x.what);return `<li>${whoWhen(x.by,x.at)}: ${esc(txt)}</li>`}).join('')+'</ul>':'No team changes yet.'}
+    catch(e){$('teamLogBody').textContent='History did not load.';delete tl.dataset.done}});
   $('nameForm')&&($('nameForm').onsubmit=e=>{e.preventDefault();S.user=$('nameIn').value.trim()||S.user;save();route();toast('Saved')});
 }
 function copyCSV(){
@@ -538,16 +605,22 @@ function copyCSV(){
   try{navigator.clipboard.writeText(csv).then(()=>toast(`Copied ${rows.length} bills as CSV. Paste into Excel or Sheets.`),show)}catch(e){show()}
 }
 let resetArm=0;
+if(TEAM.on) $('resetBtn').hidden=true;
 $('resetBtn').onclick=()=>{const btn=$('resetBtn');if(!resetArm){resetArm=setTimeout(()=>{resetArm=0;btn.textContent='Reset my settings'},4000);btn.textContent='Click again to reset';return}
   clearTimeout(resetArm);resetArm=0;btn.textContent='Reset my settings';const sess=S.session;S=defaultState();S.session=sess;save();matchCache.clear();myFilter='all';myFind='';allFilter='all';allFind='';location.hash='#updates';route();toast('Settings reset')};
-window.addEventListener('hashchange',()=>{route();scrollTo(0,0)});
+let lastPull=0;
+window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(TEAM.on&&Date.now()-lastPull>10000){lastPull=Date.now();pullTeam(true)}});
 
+let booted=false;
 (async()=>{
   try{
     INDEX=await getJSON('data/index.json');
     const ids=INDEX.sessions.map(s=>s.id);
     if(!S.session||!ids.includes(S.session)) S.session=(INDEX.sessions.find(s=>s.count>0)||INDEX.sessions[0]).id;
-    await loadSession(S.session); setNote(); route();
+    const teamFirst=TEAM.on?pullTeam(false):null; // load the team list while the bills download
+    await loadSession(S.session);
+    if(TEAM.on){await teamFirst;setInterval(()=>pullTeam(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)pullTeam(true)})}
+    booted=true; setNote(); route();
   }catch(e){
     app.innerHTML=`<main class="gut"><h1>Couldn't load bill data</h1><p class="lede">The data files didn't load (${esc(e.message)}). Reload the page to try again.</p></main>`;
     $('dataNote').textContent='Data unavailable';
