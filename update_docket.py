@@ -7,6 +7,8 @@ le.utah.gov, then writes the data files the Deseret Docket page reads:
   data/index.json                 sessions + last-checked time
   data/<SESSION>/bills.json       one record per bill (status, history, hearings, docs, changes)
   data/<SESSION>/text-<k>.json    searchable bill text, chunked
+  data/<SESSION>/billfiles.json   open bill files (requests not yet numbered) for the upcoming session,
+                                  with the time Deseret Docket first saw each one
 
 Usage:
   python3 -I update_docket.py TOKEN OUT_DIR [--prev PREV_DIR] [--sessions 2027GS,2026GS]
@@ -585,6 +587,49 @@ def build_session(token, session, out, prev, stamp):
     return {"id": session, "count": len(bl), "textFiles": len(chunks), "txFiles": len(tchunks)}
 
 
+# ---------------------------------------------------------------- open bill files
+# Before bills are numbered, le.utah.gov lists each bill file (bill request) with its working title,
+# sponsor and status. We keep the first time we saw each one so the emails can announce new files.
+def fetch_bill_files(session):
+    url = f"{LE}/bills/billSearch.jsp?sess={session}&disp=all&sub=all"
+    s = get(url).decode("utf-8", "replace")
+    rows = re.findall(r'<tr><td><input[^>]*data-trackingid="([A-Za-z0-9]+)"[^>]*></td>(.*?)</tr>', s, re.S)
+    out = {}
+    for tid, rest in rows:
+        cells = [_html.unescape(re.sub(r"<[^>]+>", "", c)).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", rest, re.S)]
+        if len(cells) < 5 or cells[0].lower() != "not numbered":
+            continue
+        out[tid] = [cells[1], cells[2], cells[4]]
+    return out
+
+
+def build_bill_files(session, out, prev, stamp):
+    old = {}
+    p = os.path.join(prev, session, "billfiles.json") if prev else None
+    if p and os.path.exists(p):
+        old = {r[0]: r for r in json.load(open(p))}
+    try:
+        cur = fetch_bill_files(session)
+    except Exception as e:
+        print(f"  bill files failed: {e}", file=sys.stderr)
+        if not old:
+            return None
+        cur = {k: v[1:4] for k, v in old.items()}
+    if not cur and old:  # the page came back empty (site hiccup or every file numbered): keep what we had
+        cur = {k: v[1:4] for k, v in old.items()}
+    first_run = not old
+    rows = []
+    for tid, (title, sponsor, status) in cur.items():
+        seen = old[tid][4] if tid in old else ("base" if first_run else stamp)
+        rows.append([tid, title, sponsor, status, seen])
+    rows.sort(key=lambda r: ("" if r[4] == "base" else r[4], r[1]), reverse=True)
+    os.makedirs(os.path.join(out, session), exist_ok=True)
+    json.dump(rows, open(os.path.join(out, session, "billfiles.json"), "w"), separators=(",", ":"))
+    new = sum(1 for r in rows if r[4] == stamp)
+    print(f"{session}: {len(rows)} open bill files, {new} new")
+    return {"session": session, "count": len(rows)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("token"); ap.add_argument("out")
@@ -592,8 +637,11 @@ def main():
     a = ap.parse_args()
     stamp = datetime.now(MT).isoformat()[:16]
     sessions = [build_session(a.token, s.strip(), a.out, a.prev, stamp) for s in a.sessions.split(",") if s.strip()]
-    json.dump({"updated": datetime.now(MT).isoformat(timespec="minutes"), "sessions": sessions},
-              open(os.path.join(a.out, "index.json"), "w"), indent=1)
+    index = {"updated": datetime.now(MT).isoformat(timespec="minutes"), "sessions": sessions}
+    bf = build_bill_files(sessions[0]["id"], a.out, a.prev, stamp) if sessions else None
+    if bf:
+        index["billfiles"] = bf
+    json.dump(index, open(os.path.join(a.out, "index.json"), "w"), indent=1)
     # list which published files changed, so a publish can send only those
     import hashlib
     def h(p):
