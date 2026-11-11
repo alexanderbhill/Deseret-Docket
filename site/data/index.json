@@ -1,21 +1,19 @@
 {
- "updated": "2026-11-10T20:26-07:00",
+ "updated": "2026-11-10T21:59-07:00",
  "sessions": [
   {
    "id": "2027GS",
    "count": 0,
    "textFiles": 0,
-   "txFiles": 0
+   "txFiles": 0,
+   "files": 243
   },
   {
    "id": "2026GS",
    "count": 1016,
    "textFiles": 16,
-   "txFiles": 10
+   "txFiles": 10,
+   "files": 0
   }
- ],
- "billfiles": {
-  "session": "2027GS",
-  "count": 283
- }
+ ]
 }
