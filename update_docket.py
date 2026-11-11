@@ -7,8 +7,6 @@ le.utah.gov, then writes the data files the Deseret Docket page reads:
   data/index.json                 sessions + last-checked time
   data/<SESSION>/bills.json       one record per bill (status, history, hearings, docs, changes)
   data/<SESSION>/text-<k>.json    searchable bill text, chunked
-  data/<SESSION>/billfiles.json   open bill files (requests not yet numbered) for the upcoming session,
-                                  with the time Deseret Docket first saw each one
 
 Usage:
   python3 -I update_docket.py TOKEN OUT_DIR [--prev PREV_DIR] [--sessions 2027GS,2026GS]
@@ -209,6 +207,11 @@ def record_of(d, upd):
         "gd": d.get("generalProvisions", "") or "", "hist": hist,
         "vers": [[v["name"], v["date"]] for v in vers], "docs": docs_of(d), "ag": ag, "secs": secs, "subj": subjects,
         "upd": upd, "ch": [], "mk": markers_of(d),
+        "spH": d.get("primeSponsorHouse", "") or "", "flH": d.get("floorSponsorHouse", "") or "",
+        "spId": d.get("primeSponsor", "") or "", "flId": d.get("floorSponsor", "") or "",
+        "cosp": cosponsors_of(d), "tid": d.get("trackingID", "") or "", "fa": d.get("fiscalAnalyst", "") or "",
+        "rc": [c.get("name", "") for c in d.get("recommendingCommitteeList", []) or [] if c.get("name")],
+        "fnu": fiscal_note_url(d), "cmp": comparison_pdf(d),
     }
 
 
@@ -379,6 +382,478 @@ def markers_of(d):
     return out
 
 
+# ---------------------------------------------------------------- office config (site/config.json)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+try:
+    CONFIG = json.load(open(os.path.join(_HERE, "site", "config.json")))
+except Exception:
+    CONFIG = {"divisions": [], "cjSubjects": []}
+
+
+def cosponsors_of(d):
+    out = []
+    for v in d.get("billVersionList", []) or []:
+        for c in v.get("coSponsorList", []) or []:
+            n = c.get("name") or c.get("fullName") or c.get("sponsorName") if isinstance(c, dict) else str(c)
+            if n and n not in out:
+                out.append(n)
+    return out
+
+
+def _abs(url):
+    return LE + url if url.startswith("/") else url
+
+
+def fiscal_note_url(d):
+    best = None
+    for v in d.get("billVersionList", []) or []:
+        for doc in v.get("billDocs", []) or []:
+            if doc.get("fileType") == "PubFN" and doc.get("url", "").lower().endswith(".html"):
+                k = doc.get("fileDate") or ""
+                if not best or k > best[0]:
+                    best = (k, _abs(doc["url"]))
+    return best[1] if best else ""
+
+
+def comparison_pdf(d):
+    best = None
+    for v in d.get("billVersionList", []) or []:
+        for doc in v.get("billDocs", []) or []:
+            desc = doc.get("shortDesc", "") or ""
+            if desc.lower().startswith("comparison") and doc.get("url"):
+                k = doc.get("fileDate") or ""
+                if not best or k > best[0]:
+                    best = (k, [desc, fmt_date(k), _abs(doc["url"])])
+    return best[1] if best else None
+
+
+# ---------------------------------------------------------------- fiscal notes
+_MONEY = r"\$\s?\(?-?[\d,]+(?:\.\d+)?\)?"
+
+
+def money(s):
+    s = s.replace("$", "").replace(",", "").strip()
+    neg = s.startswith("(") or s.startswith("-")
+    s = s.strip("()-")
+    try:
+        v = float(s)
+    except ValueError:
+        return 0
+    return -v if neg else v
+
+
+AGENCY_RE = re.compile(
+    r"\b((?:Department|Office|Division|Board|Commission|Administrative Office|Bureau|Council) of (?:the )?"
+    r"[A-Z][A-Za-z&']+(?:,? (?:and |of |the |for |& )?[A-Z][A-Za-z&']+){0,6}"
+    r"|Attorney General|Utah Highway Patrol|State Tax Commission|Tax Commission|Judicial Council|Courts|"
+    r"Utah State Board of Education|State Board of Education|Utah Department of Corrections|Juvenile Justice and Youth Services)")
+
+
+def parse_fiscal_note(raw, url):
+    s = raw.decode("utf-8", "replace")
+    s = re.sub(r"<style[\s\S]*?</style>", " ", s)
+    s = re.sub(r"<[^>]+>", " ", s)
+    import html as h
+    t = re.sub(r"\s+", " ", h.unescape(s).replace("\xa0", " ")).strip()
+    fn = {"u": url}
+    m = re.search(r"Net GF/ITF/USF\s*\(rev\.?-exp\.?\)\s*(" + _MONEY + r")\s*(" + _MONEY + r")\s*(" + _MONEY + r")", t)
+    if m:
+        fn["net"] = [money(m.group(1)), money(m.group(2)), money(m.group(3))]  # ongoing, one-time, total
+
+    def table(name, total_name):
+        i = t.find(name + " FY")
+        if i < 0:
+            return None
+        j = t.find(total_name, i)
+        if j < 0:
+            return None
+        head = re.match(name + r" ((?:FY\d{4} ?){2,4})", t[i:])
+        fys = head.group(1).split() if head else []
+        body = t[i + (head.end() if head else len(name)):j]
+        rows = []
+        for r in re.finditer(r"([A-Za-z][A-Za-z ,'&./()-]*?)\s+((?:" + _MONEY + r"\s*){%d})" % max(1, len(fys)), body):
+            vals = [money(x) for x in re.findall(_MONEY, r.group(2))]
+            rows.append([r.group(1).strip(), *vals])
+        tm = re.match(total_name + r"\s*((?:" + _MONEY + r"\s*){%d})" % max(1, len(fys)), t[j:])
+        tot = [money(x) for x in re.findall(_MONEY, tm.group(1))] if tm else []
+        k = j + (tm.end() if tm else len(total_name))
+        nxt = re.search(r"(Expenditures FY|Revenues FY|FY\d{4} FY\d{4} FY\d{4} Net|Local Government|Individuals)", t[k:])
+        narrative = t[k:k + (nxt.start() if nxt else 600)].strip()
+        return {"fy": fys, "rows": rows[:12], "tot": tot, "txt": narrative[:700]}
+    rev = table("Revenues", "Total Revenues")
+    exp = table("Expenditures", "Total Expenditures")
+    if rev:
+        fn["rev"] = rev
+    if exp:
+        fn["exp"] = exp
+    m = re.search(r"Net All Funds \(rev-exp\)\s*((?:" + _MONEY + r"\s*){3})", t)
+    if m:
+        fn["all"] = [money(x) for x in re.findall(_MONEY, m.group(1))]
+    for key, label in (("local", "Local Government"), ("ind", "Individuals & Businesses")):
+        i = t.find(label + " UCA")
+        if i >= 0:
+            seg = re.sub(r"^.*?UCA \S+ ?", "", t[i:i + 500])
+            seg = re.split(r" (?:Individuals & Businesses|Regulatory Impact|Performance Evaluation) UCA", seg)[0]
+            fn[key] = seg.strip()[:300]
+    narr = " ".join(x.get("txt", "") for x in (exp, rev) if x)
+    ags = []
+    for a in AGENCY_RE.findall(narr):
+        a = re.sub(r"^Utah ", "", a.strip())
+        if a not in ags:
+            ags.append(a)
+    fn["ag"] = ags[:6]
+    dm = re.search(r"(\d{4})/(\d{2})/(\d{2}) \d{2}:\d{2}, Lead Analyst", t)
+    fn["d"] = f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}" if dm else ""
+    if "likely will not result in direct, measurable costs" in narr or (fn.get("net") == [0, 0, 0] and not (exp and exp["rows"])):
+        fn["none"] = True
+    return fn
+
+
+# ---------------------------------------------------------------- version-to-version text changes
+def _plain(t):
+    return re.sub(r"\s+", " ", t.replace(STRUCK_OPEN, "").replace(STRUCK_CLOSE, "")).strip()
+
+
+def version_diff(old_passages, new_passages, old_name, new_name, stamp):
+    def by_where(ps):
+        d = {}
+        for w, t, _ in ps or []:
+            d[w] = (d.get(w, "") + " " + _plain(t)).strip()
+        return d
+    a, b = by_where(old_passages), by_where(new_passages)
+    items = []
+    for w in b:
+        if w not in a:
+            items.append([w, "add", "", b[w][:700]])
+        elif a[w] != b[w]:
+            items.append([w, "chg", a[w][:700], b[w][:700]])
+    for w in a:
+        if w not in b:
+            items.append([w, "del", a[w][:700], ""])
+    return {"from": old_name, "to": new_name, "at": stamp, "n": len(items), "items": [[w, k, a_[:500], b_[:500]] for w, k, a_, b_ in items[:30]]}
+
+
+# ---------------------------------------------------------------- unnumbered bill files
+FILE_ROW_RE = re.compile(r'data-trackingid="([A-Z0-9]+)"[^>]*></td><td>([^<]*)</td><td>([^<]*)</td><td>([^<]*)</td><td>([^<]*)</td><td>([^<]*)</td>')
+
+
+def bill_files(session):
+    """Bill requests the Legislature lists publicly before they get a number."""
+    out = {}
+    for who, house, title in (("rep", "H", "Rep."), ("sen", "S", "Sen.")):
+        try:
+            s = get(f"{LE}/bills/billSearch.jsp?sess={session}&disp=all&{who}=all").decode("utf-8", "replace")
+        except Exception as e:
+            print(f"  bill files ({who}) failed: {e}", file=sys.stderr)
+            continue
+        i = s.find('id="main-content"')
+        body = s[i:s.find("<footer", i)]
+        parts = re.split(r"<h2>([^<]*)</h2>", body)
+        for k in range(1, len(parts), 2):
+            if parts[k].strip().lower() != "sponsored":
+                continue
+            for tid, num, t, sp, fl, st in FILE_ROW_RE.findall(parts[k + 1]):
+                if tid in out:
+                    continue
+                import html as h
+                out[tid] = {"tid": tid, "num": h.unescape(num).strip(), "t": h.unescape(t).strip(), "sp": f"{title} {h.unescape(sp).strip()}",
+                            "spH": house, "st": h.unescape(st).strip()}
+    return out
+
+
+# ---------------------------------------------------------------- division suggestions
+def _kw_re(k):
+    return re.compile(r"\b" + re.escape(k.lower()).replace(r"\ ", r"\s+") + r"(?:s|es|ed|ing)?\b")
+
+
+_DIV_RES = [(d["id"], d.get("dept"), [(_kw_re(k), k) for k in d.get("keywords", [])], d.get("codes", [])) for d in CONFIG.get("divisions", [])]
+_CJ = {x.lower() for x in CONFIG.get("cjSubjects", [])}
+
+
+def suggest_divisions(rec, tx_text=""):
+    title = (rec.get("t") or "").lower()
+    hay = " ".join([title, (rec.get("gd") or "").lower(), " ".join(rec.get("subj", [])).lower(),
+                    " ".join((rec.get("fn") or {}).get("ag", [])).lower()])
+    tx = tx_text.lower()
+    scores = {}
+    for did, dept, kws, codes in _DIV_RES:
+        sc = 0.0
+        for rx, k in kws:
+            if rx.search(title):
+                sc += 3
+            elif rx.search(hay):
+                sc += 2
+            elif tx and len(rx.findall(tx)) >= 2:
+                sc += 0.75
+        for code in codes:
+            if any(s == code or s.startswith(code + "-") or (code[-1].isalpha() and s.startswith(code)) for s in rec.get("secs", [])):
+                sc += 2.5
+                break
+        if sc >= 2:
+            scores[did] = sc
+    return [k for k, _ in sorted(scores.items(), key=lambda x: -x[1])[:3]]
+
+
+def is_cj(rec):
+    subj = {s.lower() for s in rec.get("subj", [])}
+    if subj & _CJ:
+        return True
+    secs = rec.get("secs", [])
+    if any(s.split("-")[0] in ("76", "77", "64", "78A", "80") or s.startswith("53-") or s.startswith("63M-7") for s in secs):
+        return True
+    t = (rec.get("t") or "").lower()
+    return bool(re.search(r"\b(criminal|crime|offense|sentenc|correction|prison|jail|police|law enforcement|peace officer|victim|prosecut|juvenile justice|parole|probation|bail|firearm|drug|controlled substance|penalt|felon|misdemeanor)", t))
+
+
+# ---------------------------------------------------------------- what the bill asks of the Attorney General
+AG_NAME = re.compile(r"\b(?:attorney general|office of the attorney general|attorney general's office)\b", re.I)
+AG_DUTY = re.compile(r"\b(?:shall|must|may|is required to|is authorized to|has the duty|is responsible|represent|enforce|prosecute|defend|investigate|review|approve|report|adopt|establish|bring an action|file)\b", re.I)
+
+
+def ag_duties(passages):
+    """Sentences in the current bill text (struck language removed) that give the Attorney General something to do."""
+    out, seen = [], set()
+    for where, txt, _ in passages or []:
+        if where == "Highlighted provisions":
+            continue
+        plain = re.sub(r"\s+", " ", re.sub(STRUCK_OPEN + r"[^" + STRUCK_CLOSE + r"]*" + STRUCK_CLOSE, " ", txt)).strip()
+        if not AG_NAME.search(plain):
+            continue
+        for sent in re.split(r"(?<=[.;:])\s+(?=[A-Z(])", plain):
+            if AG_NAME.search(sent) and AG_DUTY.search(sent):
+                key = sent.lower()[:160]
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append([where, sent[:360]])
+    return out[:8]
+
+
+# ---------------------------------------------------------------- legislators
+def legislators(token):
+    try:
+        d = json.loads(get(f"{API}/legislators/{token}"))
+    except Exception as e:
+        print(f"  legislators failed: {e}", file=sys.stderr)
+        return None
+    out = []
+    for x in d.get("legislators", []):
+        out.append({"id": x.get("id"), "name": x.get("formatName"), "full": x.get("fullName"), "house": x.get("house"),
+                    "party": x.get("party"), "district": x.get("district"), "counties": x.get("counties", "")})
+    return out
+
+
+# ---------------------------------------------------------------- budget: COBI + appropriations meetings
+COBI = "https://cobi-ws.utah.gov/api"
+MONEY_SPOKEN = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?\s*(?:million|billion|thousand|k\b|m\b)?|\b\d[\d,]*(?:\.\d+)?\s+(?:million|billion)\b", re.I)
+
+
+def cobi(path):
+    return json.loads(get(f"{COBI}/{path}"))
+
+
+def _cobi_rows(table):
+    rows = []
+    for r in table.get("budgetTable", []):
+        rows.append({"id": r.get("cobiId"), "t": r.get("title"), "v": [r.get(k) or 0 for k in
+                     ("fourYearsAgo", "threeYearsAgo", "twoYearsAgo", "oneYearAgo", "currentYearEst", "currentYear", "billYear")]})
+    return rows
+
+
+def _strip_html(x):
+    import html as h
+    return re.sub(r"\s+", " ", h.unescape(re.sub(r"<[^>]+>", " ", x or ""))).strip()
+
+
+def build_cobi(prev_budget):
+    years = [y["sessionFY"] for y in cobi("navigation/fiscalYears.json")["fiscalYears"] if y["sessionFY"] < 2100]
+    years.sort(reverse=True)
+    for fy in years[:3]:
+        try:
+            root = cobi(f"tab/financials/hierarchyChart/{fy}/funding/GEN-ERF/1.json")
+        except Exception:
+            continue
+        if root.get("budgetTable"):
+            break
+    else:
+        return None
+    subs = _cobi_rows(root)
+    cj_id = next((r["id"] for r in subs if r["t"] == "Criminal Justice"), 4527)
+    cj = cobi(f"tab/financials/hierarchyChart/{fy}/funding/GEN-ERF/{cj_id}.json")
+    out = {"fy": fy, "header": root.get("header", []), "subs": subs, "cj": _cobi_rows(cj), "cjId": cj_id}
+    # every agency's issues (budget items), keeping the legislator requests
+    out["requests"] = cobi_requests(fy, {r["k"]: r for r in (prev_budget or {}).get("requests", []) if (prev_budget or {}).get("fy") == fy})
+    # last session's items too, for comparison until this session's requests are posted
+    pf = (prev_budget or {}).get("prevFy")
+    out["prevFy"] = fy - 1
+    out["requestsPrev"] = cobi_requests(fy - 1, {r["k"]: r for r in (prev_budget or {}).get("requestsPrev", []) if pf == fy - 1}, keep_only_requested=True)
+    return out
+
+
+def cobi_requests(fy, old, keep_only_requested=False):
+    menu = cobi(f"navigation/menu/{fy}/1.json")
+    agencies = []
+    for sub in menu.get("subCommittee", []):
+        try:
+            m2 = cobi(f"navigation/menu/{fy}/{sub['cobiId']}.json")
+        except Exception:
+            continue
+        for a in m2.get("agency", []):
+            agencies.append((sub["orgName"], sub["cobiId"], a["orgName"], a["cobiId"]))
+
+    def issues(a):
+        try:
+            return a, cobi(f"tab/issues/{fy}/{a[3]}.json").get("issues", [])
+        except Exception:
+            return a, []
+    items = []
+    with cf.ThreadPoolExecutor(8) as ex:
+        for a, iss in ex.map(issues, agencies):
+            for it in iss:
+                items.append((a, it))
+
+    def detail(pair):
+        a, it = pair
+        sig = [it.get(k) for k in ("requestOneTime", "requestOngoing", "priorityOneTime", "priorityOngoing", "appropriationOneTime", "appropriationOngoing")]
+        o = old.get(it["itemKey"])
+        if o and o.get("sig") == sig:
+            return o
+        rec = {"k": it["itemKey"], "name": it.get("itemName", ""), "sub": a[0], "subId": a[1], "agency": a[2], "agId": a[3], "sig": sig,
+               "req": [it.get("requestOngoing") or 0, it.get("requestOneTime") or 0],
+               "pri": [it.get("priorityOngoing") or 0, it.get("priorityOneTime") or 0],
+               "app": [it.get("appropriationOngoing") or 0, it.get("appropriationOneTime") or 0], "rank": [it.get("itemPriorityOngoing"), it.get("itemPriorityOneTime")]}
+        code = re.search(r"\(([HS]AR\d+|[HS]B\d+|[HS][JC]?R\d+)\)\s*$", rec["name"])
+        rec["code"] = code.group(1) if code else ""
+        if keep_only_requested and not rec["code"].startswith(("HAR", "SAR")):
+            return rec
+        if rec["code"].startswith(("HAR", "SAR")) or not o:
+            try:
+                d = cobi(f"tab/issues/detail/{fy}/{a[3]}/{it['itemKey']}.json")
+                txt = d.get("itemText", "")
+                by = re.search(r"\(Requested By:\s*([^)]+)\)", txt)
+                rec["by"] = by.group(1).strip() if by else ""
+                heard = re.search(r"Heard in ([^<]+)", txt)
+                rec["heard"] = heard.group(1).strip() if heard else ""
+                rec["txt"] = _strip_html(re.sub(r"\(Requested By:[^)]*\)", "", txt.split("<i>")[0]))[:600]
+            except Exception:
+                pass
+        return rec
+    reqs = []
+    with cf.ThreadPoolExecutor(8) as ex:
+        for r in ex.map(detail, items):
+            if not keep_only_requested or r.get("by"):
+                reqs.append(r)
+    return reqs
+
+
+def approp_meetings(token, years, prev_budget):
+    """Money talk in appropriations meetings: official timeline notes plus caption lines that mention dollars."""
+    old = {m["id"]: m for m in (prev_budget or {}).get("meetings", [])}
+    try:
+        coms = json.loads(get(f"{API}/committees/{token}")).get("committees", [])
+    except Exception as e:
+        print(f"  committees failed: {e}", file=sys.stderr)
+        return list(old.values())
+    approp = [(c["id"], c["description"]) for c in coms if "Appropriations" in c.get("description", "")]
+    want = []
+    for cid, name in approp:
+        for y in years:
+            try:
+                ms = json.loads(get(f"{API}/committees/meetings/{cid}/{y}/{token}")).get("meetings", [])
+            except Exception:
+                continue
+            for m in ms:
+                if m.get("mtgtype") == "past" and m.get("status") != "C":
+                    want.append((cid, name, y, m))
+    cutoff = (datetime.now(MT) - timedelta(days=21)).date().isoformat()
+
+    def one(w):
+        cid, name, y, m = w
+        mid = str(m["mtgid"])
+        o = old.get(mid)
+        if o and (o.get("status") == "ok" or (o.get("date", "") < cutoff and o.get("status") in ("nocap", "novideo"))):
+            return o
+        if not m.get("audioVideo"):
+            try:
+                m = {**m, **json.loads(get(f"{API}/committees/meeting/{mid}/{token}"))}
+            except Exception:
+                pass
+        if not m.get("audioVideo"):
+            return {"id": mid, "com": cid, "name": name, "status": "novideo", "date": (o or {}).get("date", ""), "notes": [], "money": [], "rfa": []}
+        rec = {"id": mid, "com": cid, "name": name, "page": m["audioVideo"], "date": "", "status": "nocap",
+               "agenda": _abs(m.get("agenda") or "") if m.get("agenda") else "", "notes": [], "money": [], "rfa": []}
+        dm = re.match(r"\w+\.? (\w{3}) (\d{1,2}), (\d{1,2}):(\d{2}) (AM|PM)", m.get("mtgTimeStr", ""))
+        if dm:
+            mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].index(dm.group(1)) + 1
+            hh = int(dm.group(3)) % 12 + (12 if dm.group(5) == "PM" else 0)
+            rec["date"] = f"{y}-{mon:02d}-{int(dm.group(2)):02d}T{hh:02d}:{dm.group(4)}"
+        marks = page_markers(m["audioVideo"]) or []
+        vods = []
+        for mk in marks:
+            if mk["video"] and mk["video"] not in vods:
+                vods.append(mk["video"])
+            if mk["type"] in ("AI", "freetext", "motion", "speaker") and mk["desc"]:
+                rec["notes"].append([mk["off"], mk["type"], mk["desc"][:300], vods.index(mk["video"]) if mk["video"] in vods else 0])
+                if re.search(r"request for appropriation|\bRFA\b", mk["desc"], re.I):
+                    rec["rfa"].append([mk["off"], mk["desc"][:300], vods.index(mk["video"]) if mk["video"] in vods else 0])
+        rec["notes"] = rec["notes"][:150]
+        rec["videos"] = []
+        for vi, vod in enumerate(vods):
+            vid = re.search(r"/video/(\d+)", vod)
+            hh = re.search(r"[?&]h=([0-9a-f]+)", vod)
+            rec["videos"].append((f"https://vimeo.com/{vid.group(1)}" + (f"/{hh.group(1)}" if hh else "")) if vid else vod)
+            dur, cues = video_cues(vod)
+            if not cues:
+                continue
+            rec["status"] = "ok"
+            ctx = [n for n in rec["notes"] if n[3] == vi]
+            last = -999
+            for s0, t in cues:
+                if MONEY_SPOKEN.search(t) and s0 - last > 25:
+                    near = [c for c in cues if s0 - 8 <= c[0] <= s0 + 12]
+                    snippet = _html.unescape(" ".join(c[1] for c in near))[:320]
+                    who = next((n[2] for n in reversed(ctx) if n[0] <= s0 + 2), "")
+                    rec["money"].append([s0, who[:160], snippet, vi, [m_.group(0) for m_ in MONEY_SPOKEN.finditer(snippet)][:4]])
+                    last = s0
+        rec["money"] = rec["money"][:80]
+        return rec
+    out = []
+    with cf.ThreadPoolExecutor(4) as ex:
+        for r in ex.map(one, want):
+            out.append(r)
+    out.sort(key=lambda r: r.get("date", ""), reverse=True)
+    return out
+
+
+def build_budget(token, out_dir, prev_dir):
+    prev = None
+    if prev_dir and os.path.exists(os.path.join(prev_dir, "budget.json")):
+        try:
+            prev = json.load(open(os.path.join(prev_dir, "budget.json")))
+        except Exception:
+            prev = None
+    b = {"updated": datetime.now(MT).isoformat(timespec="minutes")}
+    try:
+        c = build_cobi(prev)
+        if c:
+            b.update(c)
+    except Exception as e:
+        print(f"  COBI failed: {e}", file=sys.stderr)
+        if prev:
+            for k in ("fy", "header", "subs", "cj", "cjId", "requests"):
+                if k in prev:
+                    b[k] = prev[k]
+    now = datetime.now(MT)
+    years = sorted({now.year, now.year + (1 if now.month >= 11 else 0)})
+    try:
+        b["meetings"] = approp_meetings(token, years, prev)
+    except Exception as e:
+        print(f"  appropriations meetings failed: {e}", file=sys.stderr)
+        b["meetings"] = (prev or {}).get("meetings", [])
+    json.dump(b, open(os.path.join(out_dir, "budget.json"), "w"), separators=(",", ":"))
+    print(f"budget: FY{b.get('fy')} {len(b.get('requests', []))} budget items, {len(b.get('meetings', []))} appropriations meetings")
+
+
 # ---------------------------------------------------------------- change detection
 def human_dt(iso):
     try:
@@ -407,11 +882,13 @@ def diff(old, new, stamp):
         out.append([stamp, "Moved", f"Now with {new['own']} ({new['act']})."])
     elif old.get("act") != new.get("act") and new.get("act"):
         out.append([stamp, "New action", new["act"]])
+    if new.get("fnu") and "fnu" in old and old.get("fnu") != new.get("fnu"):
+        out.append([stamp, "Fiscal note", "A new fiscal note was posted." if not old.get("fnu") else "The fiscal note was updated."])
     old_docs = {i[2] for g in old.get("docs", []) for i in g[1]}
     new_vers_urls = set()
     for g in new.get("docs", []):
         for i in g[1]:
-            if i[2] not in old_docs and not i[0].lower().endswith("xml"):
+            if i[2] not in old_docs and not i[0].lower().endswith("xml") and not i[0].startswith("Fiscal Note"):
                 out.append([stamp, "New document", f"{i[0]} ({g[0]})."])
     return out
 
@@ -510,7 +987,7 @@ def build_session(token, session, out, prev, stamp):
     for b in bl:
         n, upd = b["number"], b.get("updatetime", "")
         ob = old_bills.get(n)
-        if ob and ob.get("upd") == upd and n in old_text and "mk" in ob:
+        if ob and ob.get("upd") == upd and n in old_text and "mk" in ob and "spH" in ob:
             bills[n] = ob
             text[n] = old_text[n]
         else:
@@ -520,6 +997,7 @@ def build_session(token, session, out, prev, stamp):
         n, upd = item
         d = json.loads(get(f"{API}/bills/{session}/{n}/{token}"))
         rec = record_of(d, upd)
+        ob = old_bills.get(n)
         url = text_url(d)
         passages = []
         if url:
@@ -527,6 +1005,29 @@ def build_session(token, session, out, prev, stamp):
                 passages = parse_bill_xml(get(url))
             except Exception as e:
                 print(f"  text failed for {n}: {e}", file=sys.stderr)
+        # fiscal note (re-read only when a new one is posted)
+        if rec.get("fnu"):
+            if ob and (ob.get("fn") or {}).get("u") == rec["fnu"]:
+                rec["fn"] = ob["fn"]
+            else:
+                try:
+                    rec["fn"] = parse_fiscal_note(get(rec["fnu"]), rec["fnu"])
+                except Exception as e:
+                    print(f"  fiscal note failed for {n}: {e}", file=sys.stderr)
+        # what changed between the last two versions of the text
+        vers = versions_of(d)
+        new_ver = vers[-1]["name"] if vers else ""
+        old_ver = (ob or {}).get("ver", "")
+        if ob and old_ver and new_ver and old_ver != new_ver and old_text.get(n):
+            rec["vd"] = version_diff(old_text.get(n), passages, old_ver, new_ver, stamp)
+        elif ob and ob.get("vd") and ob["vd"].get("to") == new_ver:
+            rec["vd"] = ob["vd"]
+        elif len(vers) >= 2 and passages:
+            try:
+                prev_p = parse_bill_xml(get(vers[-2]["url"]))
+                rec["vd"] = version_diff(prev_p, passages, vers[-2]["name"], new_ver, vers[-1]["date"] or stamp)
+            except Exception as e:
+                print(f"  previous version failed for {n}: {e}", file=sys.stderr)
         return n, rec, passages
 
     fetched = 0
@@ -554,8 +1055,46 @@ def build_session(token, session, out, prev, stamp):
                 bills[n]["ch"] = bills[n].get("ch", []) + ch
     print(f"  transcripts: {sum(len(v) for v in tx_lines.values())} segments in {round(time.time() - t_start)} s", file=sys.stderr)
 
+    # division suggestions and the criminal-justice flag
+    for n, rec in bills.items():
+        txt = " ".join(t for lines in (tx_lines.get(n) or {}).values() for _, t in lines)
+        rec["sug"] = suggest_divisions(rec, txt)
+        rec["cj"] = is_cj(rec)
+        rec["agd"] = ag_duties(text.get(n))
+
     order = sorted(bills)
     os.makedirs(os.path.join(out, session), exist_ok=True)
+
+    # bill files that don't have a number yet
+    nfiles = 0
+    if session[:4] >= str(datetime.now(MT).year):
+        old_files = {}
+        pf = os.path.join(prev, session, "files.json") if prev else None
+        pf_existed = bool(pf and os.path.exists(pf))
+        if pf_existed:
+            old_files = {f["tid"]: f for f in json.load(open(pf)).get("files", [])}
+        found = bill_files(session)
+        numbered = {b.get("tid") for b in bills.values() if b.get("tid")}
+        files = []
+        for tid, f in found.items():
+            if tid in numbered:
+                continue
+            o = old_files.get(tid)
+            # the first time files are tracked, they were already open; don't announce them all as new
+            f["seen"] = o.get("seen", "") if o else (stamp if old_files or pf_existed else "")
+            f["sug"] = suggest_divisions({"t": f["t"]})
+            f["cj"] = is_cj({"t": f["t"]})
+            if o and o.get("st") != f["st"]:
+                f["stCh"] = stamp
+            elif o and o.get("stCh"):
+                f["stCh"] = o["stCh"]
+            files.append(f)
+        if not found and old_files:  # the list didn't load this time; keep the last one
+            files = [f for f in old_files.values() if f["tid"] not in numbered]
+        files.sort(key=lambda f: f["t"].lower())
+        json.dump({"updated": stamp, "files": files}, open(os.path.join(out, session, "files.json"), "w"), separators=(",", ":"))
+        nfiles = len(files)
+
     for f in glob.glob(os.path.join(out, session, "text-*.json")) + glob.glob(os.path.join(out, session, "tx-*.json")):
         os.remove(f)
     # transcript chunks; each bill records which chunk holds its transcript
@@ -584,64 +1123,29 @@ def build_session(token, session, out, prev, stamp):
         json.dump(c, open(os.path.join(out, session, f"text-{i}.json"), "w"), separators=(",", ":"))
     changes = sum(1 for n in order for c in bills[n]["ch"] if c[0] == stamp)
     print(f"{session}: {len(bl)} bills, {fetched} downloaded, {len(chunks)} text files, {len(tchunks)} transcript files, {changes} new changes")
-    return {"id": session, "count": len(bl), "textFiles": len(chunks), "txFiles": len(tchunks)}
-
-
-# ---------------------------------------------------------------- open bill files
-# Before bills are numbered, le.utah.gov lists each bill file (bill request) with its working title,
-# sponsor and status. We keep the first time we saw each one so the emails can announce new files.
-def fetch_bill_files(session):
-    url = f"{LE}/bills/billSearch.jsp?sess={session}&disp=all&sub=all"
-    s = get(url).decode("utf-8", "replace")
-    rows = re.findall(r'<tr><td><input[^>]*data-trackingid="([A-Za-z0-9]+)"[^>]*></td>(.*?)</tr>', s, re.S)
-    out = {}
-    for tid, rest in rows:
-        cells = [_html.unescape(re.sub(r"<[^>]+>", "", c)).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", rest, re.S)]
-        if len(cells) < 5 or cells[0].lower() != "not numbered":
-            continue
-        out[tid] = [cells[1], cells[2], cells[4]]
-    return out
-
-
-def build_bill_files(session, out, prev, stamp):
-    old = {}
-    p = os.path.join(prev, session, "billfiles.json") if prev else None
-    if p and os.path.exists(p):
-        old = {r[0]: r for r in json.load(open(p))}
-    try:
-        cur = fetch_bill_files(session)
-    except Exception as e:
-        print(f"  bill files failed: {e}", file=sys.stderr)
-        if not old:
-            return None
-        cur = {k: v[1:4] for k, v in old.items()}
-    if not cur and old:  # the page came back empty (site hiccup or every file numbered): keep what we had
-        cur = {k: v[1:4] for k, v in old.items()}
-    first_run = not old
-    rows = []
-    for tid, (title, sponsor, status) in cur.items():
-        seen = old[tid][4] if tid in old else ("base" if first_run else stamp)
-        rows.append([tid, title, sponsor, status, seen])
-    rows.sort(key=lambda r: ("" if r[4] == "base" else r[4], r[1]), reverse=True)
-    os.makedirs(os.path.join(out, session), exist_ok=True)
-    json.dump(rows, open(os.path.join(out, session, "billfiles.json"), "w"), separators=(",", ":"))
-    new = sum(1 for r in rows if r[4] == stamp)
-    print(f"{session}: {len(rows)} open bill files, {new} new")
-    return {"session": session, "count": len(rows)}
+    return {"id": session, "count": len(bl), "textFiles": len(chunks), "txFiles": len(tchunks), "files": nfiles}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("token"); ap.add_argument("out")
     ap.add_argument("--prev"); ap.add_argument("--sessions", default="2027GS,2026GS")
+    ap.add_argument("--no-budget", action="store_true")
     a = ap.parse_args()
     stamp = datetime.now(MT).isoformat()[:16]
     sessions = [build_session(a.token, s.strip(), a.out, a.prev, stamp) for s in a.sessions.split(",") if s.strip()]
-    index = {"updated": datetime.now(MT).isoformat(timespec="minutes"), "sessions": sessions}
-    bf = build_bill_files(sessions[0]["id"], a.out, a.prev, stamp) if sessions else None
-    if bf:
-        index["billfiles"] = bf
-    json.dump(index, open(os.path.join(a.out, "index.json"), "w"), indent=1)
+    leg = legislators(a.token)
+    if leg is None and a.prev and os.path.exists(os.path.join(a.prev, "legislators.json")):
+        leg = json.load(open(os.path.join(a.prev, "legislators.json")))
+    if leg:
+        json.dump(leg, open(os.path.join(a.out, "legislators.json"), "w"), separators=(",", ":"))
+    if not a.no_budget:
+        build_budget(a.token, a.out, a.prev)
+    elif a.prev and os.path.exists(os.path.join(a.prev, "budget.json")):
+        import shutil
+        shutil.copy(os.path.join(a.prev, "budget.json"), os.path.join(a.out, "budget.json"))
+    json.dump({"updated": datetime.now(MT).isoformat(timespec="minutes"), "sessions": sessions},
+              open(os.path.join(a.out, "index.json"), "w"), indent=1)
     # list which published files changed, so a publish can send only those
     import hashlib
     def h(p):
