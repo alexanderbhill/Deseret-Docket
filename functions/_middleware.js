@@ -1,6 +1,6 @@
 // Deseret Docket login for Cloudflare Pages.
-// Every request (the page AND its data files) must carry a valid signed session cookie,
-// otherwise the visitor is sent to /login.
+// Visitors who aren't signed in browse as guests (read-only, nothing saves). Signing in with a valid
+// session cookie unlocks the shared team list (divisions, flags, notes, watch list).
 //
 // Settings (Cloudflare Pages > your project > Settings > Variables and Secrets, type "Secret"):
 //   DOCKET_USERS    one line per user, made with make_password.py, separated by commas or new lines:
@@ -82,12 +82,13 @@ button{margin-top:18px;width:100%;padding:10px;border:0;border-radius:5px;backgr
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style></head><body><form class="box" method="post" action="/login">
 <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><rect class="band" x="10.2" y="2.6" width="3.6" height="2.4" rx="1.2"/><rect class="band" x="8.4" y="5" width="7.2" height="3.1" rx="1.55"/><rect class="band" x="6.6" y="8.1" width="10.8" height="3.3" rx="1.65"/><rect class="band" x="5.1" y="11.4" width="13.8" height="3.4" rx="1.7"/><rect class="band" x="4" y="14.8" width="16" height="3.6" rx="1.8"/><rect class="band" x="3" y="18.4" width="18" height="2.4" rx=".6"/><path class="door" d="M10.3 18.4v-1.2a1.7 1.7 0 0 1 3.4 0v1.2z"/></svg>Deseret Docket</div>
-<p class="muted">Sign in to see your bills.</p>
+<p class="muted">Sign in to see the team list: divisions, flags and notes.</p>
 ${message ? `<div class="msg" role="alert">${esc(message)}</div>` : ""}
 <input type="hidden" name="next" value="${esc(next)}">
 <label for="u">Username</label><input id="u" name="username" autocomplete="username" required autofocus>
 <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
-<button type="submit">Sign in</button></form></body></html>`;
+<button type="submit">Sign in</button>
+<p class="muted" style="margin-top:16px;text-align:center"><a href="/" style="color:var(--accent)">Continue as a guest</a><br><span style="font-size:13px">Browse every bill without signing in. Nothing you change is saved.</span></p></form></body></html>`;
   return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 
@@ -108,7 +109,7 @@ export async function onRequest(context) {
   }
 
   if (url.pathname === "/logout") {
-    const h = new Headers({ Location: "/login" });
+    const h = new Headers({ Location: "/" });
     h.append("Set-Cookie", `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
     h.append("Set-Cookie", `${USER_COOKIE}=; Path=/; Max-Age=0; Secure; SameSite=Lax`);
     return new Response(null, { status: 302, headers: h });
@@ -140,12 +141,13 @@ export async function onRequest(context) {
     return loginPage("", 200, safeNext(url.searchParams.get("next") || "/"));
   }
 
+  // Guest mode: anyone can read the site and the bill data without signing in. Only the shared
+  // team list (/api/...) needs a sign-in. The email sign-up endpoints (/api/email/...) are public;
+  // they protect themselves with per-subscriber links and a secret for the sender.
   const user = await sessionUser(request, env);
-  if (!user) {
-    if (url.pathname.startsWith("/data/") || url.pathname.startsWith("/api/")) return new Response("Sign in required", { status: 401 });
-    return Response.redirect(new URL(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, url), 302);
-  }
-  context.data.user = user; // read by functions/api for the team list
+  const publicApi = url.pathname.startsWith("/api/email/");
+  if (!user && url.pathname.startsWith("/api/") && !publicApi) return new Response("Sign in required", { status: 401 });
+  if (user) context.data.user = user; // read by functions/api for the team list
   const res = await next();
   const out = new Response(res.body, res);
   out.headers.set("Cache-Control", "private, no-cache");
