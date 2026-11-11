@@ -458,7 +458,23 @@ function checkEmailForm(f,r){
   return '';
 }
 let emailSent=null, emailDraft=null; // the draft survives page refreshes while the form is open
+// Email isn't switched on yet: sending to people needs a domain verified with the email service (Resend),
+// and the site is on a free domain for now. Set EMAIL_READY to true once that's done (see README > Emails).
+const EMAIL_READY=false;
+function emailPlaceholder(){
+  return `<section class="card emailbox"><h2>Email updates: coming soon</h2>
+  <p class="small">Soon you'll be able to sign up here for a short email at the time and on the days you choose: which bills are on the calendar and when their committees meet. Links in the email will open each bill without signing in, so the emails won't include the office's divisions, flags or notes.</p>
+  <p class="small" style="margin-bottom:4px"><b>You'll be able to choose:</b></p>
+  <ul class="small" style="margin:0 0 12px;padding-left:18px">
+   <li><b>What's on the calendar:</b> committee meetings in the next week and bills waiting on the House and Senate floor</li>
+   <li><b>Day-before heads-up:</b> when and where a bill will be heard tomorrow</li>
+   <li><b>End-of-day recap (about 6 pm):</b> how each bill's committee or floor discussion went, from the meeting transcripts</li>
+   <li><b>New bill files:</b> newly opened bill files with their working title and sponsor, until bills are numbered</li>
+   <li>Every bill, or only the bill numbers you list</li></ul>
+  <p class="small muted" style="margin:0"><b>Why not yet?</b> Email services only send on behalf of a web address (domain) the sender owns and has verified, which keeps messages out of spam folders and stops anyone from faking them. Deseret Docket is on a free address for now, so sign-up opens once it moves to its own domain. Until then, the updates and new bill files on this page refresh four times each weekday.</p></section>`;
+}
 function emailBox(){
+  if(!EMAIL_READY) return emailPlaceholder();
   if(emailSent) return `<section class="card emailbox"><h2>Check your inbox</h2><p>We sent a confirmation link to <b>${esc(emailSent)}</b>. Click it and your emails will start. If it doesn't arrive in a few minutes, check your spam folder.</p><button class="linkbtn" id="emAgain">Use a different address</button></section>`;
   return `<section class="card emailbox"><h2>Get it by email</h2>
   <p class="small">A short email at the time you choose: which bills are on the calendar and when their committees meet. Links open each bill without signing in, so the email doesn't include the office's divisions, flags or notes.</p>
