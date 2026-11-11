@@ -1,94 +1,43 @@
-// Deseret Docket login for Cloudflare Pages.
-// Visitors who aren't signed in browse as guests (read-only, nothing saves). Signing in with a valid
-// session cookie unlocks the shared team list (divisions, flags, notes, watch list).
+// Deseret Docket sign-in for Cloudflare Pages.
+//
+// The bill information on the site is public, so anyone can browse it as a guest. Signing in adds the
+// office's own information (departments, divisions, designations, priority, notes, assignments), which
+// only the API hands out, and only to accounts allowed to see it.
 //
 // Settings (Cloudflare Pages > your project > Settings > Variables and Secrets, type "Secret"):
-//   DOCKET_USERS    one line per user, made with make_password.py, separated by commas or new lines:
-//                   username:pbkdf2:100000:<saltHex>:<hashHex>
+//   DOCKET_USERS    admin login lines made with make_password.py (one per line)
 //   SESSION_SECRET  any long random string (make_password.py prints one)
 //   SESSION_DAYS    optional, how long a sign-in lasts (default 14)
-
-const COOKIE = "docket_session";
-const USER_COOKIE = "docket_user";
-const enc = new TextEncoder();
-
-const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-const unhex = (h) => new Uint8Array((h.match(/../g) || []).map((x) => parseInt(x, 16)));
-
-function safeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let r = 0;
-  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return r === 0;
-}
-
-function parseUsers(env) {
-  // Forgiving: ignores quotes, spaces and line breaks (a long line that wrapped when it was copied
-  // from Terminal still works), and any extra text pasted around the login lines.
-  const users = new Map();
-  const flat = String(env.DOCKET_USERS || "").replace(/["'\s]+/g, "");
-  const re = /([a-z0-9._-]{2,40}):pbkdf2:(\d+):([0-9a-f]{32}):([0-9a-f]{64})/gi;
-  let m;
-  while ((m = re.exec(flat))) users.set(m[1].toLowerCase(), { iter: +m[2], salt: m[3].toLowerCase(), hash: m[4].toLowerCase() });
-  return users;
-}
-
-async function pbkdf2(password, saltHex, iter) {
-  const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: unhex(saltHex), iterations: iter }, key, 256);
-  return hex(bits);
-}
-
-async function hmac(secret, msg) {
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return hex(await crypto.subtle.sign("HMAC", key, enc.encode(msg)));
-}
-
-function cookies(req) {
-  const out = {};
-  for (const c of (req.headers.get("Cookie") || "").split(/;\s*/)) {
-    const i = c.indexOf("=");
-    if (i > 0) out[c.slice(0, i)] = c.slice(i + 1);
-  }
-  return out;
-}
-
-async function sessionUser(req, env) {
-  const raw = cookies(req)[COOKIE];
-  if (!raw) return null;
-  const [userEnc, exp, sig] = decodeURIComponent(raw).split("|");
-  if (!userEnc || !exp || !sig || Date.now() > +exp) return null;
-  const user = decodeURIComponent(userEnc);
-  if (!parseUsers(env).has(user)) return null; // removed users are signed out
-  const good = await hmac(env.SESSION_SECRET, `${userEnc}|${exp}`);
-  return safeEqual(good, sig) ? user : null;
-}
+//   RESEND_API_KEY, MAIL_FROM, CRON_KEY   for email alerts (see README)
+import { COOKIE, USER_COOKIE, findUser, checkPassword, makeSession, sessionUser, ITER, pbkdf2 } from "../lib/auth.js";
+import { BEE, BEE_CSS } from "../lib/logo.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function loginPage(message, status = 200, next = "/") {
+function loginPage(message, status = 200, next = "/", disabled = false) {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in · Deseret Docket</title><meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f3f5f8;--surface:#fff;--ink:#1b2738;--muted:#5b6676;--line:#dfe3ea;--field:#b9c0cb;--accent:#1f3a5f;--on-accent:#fff;--red:#b42318;--red-bg:#fff5f4;--honey:#e3a52a;--honey-line:#8a5a00}
-@media (prefers-color-scheme:dark){:root{--bg:#11161e;--surface:#19202b;--ink:#e4e9f0;--muted:#9aa5b4;--line:#2c3644;--field:#475365;--accent:#7fa6d6;--on-accent:#0f1620;--red:#f08a80;--red-bg:#341a18;--honey:#e8b04a;--honey-line:#f3d08a;color-scheme:dark}}
+:root{--bg:#f7f7f5;--surface:#fff;--ink:#1d1d1b;--muted:#6b6b66;--line:#e3e2dd;--field:#c9c7c0;--accent:#1d1d1b;--on-accent:#fff;--red:#9e3a34;--red-bg:#fbefed;--honey:#e3a52a;--bee-ink:#2a2418;--wing:#eef3f7;--wing-line:#9aa8b4;--link:#7a4a0a}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--surface:#1f1f1c;--ink:#ecebe6;--muted:#a3a29b;--line:#34332f;--field:#4a4943;--accent:#ecebe6;--on-accent:#161614;--red:#f0958c;--red-bg:#3a1d1a;--honey:#e8b04a;--bee-ink:#f3e3bf;--wing:#2b3238;--wing-line:#7d8a95;--link:#e0b36a;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;padding:0 16px}
-.box{max-width:380px;margin:12vh auto 40px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:28px}
-.brand{display:flex;align-items:center;gap:10px;font:600 24px Georgia,"Times New Roman",serif;margin-bottom:6px}
-.brand svg{width:32px;height:32px}.band{fill:var(--honey);stroke:var(--honey-line);stroke-width:.8}.door{fill:var(--ink)}
-label{display:block;font-weight:600;margin:14px 0 6px}input{width:100%;padding:10px 12px;border:1px solid var(--field);border-radius:5px;background:var(--surface);color:var(--ink);font:inherit}
-button{margin-top:18px;width:100%;padding:10px;border:0;border-radius:5px;background:var(--accent);color:var(--on-accent);font:600 16px inherit;cursor:pointer}
-.msg{background:var(--red-bg);color:var(--red);border-radius:5px;padding:8px 12px;font-size:14px;margin-top:12px}.muted{color:var(--muted);font-size:14px;margin:0}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.box{max-width:400px;margin:12vh auto 40px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:28px}
+.brand{display:flex;align-items:center;gap:10px;font:500 26px "Source Serif 4",Georgia,serif;margin-bottom:6px}
+.brand svg{width:36px;height:36px}${BEE_CSS}
+label{display:block;font-weight:600;margin:14px 0 6px}input{width:100%;padding:10px 12px;border:1px solid var(--field);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
+button{margin-top:18px;width:100%;padding:10px;border:0;border-radius:6px;background:var(--accent);color:var(--on-accent);font:600 16px inherit;cursor:pointer}
+.msg{background:var(--red-bg);color:var(--red);border-radius:6px;padding:8px 12px;font-size:14px;margin-top:12px}.muted{color:var(--muted);font-size:14px;margin:0}
+a{color:var(--link)}:focus-visible{outline:2px solid var(--link);outline-offset:2px}
 </style></head><body><form class="box" method="post" action="/login">
-<div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><rect class="band" x="10.2" y="2.6" width="3.6" height="2.4" rx="1.2"/><rect class="band" x="8.4" y="5" width="7.2" height="3.1" rx="1.55"/><rect class="band" x="6.6" y="8.1" width="10.8" height="3.3" rx="1.65"/><rect class="band" x="5.1" y="11.4" width="13.8" height="3.4" rx="1.7"/><rect class="band" x="4" y="14.8" width="16" height="3.6" rx="1.8"/><rect class="band" x="3" y="18.4" width="18" height="2.4" rx=".6"/><path class="door" d="M10.3 18.4v-1.2a1.7 1.7 0 0 1 3.4 0v1.2z"/></svg>Deseret Docket</div>
-<p class="muted">Sign in to see the team list: divisions, flags and notes.</p>
+<div class="brand">${BEE}Deseret Docket</div>
+<p class="muted">Sign in to see and edit the office's departments, designations, priorities and notes.</p>
 ${message ? `<div class="msg" role="alert">${esc(message)}</div>` : ""}
 <input type="hidden" name="next" value="${esc(next)}">
-<label for="u">Username</label><input id="u" name="username" autocomplete="username" required autofocus>
-<label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
-<button type="submit">Sign in</button>
-<p class="muted" style="margin-top:16px;text-align:center"><a href="/" style="color:var(--accent)">Continue as a guest</a><br><span style="font-size:13px">Browse every bill without signing in. Nothing you change is saved.</span></p></form></body></html>`;
+<label for="u">Username</label><input id="u" name="username" autocomplete="username" required autofocus ${disabled ? "disabled" : ""}>
+<label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required ${disabled ? "disabled" : ""}>
+<button type="submit" ${disabled ? "disabled" : ""}>Sign in</button>
+<p class="muted" style="margin-top:16px"><a href="/">Continue as a guest</a>: browse every bill, hearing and the budget without signing in.</p></form></body></html>`;
   return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
 }
 
@@ -96,61 +45,55 @@ function safeNext(n) {
   return typeof n === "string" && n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/login") ? n : "/";
 }
 
+const clearCookies = (h) => {
+  h.append("Set-Cookie", `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
+  h.append("Set-Cookie", `${USER_COOKIE}=; Path=/; Max-Age=0; Secure; SameSite=Lax`);
+};
+
 export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
 
-  const problems = [];
-  if (!env.DOCKET_USERS) problems.push("DOCKET_USERS is missing");
-  else if (parseUsers(env).size === 0) problems.push("DOCKET_USERS has no valid login lines (each should look like name:pbkdf2:100000:… from make_password.py)");
-  if (!env.SESSION_SECRET) problems.push("SESSION_SECRET is missing");
-  if (problems.length) {
-    return new Response(`Deseret Docket is locked: ${problems.join("; ")}. Fix it in the Cloudflare Pages settings (Variables and secrets), then redeploy.`, { status: 503, headers: { "Content-Type": "text/plain" } });
-  }
-
   if (url.pathname === "/logout") {
     const h = new Headers({ Location: "/" });
-    h.append("Set-Cookie", `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
-    h.append("Set-Cookie", `${USER_COOKIE}=; Path=/; Max-Age=0; Secure; SameSite=Lax`);
+    clearCookies(h);
     return new Response(null, { status: 302, headers: h });
   }
 
   if (url.pathname === "/login") {
+    if (!env.SESSION_SECRET) return loginPage("Sign-in is switched off until SESSION_SECRET is set in the Cloudflare Pages settings. You can still browse as a guest.", 503, "/", true);
     if (request.method === "POST") {
       const form = await request.formData();
       const username = String(form.get("username") || "").trim().toLowerCase();
       const password = String(form.get("password") || "");
       const dest = safeNext(String(form.get("next") || "/"));
-      const u = parseUsers(env).get(username);
-      // Always run the hash so a wrong username takes as long as a wrong password.
-      const got = await pbkdf2(password, u ? u.salt : "00", u ? u.iter : 100000);
-      if (!u || !safeEqual(got, u.hash)) {
+      const u = await findUser(env, username);
+      const ok = u ? await checkPassword(u, password) : (await pbkdf2(password, "00", ITER), false); // same work either way
+      if (!ok) {
         await new Promise((r) => setTimeout(r, 600));
         return loginPage("That username and password don't match. Check both and try again.", 401, dest);
       }
       const days = +(env.SESSION_DAYS || 14);
-      const exp = Date.now() + days * 864e5;
-      const userEnc = encodeURIComponent(username);
-      const sig = await hmac(env.SESSION_SECRET, `${userEnc}|${exp}`);
+      const s = await makeSession(env, u, days);
       const h = new Headers({ Location: dest });
-      h.append("Set-Cookie", `${COOKIE}=${encodeURIComponent(`${userEnc}|${exp}|${sig}`)}; Path=/; Max-Age=${days * 86400}; HttpOnly; Secure; SameSite=Lax`);
-      h.append("Set-Cookie", `${USER_COOKIE}=${userEnc}; Path=/; Max-Age=${days * 86400}; Secure; SameSite=Lax`);
+      h.append("Set-Cookie", `${COOKIE}=${s.value}; Path=/; Max-Age=${s.maxAge}; HttpOnly; Secure; SameSite=Lax`);
+      h.append("Set-Cookie", `${USER_COOKIE}=${encodeURIComponent(u.name)}; Path=/; Max-Age=${s.maxAge}; Secure; SameSite=Lax`);
       return new Response(null, { status: 303, headers: h });
     }
     if (await sessionUser(request, env)) return Response.redirect(new URL("/", url), 302);
     return loginPage("", 200, safeNext(url.searchParams.get("next") || "/"));
   }
 
-  // Guest mode: anyone can read the site and the bill data without signing in. Only the shared
-  // team list (/api/...) needs a sign-in. The email sign-up endpoints (/api/email/...) are public;
-  // they protect themselves with per-subscriber links and a secret for the sender.
   const user = await sessionUser(request, env);
-  const publicApi = url.pathname.startsWith("/api/email/");
-  if (!user && url.pathname.startsWith("/api/") && !publicApi) return new Response("Sign in required", { status: 401 });
-  if (user) context.data.user = user; // read by functions/api for the team list
+  context.data.user = user; // null for guests; the API checks permissions
   const res = await next();
   const out = new Response(res.body, res);
-  out.headers.set("Cache-Control", "private, no-cache");
   out.headers.set("X-Robots-Tag", "noindex");
+  if (url.pathname.startsWith("/api/")) out.headers.set("Cache-Control", "no-store");
+  else if (!url.pathname.startsWith("/data/")) out.headers.set("Cache-Control", "no-cache");
+  // A stale readable cookie (signed out elsewhere) would make the page think it's signed in.
+  if (!user && /(?:^|;\s*)docket_user=/.test(request.headers.get("Cookie") || "") && !url.pathname.startsWith("/api/")) {
+    out.headers.append("Set-Cookie", `${USER_COOKIE}=; Path=/; Max-Age=0; Secure; SameSite=Lax`);
+  }
   return out;
 }
