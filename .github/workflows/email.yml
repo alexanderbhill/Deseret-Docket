@@ -1,0 +1,37 @@
+name: Send Deseret Docket emails
+
+on:
+  schedule:
+    # Every hour, every day. Each subscriber's email goes out on the first run at or after the time
+    # they picked (GitHub sometimes starts scheduled runs 5-20 minutes late).
+    - cron: "7 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency: docket-email
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Send the emails that are due
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: https://deseret-docket.pages.dev
+        run: |
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Email isn't set up yet: add RESEND_API_KEY, EMAIL_FROM and CRON_SECRET in Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+          python3 -I send_emails.py
