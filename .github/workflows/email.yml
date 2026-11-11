@@ -1,37 +1,27 @@
-name: Send Deseret Docket emails
+name: Send email alerts
 
+# Every 15 minutes: send whatever daily calendar, day-before, end-of-day and new-bill-file emails
+# are due. Each subscriber picks their own times; the script only sends what's due right now.
 on:
   schedule:
-    # Every hour, every day. Each subscriber's email goes out on the first run at or after the time
-    # they picked (GitHub sometimes starts scheduled runs 5-20 minutes late).
-    - cron: "7 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch: {}
-
-permissions:
-  contents: read
 
 concurrency: docket-email
 
 jobs:
   send:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Send the emails that are due
+      - name: Send what's due
         env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          SITE_URL: https://deseret-docket.pages.dev
+          SITE_URL: ${{ vars.SITE_URL || 'https://deseret-docket.pages.dev' }}
+          CRON_KEY: ${{ secrets.CRON_KEY || secrets.CRON_SECRET }}
         run: |
-          if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$CRON_SECRET" ]; then
-            echo "Email isn't set up yet: add RESEND_API_KEY, EMAIL_FROM and CRON_SECRET in Settings > Secrets and variables > Actions."
-            exit 0
-          fi
-          python3 -I send_emails.py
+          if [ -z "$CRON_KEY" ]; then echo "CRON_KEY isn't set yet; skipping."; exit 0; fi
+          python3 -I send_alerts.py

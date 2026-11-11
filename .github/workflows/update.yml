@@ -2,9 +2,11 @@ name: Update Deseret Docket
 
 on:
   schedule:
-    # Weekdays, Mountain Standard Time (UTC-7): 6:40 am, 12:40 pm, 4:40 pm, 7:40 pm.
-    # GitHub only uses UTC, so during daylight saving time these run one hour later.
-    - cron: "40 13,19,23 * * 1-5"
+    # Weekdays, Mountain Standard Time (UTC-7): 6:40 am, 12:40 pm, 5:25 pm, 7:40 pm.
+    # (5:25 pm feeds the 6 pm "how today went" emails.) GitHub only uses UTC, so during
+    # daylight saving time these run one hour later.
+    - cron: "40 13,19 * * 1-5"
+    - cron: "25 0 * * 2-6"
     - cron: "40 2 * * 2-6"
   workflow_dispatch: {}
 
