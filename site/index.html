@@ -130,6 +130,15 @@ s.struck{color:var(--red)}
 .docs ul{margin:4px 0 12px;padding-left:18px}
 .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom, 0px));left:50%;transform:translateX(-50%);background:var(--toast);color:var(--on-toast);padding:10px 18px;border-radius:6px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
 .toast.show{opacity:1}
+.guestbar{margin-bottom:16px;font-size:14px}
+.upd-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:32px;align-items:start}
+@media (max-width:900px){.upd-grid{grid-template-columns:1fr}}
+.emailbox h2{margin-bottom:4px}.emailbox input[type=email],.emailbox input[name=bills],.emailbox select{background:var(--surface);color:var(--ink);border:1px solid var(--field);border-radius:5px;padding:8px 10px;font:inherit}
+.efs{border:0;padding:0;margin:0 0 12px}.efs legend{font-weight:600;font-size:15px;margin-bottom:6px;padding:0}
+.eopt{display:flex;gap:8px;align-items:flex-start;margin:6px 0;cursor:pointer}.eopt input{margin-top:4px}
+.daychip{position:relative}.daychip input{position:absolute;opacity:0}.daychip span{display:inline-block;padding:4px 10px;border:1px solid var(--field);border-radius:14px;font-size:14px;cursor:pointer}
+.daychip input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}.daychip input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.emerr{color:var(--red,#b42318);min-height:1px;margin:6px 0}.hp{position:absolute;left:-9999px;width:1px;height:1px}
 .login{max-width:380px;margin:60px auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:28px}
 .login input{width:100%;padding:9px 12px;margin-bottom:14px}
 .diff-add{background:var(--green-bg);border-left:3px solid var(--green);padding:6px 10px;margin:6px 0}
@@ -227,12 +236,16 @@ const LS='deseret-docket-v2';
 // When hosted behind the Deseret Docket login, the server sets a readable docket_user cookie.
 const SERVER_USER=(document.cookie.match(/(?:^|;\s*)docket_user=([^;]+)/)||[])[1]?decodeURIComponent(document.cookie.match(/(?:^|;\s*)docket_user=([^;]+)/)[1]):null;
 const LSKEY=SERVER_USER?LS+':'+SERVER_USER:LS;
+// Guest mode: on the hosted site without signing in. Everything works, but nothing is saved and the
+// office-specific designations (divisions, flags, notes, team watch list) aren't shown.
+const GUEST=!SERVER_USER&&location.protocol==='https:';
 const BUCKETS=[['criminal','Criminal'],['civil','Civil'],['pp','Public Protection'],['appellate','Appellate']];
 const BUCKET_NAME=Object.fromEntries(BUCKETS);
 const FLAGS=[['high','High priority'],['priority','Priority'],['watching','Watching'],['notrelevant','Not relevant']];
 const FLAG_NAME=Object.fromEntries(FLAGS);
 function defaultState(){return {v:3,user:SERVER_USER||'demo-user',signedIn:true,session:null,terms:[],codes:[],opts:{struck:true,defsOnly:false,titlesOnly:false},flags:{},buckets:{},notes:{}}}
-let S; try{S=JSON.parse(localStorage.getItem(LSKEY))||defaultState()}catch(e){S=defaultState()}
+let S; try{S=(!GUEST&&JSON.parse(localStorage.getItem(LSKEY)))||defaultState()}catch(e){S=defaultState()}
+if(GUEST){S.user='Guest';S.signedIn=true;try{S.session=localStorage.getItem(LS+':guest-session')||null}catch(e){}}
 if(!S.v||S.v<3){ // one-time cleanup of the old automatic settings
   S.terms=(S.terms||[]).filter(x=>x.t.toLowerCase()!=='consumer protection');
   if(S.flags&&S.flags['2026GS/HB0377']==='priority') delete S.flags['2026GS/HB0377'];
@@ -241,7 +254,7 @@ if(!S.v||S.v<3){ // one-time cleanup of the old automatic settings
 }
 S.buckets=S.buckets||{};
 if(SERVER_USER){S.user=SERVER_USER;S.signedIn=true}
-function save(){try{localStorage.setItem(LSKEY,JSON.stringify(S))}catch(e){}}
+function save(){if(GUEST){try{localStorage.setItem(LS+':guest-session',S.session||'')}catch(e){}return}try{localStorage.setItem(LSKEY,JSON.stringify(S))}catch(e){}}
 
 /* ===================== TEAM LIST (hosted site with sign-in) ===================== */
 // Signed in on the hosted site: divisions, flags, notes and the watch list live on the server and are shared.
@@ -352,7 +365,7 @@ function setNote(){
   if(!INDEX){return}
   const u=new Date(INDEX.updated); const s=S.session;
   const txt=textReady(s)?'':` · Loading bill text (${TEXTSTATE[s].loaded} of ${TEXTSTATE[s].total})…`;
-  const mine=TEAM.on?(TEAM.err?` Team list unavailable: ${TEAM.err}`:' Divisions, flags, notes and the watch list are shared with your team.'):' Your divisions, flags, notes and watch list stay in this browser.';
+  const mine=GUEST?' You\'re browsing as a guest; nothing you change is saved.':TEAM.on?(TEAM.err?` Team list unavailable: ${TEAM.err}`:' Divisions, flags, notes and the watch list are shared with your team.'):' Your divisions, flags, notes and watch list stay in this browser.';
   $('dataNote').textContent=`Live data from the Utah Legislature, last checked ${ymd(u)===todayStr?'today':fmtLong(u)} at ${fmtTime(u)}.${mine}${txt}`;
 }
 const billLink=b=>`#bill-${b.session}-${b.num}`;
@@ -368,23 +381,127 @@ function shell(active,inner){
   return `<header class="top gut"><a class="brand" href="#updates">${LOGO}Deseret Docket</a>
   <nav class="tabs">${tabs.map(([h,l])=>`<a href="#${h}" class="${active===h?'on':''}">${l}</a>`).join('')}</nav>
   <div class="right"><select id="sessSel" aria-label="Session">${INDEX.sessions.map(s=>`<option value="${s.id}" ${s.id===S.session?'selected':''}>${s.id}</option>`).join('')}</select>
-  <a class="user" href="#account">${esc(S.user)}</a><button class="linkbtn" id="signOut">Sign out</button></div></header><main class="gut">${inner}</main>`;
+  ${GUEST?`<span class="user">Guest</span><a class="btn" href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a>`:`<a class="user" href="#account">${esc(S.user)}</a><button class="linkbtn" id="signOut">Sign out</button>`}</div></header><main class="gut">${GUEST?guestBanner():''}${inner}</main>`;
 }
+function guestBanner(){return `<div class="card guestbar"><b>Guest mode.</b> You can browse every bill, hearing and transcript. Anything you change (like the watch list) isn't saved, and the office's divisions, flags and notes are only shown after you <a href="/login?next=${encodeURIComponent('/'+location.hash)}">sign in</a>.</div>`}
 function emptySession(){return `<p class="lede">No bills have been numbered for ${esc(S.session)} yet. They'll appear here automatically once the Legislature starts releasing them.</p>`}
 const textNotice=()=>textReady(S.session)?'':`<p class="small muted">Still loading bill text (${TEXTSTATE[S.session].loaded} of ${TEXTSTATE[S.session].total} files). Until it finishes, matches are based on titles and summaries.</p>`;
 
 /* ---------- pages ---------- */
 function pageUpdates(){
-  const bills=(BILLS[S.session]||[]).filter(b=>onList(b)&&flagOf(b)!=='notrelevant');
+  // Guests with no watch list see every bill's changes; everyone else sees the bills on their list.
+  const everything=GUEST&&!S.terms.length&&!S.codes.length;
+  const bills=(BILLS[S.session]||[]).filter(b=>everything||(onList(b)&&flagOf(b)!=='notrelevant'));
+  const scope=everything?'bills':'bills on your list';
   const items=bills.flatMap(b=>b.ch.filter(c=>c[0].slice(0,10)===todayStr).map(c=>({b,c}))).sort((x,y)=>y.c[0].localeCompare(x.c[0]));
   const u=new Date(INDEX.updated), nc=nextCheck();
   const stats=`<div class="stats"><div><span>Last checked</span><b>${ymd(u)===todayStr?'today':fmtLong(u)} at ${fmtTime(u)}</b></div><div><span>Next check</span><b>${nc?(ymd(nc)===todayStr?'today':WD[nc.getDay()])+' at '+fmtTime(nc):'—'}</b></div></div>`;
   let body;
-  if(!items.length) body=`<p class="lede">Nothing on your list has changed yet today. This board empties at midnight, but every bill's page keeps its complete history.</p>${stats}
-   <p class="lede">When a bill you follow changes committee, gets a substitute, is scheduled for a hearing or gains new documents, it shows up here. In the meantime, <a href="#bills">your bills</a> lists where each one stands.</p>`;
-  else body=`<p class="lede">${items.length} change${items.length>1?'s':''} to bills on your list today. This board empties at midnight; each bill's page keeps its full history.</p>${stats}
+  if(!items.length) body=`<p class="lede">Nothing on ${everything?'any bill':'your list'} has changed yet today. This board empties at midnight, but every bill's page keeps its complete history.</p>${stats}
+   <p class="lede">When a bill ${everything?'':'you follow '}changes committee, gets a substitute, is scheduled for a hearing or gains new documents, it shows up here.${everything?'':' In the meantime, <a href="#bills">your bills</a> lists where each one stands.'}</p>`;
+  else body=`<p class="lede">${items.length} change${items.length>1?'s':''} to ${scope} today. This board empties at midnight; each bill's page keeps its full history.</p>${stats}
    ${items.map(({b,c})=>`<div class="card update"><div class="when">${fmtTime(pd(c[0]))} · ${esc(c[1])}</div><a class="billnum" href="${billLink(b)}">${esc(b.num)}</a> ${bucketTag(b)} ${flagTag(b)} ${c[1]==='AG mentioned'?'<span class="tag agm">AG mentioned</span>':''}<div class="btitle">${esc(b.title)}</div><div>${esc(c[2])}</div></div>`).join('')}`;
-  return shell('updates',`<h1>Today's updates</h1>${body}`);
+  return shell('updates',`<h1>Today's updates</h1><div class="upd-grid"><div>${body}${billFilesSection()}</div><div>${emailBox()}</div></div>`);
+}
+
+/* ---------- new bill files (before bills are numbered) ---------- */
+let BILLFILES=null, billFilesLoading=false;
+function loadBillFiles(){
+  const bf=INDEX&&INDEX.billfiles; if(!bf||BILLFILES||billFilesLoading) return;
+  billFilesLoading=true;
+  getJSON(`data/${bf.session}/billfiles.json`).then(r=>{BILLFILES=r;if(booted&&(location.hash||'#updates').startsWith('#updates'))route(true)}).catch(()=>{billFilesLoading=false});
+}
+function billFilesSection(){
+  const bf=INDEX.billfiles; if(!bf) return '';
+  loadBillFiles();
+  if(!BILLFILES) return `<h2 style="margin-top:28px">New bill files</h2><p class="small muted">Loading…</p>`;
+  const cut=ymd(new Date(TODAY.getTime()-6*864e5));
+  const recent=BILLFILES.filter(f=>f[4]&&f[4]!=='base'&&f[4].slice(0,10)>=cut);
+  const yr=bf.session.slice(0,4);
+  return `<h2 style="margin-top:28px">New bill files for ${esc(bf.session)}</h2>
+  <p class="small muted">Lawmakers open a bill file (a request for a bill) before the bill is drafted and numbered. ${BILLFILES.length} are open so far. The Legislature only lists each file's working title and sponsor until the bill is numbered.</p>
+  ${recent.length?`<div class="tablewrap"><table class="compact"><thead><tr><th>Opened</th><th>Working title</th><th>Sponsor</th></tr></thead><tbody>${recent.map(f=>{const d=pd(f[4]);return `<tr><td style="white-space:nowrap">${d?fmtMD(d):''}</td><td>${esc(f[1])}</td><td>${esc(f[2]||'—')}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="small">No new bill files in the last week.</p>`}
+  <p class="small"><a href="https://le.utah.gov/bills/billSearch.jsp?sess=${esc(bf.session)}&disp=all&sub=all" target="_blank" rel="noopener">See every ${esc(yr)} bill file on le.utah.gov</a></p>`;
+}
+
+/* ---------- email sign-up ---------- */
+const DAYS3=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DEFAULT_EMAIL={days:[1,2,3,4,5],hour:7,calendar:true,daybefore:true,recap:false,billfiles:true,bills:[]};
+const hourLabel=h=>`${h%12||12}:00 ${h<12?'am':'pm'}`;
+function normBills(txt){const out=[];for(const m of String(txt||'').toUpperCase().replace(/\./g,'').matchAll(/\b([A-Z]{1,4})\s*0*(\d{1,4})\b/g)){const k=m[1]+(+m[2]);if(/^(HB|SB|HJR|SJR|HCR|SCR|HR|SR)\d+$/.test(k)&&!out.includes(k))out.push(k)}return out}
+const billsText=a=>(a||[]).map(k=>k.replace(/^([A-Z]+)(\d+)$/,'$1 $2')).join(', ');
+function emailFields(st,lockedEmail,draftEmail){
+  const opt=(name,label,help)=>`<label class="eopt"><input type="checkbox" name="${name}" ${st[name]?'checked':''}><span><b>${label}</b><br><span class="small muted">${help}</span></span></label>`;
+  return `<div class="field" style="margin-bottom:12px"><label for="emAddr">Email address</label><input id="emAddr" name="email" type="email" autocomplete="email" required ${lockedEmail?`value="${esc(lockedEmail)}" readonly`:`value="${esc(draftEmail||'')}"`} style="width:100%"></div>
+  <fieldset class="efs"><legend>Days</legend><div class="chips">${DAYS3.map((d,i)=>`<label class="daychip"><input type="checkbox" name="day" value="${i}" ${st.days.includes(i)?'checked':''}><span>${d}</span></label>`).join('')}</div></fieldset>
+  <div class="field" style="margin:12px 0"><label for="emHour">Time</label><select id="emHour" name="hour">${Array.from({length:18},(_,i)=>i+5).map(h=>`<option value="${h}" ${st.hour===h?'selected':''}>${hourLabel(h)}</option>`).join('')}</select> <span class="small muted">Mountain time</span></div>
+  <fieldset class="efs"><legend>Which bills</legend>
+   <label class="eopt"><input type="radio" name="scope" value="all" ${st.bills.length?'':'checked'}><span>Every bill</span></label>
+   <label class="eopt"><input type="radio" name="scope" value="some" ${st.bills.length?'checked':''}><span>Only these bills</span></label>
+   <input name="bills" id="emBills" placeholder="e.g. HB 101, SB 22, HJR 3" value="${esc(billsText(st.bills))}" aria-label="Bill numbers to follow" style="width:100%;margin-top:4px"></fieldset>
+  <fieldset class="efs"><legend>What to send</legend>
+   ${opt('calendar','What\'s on the calendar','Committee meetings in the next week (when, where, which bills) and the bills waiting on the House and Senate floor calendars. Sent on the days and time above.')}
+   ${opt('daybefore','Day-before heads-up','The day before a bill\'s committee hearing: when and where it will be heard. Floor times aren\'t posted ahead, so floor calendars show up in the calendar email instead.')}
+   ${opt('recap','End-of-day recap (about 6 pm)','How each bill\'s committee or floor discussion went that day, from the meeting transcripts: who presented, who spoke for and against, motions and votes, and any mention of the Attorney General.')}
+   ${opt('billfiles','New bill files','When lawmakers open new bill files, with each one\'s working title and sponsor. Useful until bills are numbered.')}
+  </fieldset>`;
+}
+function readEmailForm(f){
+  const days=[...f.querySelectorAll('input[name=day]:checked')].map(x=>+x.value);
+  const bills=f.scope.value==='some'?normBills(f.bills.value):[];
+  return {email:f.email.value.trim(),settings:{days,hour:+f.hour.value,calendar:f.calendar.checked,daybefore:f.daybefore.checked,recap:f.recap.checked,billfiles:f.billfiles.checked,bills}};
+}
+function checkEmailForm(f,r){
+  if(!r.settings.calendar&&!r.settings.daybefore&&!r.settings.recap&&!r.settings.billfiles) return 'Pick at least one thing to send.';
+  if(r.settings.calendar&&!r.settings.days.length) return 'Pick at least one day for the calendar email.';
+  if(f.scope.value==='some'&&!r.settings.bills.length) return 'Type at least one bill number, like HB 101, or choose Every bill.';
+  return '';
+}
+let emailSent=null, emailDraft=null; // the draft survives page refreshes while the form is open
+function emailBox(){
+  if(emailSent) return `<section class="card emailbox"><h2>Check your inbox</h2><p>We sent a confirmation link to <b>${esc(emailSent)}</b>. Click it and your emails will start. If it doesn't arrive in a few minutes, check your spam folder.</p><button class="linkbtn" id="emAgain">Use a different address</button></section>`;
+  return `<section class="card emailbox"><h2>Get it by email</h2>
+  <p class="small">A short email at the time you choose: which bills are on the calendar and when their committees meet. Links open each bill without signing in, so the email doesn't include the office's divisions, flags or notes.</p>
+  <form id="emailForm" novalidate>${emailFields(emailDraft?emailDraft.settings:DEFAULT_EMAIL,null,emailDraft&&emailDraft.email)}
+   <input name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+   <div class="small emerr" id="emErr" role="alert"></div>
+   <button class="btn primary" style="width:100%">Send me a confirmation email</button>
+   <p class="small muted" style="margin:8px 0 0">Every email has links to change these choices or unsubscribe. Days with nothing to report are skipped.</p></form></section>`;
+}
+async function emailApi(path,body){
+  const opt=body?{method:'POST',headers:{'Content-Type':'application/json','X-Docket':'1'},body:JSON.stringify(body)}:{cache:'no-store'};
+  const r=await fetch('/api/email/'+path,opt); const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||('error '+r.status)); return j;
+}
+let manage={token:null,data:null,err:null};
+function pageEmail(token,flag){
+  if(manage.token!==token){manage={token,data:null,err:null};emailApi('sub?t='+encodeURIComponent(token)).then(d=>{manage.data=d;route(true)}).catch(e=>{manage.err=e.message;route(true)})}
+  if(manage.err) return shell('',`<h1>Email settings</h1><p class="lede">${manage.err==='gone'?'This email address is no longer signed up. You can sign up again from <a href="#updates">Today\'s updates</a>.':'That link didn\'t work ('+esc(manage.err)+'). Open the newest email from Deseret Docket and use its link.'}</p>`);
+  if(!manage.data) return shell('',`<h1>Email settings</h1><p class="small muted">Loading…</p>`);
+  const d=manage.data;
+  return shell('',`<h1>Email settings</h1>
+  ${flag==='ok'?`<div class="card" style="margin-bottom:16px;border-color:var(--green-line);background:var(--green-bg)"><b>You're signed up.</b> Your emails will start at the next time you picked.</div>`:''}
+  <form id="manageForm" class="card emailbox" style="max-width:560px" novalidate>${emailFields(d.settings||DEFAULT_EMAIL,d.email)}
+   <div class="small emerr" id="emErr" role="alert"></div>
+   <button class="btn primary">Save changes</button> <button type="button" class="btn" id="emUnsub">Unsubscribe</button></form>`);
+}
+function bindEmail(){
+  const f=$('emailForm');
+  if(f){f.bills.oninput=()=>{f.scope.value='some'};f.addEventListener('input',()=>{emailDraft=readEmailForm(f)});f.addEventListener('change',()=>{emailDraft=readEmailForm(f)});f.onsubmit=async e=>{e.preventDefault();
+    const r=readEmailForm(f); let err=checkEmailForm(f,r);
+    if(!err&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) err='Enter a full email address, like name@example.com.';
+    $('emErr').textContent=err; if(err) return;
+    const btn=f.querySelector('button.primary'); btn.disabled=true; btn.textContent='Sending…';
+    try{await emailApi('subscribe',{...r,website:f.website.value});emailSent=r.email;emailDraft=null;route(true)}
+    catch(x){$('emErr').textContent=`That didn't go through: ${x.message}`;btn.disabled=false;btn.textContent='Send me a confirmation email'}}}
+  $('emAgain')&&($('emAgain').onclick=()=>{emailSent=null;route(true)});
+  const m=$('manageForm');
+  if(m){m.bills.oninput=()=>{m.scope.value='some'};m.onsubmit=async e=>{e.preventDefault();
+    const r=readEmailForm(m); const err=checkEmailForm(m,r); $('emErr').textContent=err; if(err) return;
+    try{const d=await emailApi('sub?t='+encodeURIComponent(manage.token),{settings:r.settings});manage.data=d;toast('Email settings saved')}
+    catch(x){$('emErr').textContent=`Couldn't save: ${x.message}`}};
+   $('emUnsub').onclick=async()=>{const b=$('emUnsub');if(!b.dataset.arm){b.dataset.arm=1;b.textContent='Click again to unsubscribe';return}
+    try{await emailApi('unsubscribe?t='+encodeURIComponent(manage.token),{});manage.err='gone';route();toast('Unsubscribed')}catch(x){$('emErr').textContent=`Couldn't unsubscribe: ${x.message}`}}}
 }
 
 let myFilter='all',myFind='',myBucket='any';
@@ -461,6 +578,7 @@ function pageWatch(){
 }
 
 function pageAccount(){
+  if(GUEST) return shell('',`<h1>Guest</h1><p>You're browsing without signing in. Nothing you change is saved.</p><p><a class="btn primary" href="/login">Sign in</a></p>`);
   if(SERVER_USER) return shell('',`<h1>Your account</h1><p>Signed in as <b>${esc(SERVER_USER)}</b>. Divisions, flags, notes and the watch list are shared with everyone who signs in.</p>
   <p class="small muted">To change a password, the site owner makes a new password line with <code>make_password.py</code> and updates the <code>DOCKET_USERS</code> setting in Cloudflare.</p><p><a class="btn" href="/logout">Sign out</a></p>`);
   return shell('',`<h1>Your account</h1><p>Signed in as <b>${esc(S.user)}</b>. Your name, divisions, flags, notes and watch list are saved only in this browser.</p>
@@ -518,14 +636,14 @@ function pageBill(session,num){
    <section><h2>Status and votes</h2><div class="tablewrap"><table class="compact"><thead><tr><th>Date</th><th>Action</th><th>Location</th><th>Vote</th></tr></thead><tbody>${b.hist.map(h=>{const d=pd(h[0]);return `<tr><td>${d?fmtMDY(d):''}</td><td>${esc(h[1])}</td><td>${esc(h[2])}</td><td>${esc(h[3])}</td></tr>`}).join('')}</tbody></table></div></section>
    <section class="docs"><h2>Documents</h2>${b.docs.map(g=>`<b>${esc(g[0])}</b><ul>${g[1].map(i=>{const d=pd(i[1]);return `<li><a href="${esc(i[2])}" target="_blank" rel="noopener">${esc(i[0])}</a>${d?', '+MONTHS[d.getMonth()]+' '+d.getDate():''}</li>`}).join('')}</ul>`).join('')||'<p class="small muted">None yet.</p>'}</section>
   </div>
-  <aside class="side"><h3>${TEAM.on?'Team division, flag and note':'Your division, flag and note'}</h3><div class="small muted">${TEAM.on?'Shared with everyone who signs in.':'Private to you.'}</div>
+  ${GUEST?`<aside class="side"><h3>Division, flag and note</h3><p class="small muted">The office's divisions, flags and notes are only available after you <a href="/login?next=${encodeURIComponent('/'+location.hash)}">sign in</a>.</p></aside></div>`:`<aside class="side"><h3>${TEAM.on?'Team division, flag and note':'Your division, flag and note'}</h3><div class="small muted">${TEAM.on?'Shared with everyone who signs in.':'Private to you.'}</div>
    <div class="sidegroup"><b>Division</b>${bucketChips(b)}${TEAM.on&&TEAM.meta[b.key]&&TEAM.meta[b.key].divBy?`<div class="small muted" style="margin-top:4px">Set by ${whoWhen(TEAM.meta[b.key].divBy,TEAM.meta[b.key].divAt)}</div>`:''}</div>
    <div class="sidegroup"><b>Flag</b>${TEAM.on&&TEAM.meta[b.key]&&TEAM.meta[b.key].flagBy?`<div class="small muted">Set by ${whoWhen(TEAM.meta[b.key].flagBy,TEAM.meta[b.key].flagAt)}</div>`:''}${[['none','No flag'],...FLAGS].map(([v,l])=>`<label class="radio ${v==='none'?'':'f-'+v} ${f===v?'sel':''}"><input type="radio" name="flag" value="${v}" ${f===v?'checked':''}> ${l}</label>`).join('')}</div>
    <label for="noteIn" style="display:block;font-weight:600;margin:12px 0 6px">Note</label><textarea id="noteIn">${esc(S.notes[b.key]||'')}</textarea>
    ${TEAM.on&&TEAM.meta[b.key]&&TEAM.meta[b.key].noteBy?`<div class="small muted">Last edited by ${whoWhen(TEAM.meta[b.key].noteBy,TEAM.meta[b.key].noteAt)}</div>`:''}
    <button class="btn primary" id="saveNote" style="margin-top:8px">Save</button>
    ${TEAM.on?`<details class="sidegroup" id="teamLog" data-key="${esc(b.key)}"><summary class="small" style="cursor:pointer;color:var(--link)">Team history</summary><div class="small muted" id="teamLogBody">Loading…</div></details>`:''}
-   <p class="small muted"><b>High priority</b> and <b>Priority</b> keep a bill under Needs attention. <b>Not relevant</b> hides it from your updates and your list.</p></aside></div>`);
+   <p class="small muted"><b>High priority</b> and <b>Priority</b> keep a bill under Needs attention. <b>Not relevant</b> hides it from your updates and your list.</p></aside></div>`}`);
 }
 
 function pageLogin(){
@@ -547,14 +665,16 @@ function route(soft){
   else if(view==='hearings') html=pageHearings();
   else if(view==='watchlist') html=pageWatch();
   else if(view==='account') html=pageAccount();
+  else if(view==='email') html=pageEmail(parts[1]||'',parts[2]||'');
   else if(view==='bill'){curKey=parts[1]+'/'+parts.slice(2).join('-');html=pageBill(parts[1],parts.slice(2).join('-'))}
   else html=shell('','<h1>Not found</h1>');
   app.innerHTML=html; bind();
   if(soft) scrollTo(0,y);
-  const titles={updates:'Updates',bills:'My bills',all:'All bills',hearings:'Hearings',watchlist:'Watch list',account:'Account',bill:parts.slice(2).join('-')};
+  const titles={email:'Email settings',updates:'Updates',bills:'My bills',all:'All bills',hearings:'Hearings',watchlist:'Watch list',account:'Account',bill:parts.slice(2).join('-')};
   document.title=(titles[view]?titles[view]+' · ':'')+'Deseret Docket';
 }
 function bind(){
+  bindEmail();
   $('sessSel')&&($('sessSel').onchange=async e=>{S.session=e.target.value;save();allPage=1;await loadSession(S.session);setNote();if(location.hash.startsWith('#bill-'))location.hash='#bills';else route()});
   $('signOut')&&($('signOut').onclick=()=>{if(SERVER_USER){location.href='/logout';return}S.signedIn=false;save();route()});
   $('loginForm')&&($('loginForm').onsubmit=e=>{e.preventDefault();S.user=$('lu').value.trim()||'demo-user';S.signedIn=true;save();location.hash='#updates';route()});
@@ -605,7 +725,7 @@ function copyCSV(){
   try{navigator.clipboard.writeText(csv).then(()=>toast(`Copied ${rows.length} bills as CSV. Paste into Excel or Sheets.`),show)}catch(e){show()}
 }
 let resetArm=0;
-if(TEAM.on) $('resetBtn').hidden=true;
+if(TEAM.on||GUEST) $('resetBtn').hidden=true;
 $('resetBtn').onclick=()=>{const btn=$('resetBtn');if(!resetArm){resetArm=setTimeout(()=>{resetArm=0;btn.textContent='Reset my settings'},4000);btn.textContent='Click again to reset';return}
   clearTimeout(resetArm);resetArm=0;btn.textContent='Reset my settings';const sess=S.session;S=defaultState();S.session=sess;save();matchCache.clear();myFilter='all';myFind='';allFilter='all';allFind='';location.hash='#updates';route();toast('Settings reset')};
 let lastPull=0;
