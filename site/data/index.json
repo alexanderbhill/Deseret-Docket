@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-10T17:11-07:00",
+ "updated": "2026-11-10T20:26-07:00",
  "sessions": [
   {
    "id": "2027GS",
@@ -13,5 +13,9 @@
    "textFiles": 16,
    "txFiles": 10
   }
- ]
+ ],
+ "billfiles": {
+  "session": "2027GS",
+  "count": 283
+ }
 }
