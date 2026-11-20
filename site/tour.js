@@ -58,7 +58,7 @@ document.addEventListener('click',e=>{
   if(open&&!open.contains(e.target)){open.remove();const hb=$('helpBtn');hb&&hb.setAttribute('aria-expanded','false')}
   if(!b||open)return;
   const m=document.createElement('div');m.className='helpmenu';m.setAttribute('role','menu');
-  m.innerHTML=`<button type="button" role="menuitem" data-h="tour">Take the tour</button><a role="menuitem" href="#features">What Deseret Docket does</a>${ME?'<a role="menuitem" href="#account">Your account</a>':'<a role="menuitem" href="/login">Sign in or create an account</a>'}`;
+  m.innerHTML=`<button type="button" role="menuitem" data-h="tour">${ic('spark')}Tutorial</button><a role="menuitem" href="#features">${ic('list')}Features</a>${ME?`<a role="menuitem" href="#account">${ic('user')}Account</a>`:`<a role="menuitem" href="/login">${ic('user')}Sign in</a>`}<a role="menuitem" href="#about">${ic('impact')}About</a>`;
   document.body.appendChild(m);const r=b.getBoundingClientRect();m.style.top=(r.bottom+6)+'px';m.style.left=Math.max(8,Math.min(r.left,innerWidth-m.offsetWidth-8))+'px';b.setAttribute('aria-expanded','true');
   m.onclick=ev=>{const h=ev.target.dataset.h;m.remove();if(h==='tour')startTour();};
   m.querySelector('button,a').focus();
@@ -100,3 +100,40 @@ function pageFeatures(){
    ${F.map(([g,gi,list])=>`<div class="card"><h2>${ic(gi,'h')}${esc(g)}</h2><div class="feats">${list.map(x=>`<a class="feat ${ok(x)?'':'locked'}" href="${ok(x)?x[3]:'/login'}"><span class="fi">${ic(x[0])}</span><span><b>${esc(x[1])}</b><span>${esc(x[2])}</span>${ok(x)?'':'<span class="tiny muted">Sign in to use this</span>'}</span></a>`).join('')}</div></div>`).join('')}`);
 }
 document.addEventListener('click',e=>{if(e.target&&e.target.id==='featTour'&&typeof startTour==='function')startTour()});
+
+// ---------- Help → About: who built it, how the office's information is protected, and how to send feedback.
+// The contact address comes from "contactEmail" in config.json.
+const feedbackTo=()=>(CONFIG&&CONFIG.contactEmail)||'';
+function pageAbout(){
+  const to=feedbackTo();
+  const sec=[
+    ['users','Only people the office approves','Every account is approved or invited by an admin, who chooses what each person can see and change. Guests see public bill information only, and nothing a guest changes is saved.'],
+    ['gear','Passwords are never stored','Passwords are scrambled with PBKDF2 (100,000 rounds) before they’re saved, so nobody, including admins, can read them. Sign-ins use signed, secure cookies that expire.'],
+    ['building','Office information stays in the site’s database','Positions, notes, assignments and Fiscal Hive answers live in the site’s own Cloudflare database. They aren’t sold, shared or sent to outside services.'],
+    ['spark','No AI reads the office’s data','The site doesn’t send office information to any AI service. The “Ask Claude” buttons only open claude.ai in your browser with a bill’s public title and summary, and only when you click them.'],
+    ['file','Public information comes from public sources','Bill data comes from the Utah Legislature’s website and API, news from Utah newspapers’ public feeds, and the budget from the Legislature’s budget data.'],
+    ['mail','Emails never include office positions','Alert emails link to the public bill pages and leave out the office’s positions and notes.'],
+    ['clock','Every change is on the record','Each edit to a bill’s office information is logged with who made it and when. Open “Office history” on any bill to see it.'],
+  ];
+  return shell('',`<div class="card about-hero"><div class="ab-top">${BEE}<div><h2>About Deseret Docket</h2><p class="desc">A bill tracker for the Utah Legislature, built by <b>Alexander Hill</b>.</p></div></div>
+    ${to?`<p>Questions or comments? Email <a href="mailto:${esc(to)}">${esc(to)}</a>.</p>`:''}
+    <div class="fbbtns"><button type="button" class="dlbig" data-fb="bug">${ic('x')}<span><b>Report a bug</b><small>Something broken, wrong or confusing</small></span></button><button type="button" class="dlbig alt" data-fb="feature">${ic('spark')}<span><b>Request a feature</b><small>An idea that would make the site more useful</small></span></button></div></div>
+   <div class="card"><h2>${ic('scale','h')}How the office’s information is protected</h2><div class="feats">${sec.map(x=>`<div class="feat"><span class="fi">${ic(x[0])}</span><span><b>${esc(x[1])}</b><span>${esc(x[2])}</span></span></div>`).join('')}</div></div>
+   <dialog id="fbDlg"></dialog>`);
+}
+let FB_FROM='';
+function feedbackDlg(kind){
+  const dlg=$('fbDlg');const bug=kind==='bug';const to=feedbackTo();
+  dlg.innerHTML=`<form method="dialog" class="fbform"><h2>${ic(bug?'x':'spark')}${bug?'Report a bug':'Request a feature'}</h2>
+   <div class="field"><label for="fbWhat">${bug?'What went wrong?':'What would you like the site to do?'}</label><textarea id="fbWhat" rows="4" required placeholder="${bug?'I clicked… and expected… but instead…':'It would help if…'}"></textarea></div>
+   ${bug?`<div class="field" style="margin-top:10px"><label for="fbWhere">Where did it happen? (page or bill)</label><input id="fbWhere" value="${esc(FB_FROM||'')}"></div>`:''}
+   <p class="small muted">This opens an email${to?` to ${esc(to)}`:''} in your mail app${bug?', with your browser details added to help track it down':''}. Nothing is sent until you press send.</p>
+   <div style="display:flex;gap:10px;justify-content:flex-end"><button type="button" class="btn" id="fbCancel">Cancel</button><button class="btn primary" id="fbGo">${ic('mail')}Open the email</button></div></form>`;
+  dlg.showModal();$('fbCancel').onclick=()=>dlg.close();
+  $('fbGo').onclick=e=>{e.preventDefault();const what=$('fbWhat').value.trim();if(!what){$('fbWhat').focus();return}
+    const subject=`Deseret Docket ${bug?'bug':'feature request'}: ${what.slice(0,60)}${what.length>60?'…':''}`;
+    const body=`${what}\n\n${bug?`Where: ${$('fbWhere').value.trim()||'—'}\nPage: ${location.origin}/${FB_FROM||''}\nBrowser: ${navigator.userAgent}\nScreen: ${innerWidth}×${innerHeight}\n`:''}From: ${ME?(ME.display||ME.user):'a guest'}`;
+    location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;dlg.close()};
+}
+addEventListener('hashchange',e=>{if(!location.hash.startsWith('#about'))FB_FROM=location.hash;else{try{const h=new URL(e.oldURL).hash;if(!h.startsWith('#about'))FB_FROM=h}catch{}}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-fb]');if(t)feedbackDlg(t.dataset.fb)});

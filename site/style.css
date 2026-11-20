@@ -701,3 +701,15 @@ dialog .invdraft{max-width:640px}
 a.pill.tagx{text-decoration:none;cursor:pointer}
 a.pill.tagx:hover{filter:brightness(1.08);box-shadow:0 0 0 2px var(--gold)}
 .fulltip{white-space:pre-line}
+/* About page */
+.ab-top{display:flex;gap:16px;align-items:center}
+.ab-top>svg{width:56px;height:56px;flex:none;background:var(--goldc);border-radius:50%;padding:6px}
+.fbbtns{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+div.feat{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:11px;background:#fff}
+div.feat .fi{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--gold-bg);color:var(--navy);flex:none}
+div.feat .fi .ic{width:21px;height:21px;margin:0}
+div.feat b{display:block;color:var(--navy);margin-bottom:2px}
+div.feat span span{font-size:14px;display:block}
+.helpmenu .ic{margin-right:.5em;color:var(--steel)}
+dialog .fbform{min-width:min(520px,86vw)}
+.fbform textarea,.fbform input{width:100%}

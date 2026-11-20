@@ -1031,6 +1031,7 @@ function route(soft){
   else if(view==='legislators'){const id=parts.slice(1).join('-');if(!id){location.replace('#learn-members');return}html=pageLearn('members',typeof legProfile==='function'?legProfile(id):'')}
   else if(view==='budget') html=pageBudget();
   else if(view==='features') html=pageFeatures();
+  else if(view==='about') html=pageAbout();
   else if(view==='watchlist'){WATCHOPEN=true;location.replace('#bills');return}
   else if(view==='account') html=pageAccount();
   else if(view==='admin') html=pageAdmin();
@@ -1043,7 +1044,7 @@ function route(soft){
   else html=shell('',`<div class="card"><h2>Not found</h2></div>`);
   app.innerHTML=html; bind();
   if(soft) scrollTo(0,y);
-  const titles={features:'What Deseret Docket does',fiscal:'Fiscal Hive',learn:'Learn the Legislature',postsession:'Session wrap-up',packet:'Prep packet',updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
+  const titles={features:'What Deseret Docket does',about:'About',fiscal:'Fiscal Hive',learn:'Learn the Legislature',postsession:'Session wrap-up',packet:'Prep packet',updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
   document.title=(titles[view]?titles[view]+' · ':'')+'Deseret Docket';
 }
 const on=(id,ev,fn)=>{const el=$(id);if(el)el[ev]=fn};
