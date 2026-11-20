@@ -1,0 +1,156 @@
+/* Bill intelligence: floor calendar watch, substitute alerts, bill collisions, "this bill has run
+   before", similar laws elsewhere, follow the money, media and sentiment, trending bills, media
+   availability analyses and in-app "you're up next" notifications. */
+'use strict';
+let MEDIA=null, HIST=null, MAV=null, BILLTAB='overview', BILLTAB_KEY='';
+function loadMedia(){if(MEDIA===null){MEDIA=undefined;getJSON('data/media.json').then(j=>{MEDIA=j;route(true)}).catch(()=>{MEDIA={bills:{},trending:{day:[],week:[]},sources:[]}})}return MEDIA||null}
+function loadHist(){if(HIST===null){HIST=undefined;getJSON('data/history.json').then(j=>{HIST=j;route(true)}).catch(()=>{HIST={}})}return HIST||null}
+function loadMAV(){if(MAV===null){MAV=undefined;getJSON('data/media-avail.json').then(j=>{MAV=j;route(true)}).catch(()=>{MAV={items:[]}})}return MAV||null}
+const aiOf=b=>{if(typeof loadAI==='function')loadAI(b.session);const a=((typeof AIDATA!=='undefined'&&AIDATA[b.session])||{})[b.num];return a||null};
+
+// ---------- floor calendar watch
+const FLOOR_JS=/reading calendar|\bcircled\b|\buncircled\b|\brules\b|concurrence calendar|consent calendar|time certain/i;
+function floorMoves(b,days){const since=ymd(new Date(Date.now()-days*864e5));return (b.hist||[]).filter(h=>h[0]&&h[0].slice(0,10)>=since&&FLOOR_JS.test(h[1]||''))}
+function floorWords(a){if(/\buncircled\b/i.test(a))return 'Uncircled';if(/\bcircled\b/i.test(a))return 'Circled';if(/to rules|returned? to rules/i.test(a))return 'Sent to Rules';if(/rules to/i.test(a))return 'Out of Rules';if(/3rd reading calendar/i.test(a))return 'On the 3rd reading calendar';if(/2nd reading calendar/i.test(a))return 'On the 2nd reading calendar';if(/concurrence/i.test(a))return 'On the concurrence calendar';return a}
+
+// ---------- substitutes that touch watched code
+function subWatchHits(b){
+  const vd=b.vd;if(!vd||!vd.items)return [];const codes=W.codes.filter(x=>x.on).map(x=>x.t);if(!codes.length)return [];
+  const out=new Set();for(const it of vd.items){const m=String(it[0]).match(/^Section ([0-9A-Za-z.\-]+)/);if(!m)continue;const sec=m[1];for(const c of codes)if(sec===c||sec.startsWith(c+'-'))out.add(sec)}
+  return [...out];
+}
+function subSummary(b){
+  const ai=aiOf(b);if(ai&&ai.subsum&&(!ai.ver||ai.ver===b.version))return {txt:ai.subsum,src:'ai'};
+  const vd=b.vd;if(!vd||!vd.items||!vd.items.length)return null;
+  const secs=[...new Set(vd.items.map(i=>(String(i[0]).match(/^Section ([0-9A-Za-z.\-]+)/)||[])[1]).filter(Boolean))];
+  const add=vd.items.filter(i=>i[1]==='add').length, del=vd.items.filter(i=>i[1]==='del').length, chg=vd.items.length-add-del;
+  const hp=vd.items.find(i=>i[0]==='Highlighted provisions');
+  const parts=[];if(chg)parts.push(`rewrites ${plural(chg,'passage')}`);if(add)parts.push(`adds ${add}`);if(del)parts.push(`removes ${del}`);
+  return {txt:`${esc(vd.to)} ${parts.join(', ')||'makes changes'}${secs.length?` in ${secs.length>4?plural(secs.length,'code section'):'Section '+secs.join(', ')}`:''}.${hp?' The bill’s own summary of its provisions changed too.':''}`,src:'auto',html:true};
+}
+
+// ---------- bill collisions: two bills amending the same code section, with different wording
+let COLL=null, COLLSIG='';
+function collisions(){
+  const S=UI.session, rows=(BILLS[S]||[]).filter(b=>!b.file&&(outcome(b)||{}).k!=='dead');
+  const sig=S+rows.length+(TEXTSTATE[S]||{}).loaded;if(COLL&&COLLSIG===sig)return COLL;COLLSIG=sig;
+  const bySec={};for(const b of rows)for(const s of b.secs)(bySec[s]=bySec[s]||[]).push(b);
+  const sub=(b,sec)=>{const ps=(TEXT[S]||{})[b.num]||[];const m={};for(const p of ps){if(p[0]===`Section ${sec}`||p[0].startsWith(`Section ${sec} >`))m[p[0]]=p[1].replace(/\u0001[^\u0002]*\u0002/g,'').replace(/\s+/g,' ').trim()}return m};
+  const out={};
+  for(const [sec,list] of Object.entries(bySec)){if(list.length<2||list.length>8)continue;
+    for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){const a=list[i],c=list[j];const ta=sub(a,sec),tc=sub(c,sec);
+      const diff=Object.keys(ta).filter(k=>k in tc&&ta[k]!==tc[k]).map(k=>k.replace(`Section ${sec}`,'').replace(/^ > /,'')||'the section');
+      const rec={sec,diff:diff.slice(0,4),nd:diff.length};(out[a.key]=out[a.key]||[]).push({other:c,...rec});(out[c.key]=out[c.key]||[]).push({other:a,...rec})}}
+  COLL=out;return out;
+}
+
+// ---------- this bill has run before
+function tokens(t){return new Set(String(t||'').toLowerCase().replace(/amendments?|modifications?|act|provisions?/g,' ').split(/[^a-z0-9]+/).filter(w=>w.length>2))}
+function runBefore(b){
+  const H=loadHist();if(!H)return null;const out=[];const ts=tokens(b.title);const secs=new Set(b.secs);
+  for(const [ses,bills] of Object.entries(H)){if(ses===b.session)continue;
+    for(const r of Object.values(bills)){const shared=r.secs.filter(s=>secs.has(s)).length;const rt=tokens(r.t);const inter=[...ts].filter(w=>rt.has(w)).length;const jac=inter/Math.max(1,new Set([...ts,...rt]).size);
+      const score=(secs.size?shared/Math.max(secs.size,r.secs.length||1):0)*0.6+jac*0.4+(r.t.toLowerCase()===b.title.toLowerCase()?0.5:0);
+      if((shared>=2||jac>=0.55||(shared>=1&&jac>=0.3))&&score>=0.3)out.push({ses,r,shared,score})}}
+  return out.sort((a,c)=>c.score-a.score).slice(0,6);
+}
+
+// ---------- tags on the Bills table
+function billExtraTags(b){const t=[];
+  if(floorMoves(b,3).length)t.push(`<span class="pill warn" title="${esc(floorMoves(b,3).map(h=>h[1]).join('; '))}">${esc(floorWords(floorMoves(b,3)[0][1]))}</span>`);
+  if(ME&&subWatchHits(b).length)t.push('<span class="pill warn">Sub touches watched code</span>');
+  if(!b.file&&(collisions()[b.key]||[]).some(x=>x.nd))t.push('<span class="pill ink" title="Another bill amends the same code section with different wording">Collision</span>');
+  return t.join('');
+}
+
+// ---------- the bill page: overview extras and tabs
+function billOverviewExtras(b){
+  if(b.file)return '';
+  const ai=aiOf(b), ss=subSummary(b), hits=ME?subWatchHits(b):[], col=(collisions()[b.key]||[]).sort((x,y)=>y.nd-x.nd), fm=floorMoves(b,14);
+  let h='';
+  if(ai&&ai.sum)h+=`<section class="plain"><h2>In plain English</h2><p class="serif" style="font-size:17px">${esc(ai.sum)}</p><p class="tiny muted">AI summary of ${esc(ai.ver||'the bill')}. Check the bill text before relying on it.</p></section>`;
+  if(ss)h+=`<section><h2>What this ${/sub/i.test(b.version)?'substitute':'version'} does</h2><p>${ss.html?ss.txt:esc(ss.txt)}</p>${hits.length?`<div class="alertbox"><b>Touches code on the watch list:</b> Section ${esc(hits.join(', '))}</div>`:''}<p class="tiny muted">${ss.src==='ai'?'AI summary of the changes.':'Automatic summary from the text comparison.'}</p></section>`;
+  if(fm.length)h+=`<section><h2>Floor calendar</h2>${fm.map(x=>`<div class="small"><b>${esc(floorWords(x[1]))}</b> · ${esc(x[1])} · ${fmtMDY(pd(x[0]))}</div>`).join('')}<p class="tiny muted">Circling, Rules and calendar moves are where bills often stall or speed up.</p></section>`;
+  if(col.length)h+=`<section><h2>Bill collisions</h2><p class="small muted">Other bills this session that amend the same Utah Code sections. Different wording in the same subsection usually needs a coordination clause.</p>${col.slice(0,8).map(x=>`<div class="coll ${x.nd?'hot':''}"><a class="billnum" href="${billHref(x.other)}">${esc(shortNum(x.other.num))}</a> <span class="serif">${esc(x.other.title)}</span><div class="small">Both amend Section ${esc(x.sec)}${x.nd?` · <b>different wording in ${esc(x.diff.join(', '))}${x.nd>x.diff.length?` and ${x.nd-x.diff.length} more`:''}</b>`:' · no conflicting wording found'}</div></div>`).join('')}</section>`;
+  return h;
+}
+function billTabsNav(b){
+  if(b.file)return '';
+  if(BILLTAB_KEY!==b.key){BILLTAB_KEY=b.key;BILLTAB='overview'}
+  const m=(loadMedia()||{bills:{}}).bills[b.num]&&MEDIA.session===b.session?MEDIA.bills[b.num]:null;
+  const tabs=[['overview','Overview'],['media',`Media & sentiment${m?` (${m.items.length})`:''}`],['history','Run before & lookalikes'],['money','Follow the money']];
+  return `<nav class="billtabs" aria-label="Bill sections">${tabs.map(([k,l])=>`<button type="button" data-billtab="${k}" class="${BILLTAB===k?'on':''}" aria-pressed="${BILLTAB===k}">${esc(l)}</button>`).join('')}${ME?`<a class="btn sm" href="#packet-${esc(b.session)}-${esc(b.num)}" style="margin-left:auto">Prep packet</a>`:''}</nav>`;
+}
+function meterSVG(score,n){
+  const a=Math.PI*(1-(score+1)/2), r=70, cx=90, cy=86, x=cx+r*Math.cos(a), y=cy-r*Math.sin(a);
+  const label=n<3?'Too few mentions to say':score>0.25?'Mostly positive':score<-0.25?'Mostly negative':'Mixed or neutral';
+  return `<svg viewBox="0 0 180 104" class="meter" role="img" aria-label="Sentiment: ${label}"><defs><linearGradient id="sg" x1="0" x2="1"><stop offset="0" stop-color="#78081c"/><stop offset=".5" stop-color="#e9d8a6"/><stop offset="1" stop-color="#2f6f3a"/></linearGradient></defs>
+   <path d="M20 86 A70 70 0 0 1 160 86" fill="none" stroke="url(#sg)" stroke-width="16" stroke-linecap="round"/>
+   <line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#002147" stroke-width="4" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="7" fill="#002147"/>
+   <text x="20" y="102" font-size="10" fill="#5b6672">Negative</text><text x="160" y="102" font-size="10" fill="#5b6672" text-anchor="end">Positive</text></svg><div class="meter-l"><b>${label}</b></div>`;
+}
+function billTabBody(b){
+  if(BILLTAB==='media'){
+    const M=loadMedia();if(!M)return '<p>Loading…</p>';
+    const m=M.session===b.session?M.bills[b.num]:null;
+    return `<section><h2>Media & sentiment</h2><p class="small muted">News stories and public social posts that mention ${esc(shortNum(b.num))} by number or exact title, from the last 60 days. Checked with every data update${M.fetched?`; last checked ${fmtAP(new Date(M.fetched+'Z'))}`:''}.</p>
+     ${m?`<div class="sent"><div>${meterSVG(m.score,m.n)}</div><div class="small"><p><b>What is the sentiment meter?</b> A rough read of the tone of the ${plural(m.n,'recent mention')} (${m.news} news, ${m.social} social), from the positive and negative words they use. It tells you which way the conversation is leaning, not how many people agree. Open the stories to judge for yourself.</p></div></div>
+      <div class="rows">${m.items.map(x=>`<div class="row" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="small">${x.date?fmtMD(new Date(x.date.length>10?x.date+'Z':x.date)):''}<span class="sub">${esc(x.src)}</span></span><div class="what" style="font-size:15px"><a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t||'(post)')}</a>${x.d?`<span class="sub">${esc(x.d.slice(0,200))}</span>`:''}</div><div class="r"><span class="pill ${x.kind==='news'?'ink':'muted'}">${x.kind==='news'?'News':'Social'}</span><span class="sdot" style="--c:${x.s>0.2?'var(--green)':x.s<-0.2?'var(--maroon)':'var(--line-2)'}" title="Tone ${x.s}"></span></div></div>`).join('')}</div>`
+     :`<p class="empty">No news stories or posts mention this bill yet.</p>`}
+     <p class="tiny muted">Sources: ${esc((M.sources||[]).filter(s=>s.ok).map(s=>s.name).join(', ')||'none reachable on the last check')}.</p></section>`;
+  }
+  if(BILLTAB==='history'){
+    const rb=runBefore(b), ai=aiOf(b);
+    return `<section><h2>This bill has run before</h2><p class="small muted">Earlier Utah bills with the same code sections or a very similar title, from the last four general sessions.</p>
+     ${rb===null?'<p>Loading…</p>':rb.length?`<div class="tablewrap"><table class="compact"><thead><tr><th>Session</th><th>Bill</th><th>Sponsor</th><th>How far it got</th><th>Where it stopped</th></tr></thead><tbody>${rb.map(x=>`<tr><td>${esc(x.ses.slice(0,4))}</td><td><a href="https://le.utah.gov/~${esc(x.ses.slice(0,4))}/bills/static/${esc(x.r.n)}.html" target="_blank" rel="noopener"><b>${esc(shortNum(x.r.n))}</b></a> ${esc(x.r.t)}<div class="sub">${x.shared?plural(x.shared,'shared code section'):'Similar title'}</div></td><td class="small">${esc(x.r.sp.replace(/^(Rep|Sen)\.\s*/,''))}</td><td><span class="pill ${/law/i.test(x.r.stage)?'pass':/vetoed|stopped|never/i.test(x.r.stage)?'dead':'ink'}">${esc(x.r.stage)}</span></td><td class="small">${esc(x.r.died||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="empty">No close match in the last four sessions. (Earlier sessions fill in over the first few data updates.)</p>'}</section>
+     <section><h2>Similar laws in other states and lawsuit risk</h2>${ai&&ai.elsewhere&&ai.elsewhere.length?`<div class="alertbox warnbox"><b>Leads to verify:</b> suggested by AI from the bill text. Confirm each one before relying on it.</div><ul>${ai.elsewhere.map(e=>`<li><b>${esc(e.state)}</b>: ${esc(e.law)}${e.note?` · ${esc(e.note)}`:''}</li>`).join('')}</ul>`:`<p class="small muted">${ai?'No closely similar laws elsewhere were identified.':'Leads on model legislation, other states’ versions and court challenges appear here once AI summaries are switched on (an ANTHROPIC_API_KEY secret in GitHub).'}</p>`}</section>`;
+  }
+  if(BILLTAB==='money'){
+    const people=[[b.sponsor,b.spId,'Chief sponsor'],[b.floor,b.flId,'Floor sponsor'],...b.cosp.map(c=>[c,'','Cosponsor'])].filter(x=>x[0]);
+    const votes=b.hist.filter(h=>h[3]&&/\d+-\d+/.test(h[3]));
+    return `<section><h2>Follow the money</h2><p class="small muted">Public records about who is carrying this bill. These links go to the state’s official disclosure sites; amounts aren’t copied here, so you always see the source.</p>
+     <div class="tablewrap"><table class="compact"><thead><tr><th>Who</th><th>Role</th><th>Campaign finance</th></tr></thead><tbody>${people.map(([n,id,r])=>{const l=legFor(id,n);const nm=l?l.name:n.replace(/^(Rep|Sen)\.\s*/,'');return `<tr><td><b>${esc(nm)}</b>${l?`<div class="sub">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${esc(l.party)}</div>`:''}</td><td class="small">${r}</td><td class="small"><a href="https://disclosures.utah.gov/search/publicsearch?type=pcc" target="_blank" rel="noopener">Campaign disclosures</a> <span class="muted">(search “${esc(nm)}”)</span></td></tr>`}).join('')}</tbody></table></div>
+     <p class="small" style="margin-top:12px"><a href="https://lobbyist.utah.gov/lobbyistbyprincipal" target="_blank" rel="noopener">Registered lobbyists by organization</a> · <a href="https://lobbyist.utah.gov/" target="_blank" rel="noopener">Lobbyist expenditure reports</a></p>
+     <h3 style="font-family:var(--sans);font-size:17px;margin-top:18px">Floor and committee votes</h3>${votes.length?`<table class="compact"><tbody>${votes.map(h=>`<tr><td>${fmtMDY(pd(h[0]))}</td><td>${esc(h[1])}</td><td><b>${esc(h[3])}</b> <span class="tiny muted">yes–no–absent</span></td></tr>`).join('')}</tbody></table><p class="tiny muted">How each member voted is on the bill’s page at <a href="https://le.utah.gov/~${esc(b.session.slice(0,4))}/bills/static/${esc(b.num)}.html" target="_blank" rel="noopener">le.utah.gov</a>.</p>`:'<p class="small muted">No recorded votes yet.</p>'}</section>`;
+  }
+  return '';
+}
+
+// ---------- Daily Updates extras
+function updatesExtras(){
+  const S=UI.session;let h='';
+  const pool=allRows(S).filter(b=>!b.file&&(updScope==='office'&&ME?onOffice(b):updScope==='mine'?mineAssigned(b):true));
+  const moves=pool.flatMap(b=>floorMoves(b,3).map(x=>({b,x}))).sort((a,c)=>c.x[0].localeCompare(a.x[0]));
+  if(moves.length)h+=`<div class="card"><h2>Floor calendar watch</h2><p class="desc">Bills moved onto a reading calendar, circled or uncircled, or sent to or from Rules in the last three days. These moves happen fast and are where bills quietly stall or jump ahead.</p><div class="rows">${moves.slice(0,40).map(({b,x})=>`<div class="row"><a class="k" href="${billHref(b)}">${esc(shortNum(b.num))}</a><div class="what">${esc(floorWords(x[1]))}<span class="sub">${esc(b.title)} · ${esc(x[1])}</span></div><div class="r"><span class="small muted">${fmtMD(pd(x[0]))} ${fmtTime(pd(x[0]))}</span></div></div>`).join('')}</div></div>`;
+  if(ME){const subs=pool.filter(b=>b.vd&&b.vd.at&&b.vd.at.slice(0,10)>=ymd(new Date(Date.now()-7*864e5))&&subWatchHits(b).length);
+    if(subs.length)h+=`<div class="card"><h2>Substitutes that touch your code sections</h2><p class="desc">New versions from the last week that change Utah Code on the watch list.</p><div class="rows">${subs.map(b=>{const ss=subSummary(b);return `<div class="row"><a class="k" href="${billHref(b)}">${esc(shortNum(b.num))}</a><div class="what">${esc(b.vd.to)}: Section ${esc(subWatchHits(b).join(', '))}<span class="sub">${ss?(ss.html?ss.txt:esc(ss.txt)):esc(b.title)}</span></div><div class="r"><span class="pill warn">Watch list</span></div></div>`}).join('')}</div></div>`}
+  const M=loadMedia();
+  if(M&&M.trending&&(M.trending.week||[]).length&&M.session===S){const row=(l,lbl)=>`<div><h3 style="font-family:var(--sans);font-size:16px">${lbl}</h3>${l.length?`<ol class="trend">${l.slice(0,8).map(([n,c])=>{const b=BYKEY[`${S}/${n}`];return `<li><a class="billnum" href="${b?billHref(b):'#'}">${esc(shortNum(n))}</a> <span class="serif">${esc(b?b.title:'')}</span><span class="v">${plural(c,'mention')}</span></li>`}).join('')}</ol>`:'<p class="small muted">Nothing yet.</p>'}</div>`;
+    h+=`<div class="card"><h2>Most talked-about bills</h2><p class="desc">Bills mentioned most in the news and on social media.</p><div class="grid2">${row(M.trending.day||[],'Last 24 hours')}${row(M.trending.week||[],'Last 7 days')}</div></div>`}
+  const V=loadMAV();
+  h+=`<div class="card"><h2>Media availabilities</h2><p class="desc">House and Senate leaders’ media availabilities, streamed live on Facebook, transcribed and summarized after they finish: topics, bills mentioned, and who said what.</p>
+   ${isAdmin()?`<form class="filters" id="mavForm"><div class="field grow"><label for="mavUrl">Analyze a Facebook video</label><input id="mavUrl" placeholder="https://www.facebook.com/…/videos/…"></div><button class="btn">Add</button></form><p class="tiny muted" style="margin-top:-8px">New videos on the House and Senate pages are picked up automatically when Facebook allows it. If one is missed, paste its link here.${MQ&&MQ.length?' Waiting: '+MQ.filter(q=>q.status==='waiting').length+'. '+MQ.filter(q=>q.status==='failed').map(q=>`Couldn’t fetch ${esc(q.label||q.url)}: ${esc(q.note||'')}`).join(' '):''}</p>`:''}
+   ${V&&V.items&&V.items.length?V.items.slice(0,4).map((x,i)=>`<details class="disc" ${i===0?'open':''}><summary style="cursor:pointer;list-style:none"><div class="kicker">${x.date?fmtLong(new Date(x.date)):''}${x.mins?' · '+x.mins+' min':''}</div><h4>${esc(x.label)}</h4></summary>
+     <p>${esc(x.summary||'')}</p>${(x.topics||[]).length?`<div class="tags">${x.topics.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>`:''}${(x.bills||[]).length?`<p class="small"><b>Bills mentioned:</b> ${x.bills.map(n=>{const k=`${S}/${String(n).replace(/[\s.]/g,'').replace(/^([A-Z]+)(\d+)$/,(m,a,d)=>a+d.padStart(4,'0'))}`;return BYKEY[k]?`<a href="${billHref(BYKEY[k])}">${esc(n)}</a>`:esc(n)}).join(', ')}</p>`:''}
+     ${(x.quotes||[]).length?`<ul>${x.quotes.map(q=>`<li><a class="ts" href="${esc(x.url)}" target="_blank" rel="noopener">${clock(q.t)}</a><span><b>${esc(q.who)}:</b> “${esc(q.text)}”</span></li>`).join('')}</ul>`:''}
+     <div class="links"><a href="${esc(x.url)}" target="_blank" rel="noopener">Watch on Facebook</a>${x.src==='ai'?'<span class="tiny muted">AI summary; speaker names come from the transcript and can be wrong.</span>':''}</div></details>`).join(''):'<p class="empty">No media availabilities analyzed yet.</p>'}</div>`;
+  return h;
+}
+let MQ=null;
+
+// ---------- in-app notices ("you're up next") with browser notifications
+let noticeAsked=false;
+async function pollNotices(){
+  if(!ME)return;try{const j=await api('notices');const list=j.notices||[];if(!list.length)return;
+    for(const n of list){toast(n.title);if('Notification' in window&&Notification.permission==='granted'){const no=new Notification(n.title,{body:n.body});no.onclick=()=>{window.open(n.url,'_blank')}}}
+    await api('notices',{upTo:list[list.length-1].id})}catch(e){}
+}
+function askNotify(){if(noticeAsked||!('Notification' in window)||Notification.permission!=='default')return;noticeAsked=true;Notification.requestPermission().catch(()=>{})}
+setInterval(pollNotices,60e3);setTimeout(pollNotices,5000);
+
+function billExtraBind(){
+  app.querySelectorAll('[data-billtab]').forEach(b=>b.onclick=()=>{BILLTAB=b.dataset.billtab;route(true)});
+  on('mavForm','onsubmit',async e=>{e.preventDefault();try{const j=await api('media/queue',{url:$('mavUrl').value.trim()});MQ=j.queue;toast('Added. It’s analyzed on the next run (within about 30 minutes on session weekdays), or run “Media availability analysis” from GitHub Actions.');route(true)}catch(err){toast(err.message)}});
+  if(isAdmin()&&MQ===null&&location.hash.slice(1).split('-')[0]==='updates'){MQ=[];api('media/queue').then(j=>{MQ=j.queue||[];if(MQ.length)route(true)}).catch(()=>{})}
+  if(ME&&mineAssigned&&location.hash.startsWith('#hearings'))askNotify();
+}

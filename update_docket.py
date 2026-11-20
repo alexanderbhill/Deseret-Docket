@@ -882,6 +882,22 @@ def human_dt(iso):
         return iso
 
 
+FLOOR_RE = re.compile(r"reading calendar|\bcircled\b|\buncircled\b|\brules\b|concurrence calendar|consent calendar|time certain|returned? to rules", re.I)
+
+
+def floor_words(act):
+    a = act.replace("House/", "House:").replace("Senate/", "Senate:").strip()
+    if re.search(r"\buncircled\b", act, re.I):
+        return f"Uncircled ({a}). It can be voted on again."
+    if re.search(r"\bcircled\b", act, re.I):
+        return f"Circled ({a}). It's on hold on the floor until uncircled."
+    if re.search(r"to rules|returned? to rules", act, re.I):
+        return f"Sent to Rules ({a}). Bills can sit here without a hearing."
+    if re.search(r"rules to", act, re.I):
+        return f"Out of Rules ({a})."
+    return a
+
+
 def diff(old, new, stamp):
     out = []
     if old is None:
@@ -899,6 +915,11 @@ def diff(old, new, stamp):
         out.append([stamp, "Moved", f"Now with {new['own']} ({new['act']})."])
     elif old.get("act") != new.get("act") and new.get("act"):
         out.append([stamp, "New action", new["act"]])
+    # Floor calendar moves: where bills quietly die or jump ahead.
+    old_h = {(h[0], h[1]) for h in old.get("hist", [])}
+    for h in new.get("hist", []):
+        if (h[0], h[1]) not in old_h and FLOOR_RE.search(h[1] or ""):
+            out.append([stamp, "Floor calendar", floor_words(h[1])])
     if new.get("fnu") and "fnu" in old and old.get("fnu") != new.get("fnu"):
         out.append([stamp, "Fiscal note", "A new fiscal note was posted." if not old.get("fnu") else "The fiscal note was updated."])
     old_docs = {i[2] for g in old.get("docs", []) for i in g[1]}
@@ -908,6 +929,80 @@ def diff(old, new, stamp):
             if i[2] not in old_docs and not i[0].lower().endswith("xml") and not i[0].startswith("Fiscal Note"):
                 out.append([stamp, "New document", f"{i[0]} ({g[0]})."])
     return out
+
+
+# ---------------------------------------------------------------- earlier sessions ("this bill has run before")
+HISTORY_YEARS = 4
+HISTORY_FETCH_CAP = 700  # bill details fetched per run; old sessions don't change, so this fills in over a few runs
+
+
+def stage_of(hist, act):
+    acts = " | ".join(h[1] for h in hist) + " | " + (act or "")
+    if re.search(r"vetoed", acts, re.I) and not re.search(r"override", acts, re.I):
+        return "Vetoed"
+    if re.search(r"governor signed|became law|law without", acts, re.I):
+        return "Became law"
+    if re.search(r"to governor", acts, re.I):
+        return "Passed the Legislature"
+    passed = {h[1].split("/")[0] for h in hist if re.search(r"passed (3rd reading|2nd & 3rd readings)", h[1], re.I)}
+    if len(passed) >= 2:
+        return "Passed both houses"
+    if passed:
+        return f"Passed the {next(iter(passed))}"
+    if any(re.search(r"Comm - Favorable|committee report favorable|comm rpt", h[1], re.I) for h in hist):
+        return "Out of committee"
+    if any(re.search(r"Comm - (Held|Not Considered|Failed)|Unfavorable", h[1], re.I) for h in hist):
+        return "Stopped in committee"
+    if any(re.search(r"to standing committee", h[1], re.I) for h in hist):
+        return "Never heard in committee"
+    return "Never left Rules"
+
+
+def history_rec(rec):
+    hist = rec.get("hist", [])
+    died = "" if re.search(r"law|governor|vetoed", stage_of(hist, rec.get("act")), re.I) else f"{rec.get('act', '')} ({rec.get('own', '')})"
+    return {"n": rec["n"], "t": rec.get("t", ""), "sp": rec.get("sp", ""), "spId": rec.get("spId", ""), "fl": rec.get("fl", ""), "secs": rec.get("secs", []),
+            "subj": rec.get("subj", [])[:6], "stage": stage_of(hist, rec.get("act")), "died": died, "date": rec.get("date", "")}
+
+
+def build_history(token, out, prev, sessions):
+    cur_years = sorted({int(s[:4]) for s in sessions if s[:4].isdigit()})
+    if not cur_years:
+        return
+    top = cur_years[-1]
+    want = [f"{y}GS" for y in range(top - HISTORY_YEARS, top)]
+    cache = {}
+    if prev and os.path.exists(os.path.join(prev, "history.json")):
+        cache = json.load(open(os.path.join(prev, "history.json")))
+    budget = HISTORY_FETCH_CAP
+    for ses in want:
+        live = os.path.join(out, ses, "bills.json")
+        if os.path.exists(live):  # sessions we already track: reuse their records
+            cache[ses] = {b["n"]: history_rec(b) for b in json.load(open(live))}
+            continue
+        have = cache.get(ses, {})
+        try:
+            bl = json.loads(get(f"{API}/bills/{ses}/billlist/{token}"))
+        except Exception as e:
+            print(f"  history {ses}: {e}", file=sys.stderr); continue
+        missing = [b["number"] for b in bl if b["number"] not in have][:budget]
+        budget -= len(missing)
+
+        def one(n):
+            try:
+                return n, history_rec(record_of(json.loads(get(f"{API}/bills/{ses}/{n}/{token}")), ""))
+            except Exception:
+                return n, None
+        with cf.ThreadPoolExecutor(8) as ex:
+            for n, r in ex.map(one, missing):
+                if r:
+                    have[n] = r
+        cache[ses] = have
+        print(f"  history {ses}: {len(have)} of {len(bl)} bills")
+        if budget <= 0:
+            break
+    cache = {k: v for k, v in cache.items() if k in want}
+    json.dump(cache, open(os.path.join(out, "history.json"), "w"), separators=(",", ":"))
 
 
 # ---------------------------------------------------------------- main
@@ -1161,6 +1256,12 @@ def main():
         com = json.load(open(os.path.join(a.prev, "committees.json")))
     if com:
         json.dump(com, open(os.path.join(a.out, "committees.json"), "w"), separators=(",", ":"))
+    try:
+        build_history(a.token, a.out, a.prev, [s["id"] for s in sessions])
+    except Exception as e:
+        print(f"  history failed: {e}", file=sys.stderr)
+        if a.prev and os.path.exists(os.path.join(a.prev, "history.json")):
+            import shutil; shutil.copy(os.path.join(a.prev, "history.json"), os.path.join(a.out, "history.json"))
     if not a.no_budget:
         build_budget(a.token, a.out, a.prev)
     elif a.prev and os.path.exists(os.path.join(a.prev, "budget.json")):

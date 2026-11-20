@@ -1061,5 +1061,41 @@
    ]
   }
  },
- "_designations_about": "Outside committees whose positions the office tracks. Their positions use the same scale as the office's positions."
+ "_designations_about": "Outside committees whose positions the office tracks. Their positions use the same scale as the office's positions.",
+ "_newsFeeds_about": "News sources for each bill's Media & Sentiment tab. Add or remove feeds here (any RSS or Atom feed URL). Feeds that fail are skipped.",
+ "newsFeeds": [
+  {
+   "name": "Utah News Dispatch",
+   "url": "https://utahnewsdispatch.com/feed/"
+  },
+  {
+   "name": "Salt Lake Tribune",
+   "url": "https://www.sltrib.com/arc/outboundfeeds/rss/?outputType=xml"
+  },
+  {
+   "name": "Deseret News",
+   "url": "https://www.deseret.com/arc/outboundfeeds/rss/?outputType=xml"
+  },
+  {
+   "name": "KSL",
+   "url": "https://www.ksl.com/rss/news"
+  },
+  {
+   "name": "KUER",
+   "url": "https://www.kuer.org/news.rss"
+  },
+  {
+   "name": "Utah Policy",
+   "url": "https://utahpolicy.com/feed"
+  },
+  {
+   "name": "Fox 13",
+   "url": "https://www.fox13now.com/news/politics.rss"
+  }
+ ],
+ "mediaPages": {
+  "_about": "Facebook pages the media availability job checks for new videos.",
+  "house": "https://www.facebook.com/UtahHouseofRepresentatives/videos",
+  "senate": "https://www.facebook.com/utahsenate/videos"
+ }
 }

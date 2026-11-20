@@ -399,6 +399,7 @@ function tagsFor(b){const t=[];
   if(b.agm) t.push(`<span class="pill solid" title="The Attorney General came up ${b.agm} time${b.agm>1?'s':''} in hearing or floor transcripts">AG mentioned</span>`);
   if(b.vd&&b.vd.at&&b.vd.at.slice(0,10)>=ymd(new Date(Date.now()-3*864e5))) t.push('<span class="pill ink">New version</span>');
   if(matchesFor(b).length) t.push('<span class="pill muted">Watch list</span>');
+  if(typeof billExtraTags==='function'){const x=billExtraTags(b);if(x)t.push(x)}
   return t.length?`<div class="tags">${t.join('')}</div>`:''}
 function priCell(b){
   const p=priOf(b);
@@ -608,6 +609,7 @@ function pageUpdates(){
    <div class="card"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Today’s updates</h2>
     <p class="desc">${items.length?`${plural(items.length,'change')} today, newest first. This list starts fresh at midnight; every bill’s page keeps its full history.`:`Nothing ${updScope==='all'?'':'on this list '}has changed yet today. This list starts fresh at midnight; every bill’s page keeps its full history.`}</p></div>${seg}</div>
     ${items.length?updateRows(items.slice(0,300)):''}${items.length>300?`<p class="small muted">Showing the newest 300.</p>`:''}</div>
+   ${typeof updatesExtras==='function'?updatesExtras():''}
    ${newFiles.length?`<div class="card"><h2>New bill files</h2><p class="desc">Bill requests opened in the last 7 days. Until a bill is numbered, the Legislature publishes only its title and sponsor.</p>
     <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
@@ -952,8 +954,10 @@ function pageBill(session,num){
     <div class="sponsors"><div><span class="l">House</span>${sp('H')}</div><div><span class="l">Senate</span>${sp('S')}</div>${b.cosp.length?`<div><span class="l">Cosponsors</span>${esc(b.cosp.join(', '))}</div>`:''}</div>
     <div class="where"><span class="muted">Where it is now</span><span class="now">${esc(b.own)}</span><span>${esc(b.act)}${b.date?', '+fmtMDY(b.date):''}</span></div>
     ${b.file?'':`<a class="small" href="https://le.utah.gov/~${yr}/bills/static/${esc(b.num)}.html" target="_blank" rel="noopener">Open on le.utah.gov</a>`}</div>
-   ${changesCard(b)}
-   <div class="detail"><div>
+   ${typeof billTabsNav==='function'?billTabsNav(b):''}
+   ${typeof BILLTAB==='undefined'||BILLTAB==='overview'||b.file?changesCard(b):''}
+   ${typeof BILLTAB!=='undefined'&&BILLTAB!=='overview'&&!b.file?`<div class="detail"><div>${billTabBody(b)}</div>${officePanel(b)}</div>`:`<div class="detail"><div>
+    ${typeof billOverviewExtras==='function'?billOverviewExtras(b):''}
     <section><h2>Summary</h2><p class="serif" style="font-size:17px">${esc(b.description||(b.file?'The Legislature publishes only the title and sponsor of a bill file until it gets a number.':'No summary yet.'))}</p>${b.subj.length?`<p class="small muted">Subjects: ${esc(b.subj.join(', '))}</p>`:''}${b.rc.length?`<p class="small muted">Recommended by ${esc(b.rc.join(', '))}</p>`:''}</section>
     ${agSection(b)}
     ${fiscalSection(b)}
@@ -963,7 +967,7 @@ function pageBill(session,num){
     ${b.file?'':`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight" style="margin-bottom:8px"><b>${esc(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>
     <section><h2>Status and votes</h2><div class="tablewrap" style="border:0"><table class="compact"><thead><tr><th>Date</th><th>Action</th><th>Location</th><th>Vote</th></tr></thead><tbody>${b.hist.map(h=>{const d=pd(h[0]);return `<tr><td>${d?fmtMDY(d):''}</td><td>${esc(h[1])}</td><td>${esc(h[2])}</td><td>${esc(h[3])}</td></tr>`}).join('')}</tbody></table></div></section>
     <section class="docs"><h2>Documents</h2>${b.docs.map(g=>`<b>${esc(g[0])}</b><ul>${g[1].map(i=>{const d=pd(i[1]);return `<li><a href="${esc(i[2])}" target="_blank" rel="noopener">${esc(i[0])}</a>${d?', '+MONTHS[d.getMonth()]+' '+d.getDate():''}</li>`}).join('')}</ul>`).join('')||'<p class="small muted">None yet.</p>'}</section>`}
-   </div>${officePanel(b)}</div>`,true);
+   </div>${officePanel(b)}</div>`}`,true);
 }
 
 /* ===================== ROUTER ===================== */

@@ -305,6 +305,43 @@ export async function onRequest(context) {
         }
         return json({ subs: out });
       }
+      // "You're up next": the watcher asks who is assigned to bills being heard today, then sends alerts.
+      if (route === "cron/upnext-targets" && method === "POST") {
+        const keys = (Array.isArray(body.keys) ? body.keys : []).filter((k) => KEY_RE.test(k)).slice(0, 300);
+        const users = (await db.prepare("SELECT username, name, email FROM users WHERE disabled = 0").all()).results || [];
+        const out = {};
+        for (const k of keys) {
+          const r = await db.prepare("SELECT assignees FROM bills WHERE key = ?").bind(k).first();
+          const names = arr(r && r.assignees).map((a) => String(a).toLowerCase());
+          out[k] = users.filter((u) => names.includes(u.username) || (u.name && names.includes(u.name.toLowerCase()))).map((u) => ({ user: u.username, email: u.email || "" }));
+        }
+        return json({ targets: out });
+      }
+      if (route === "cron/upnext-send" && method === "POST") {
+        await db.prepare("CREATE TABLE IF NOT EXISTS notices (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, at TEXT, title TEXT, body TEXT, url TEXT, dedupe TEXT UNIQUE, seen INTEGER DEFAULT 0)").run();
+        const dedupe = String(body.dedupe || "").slice(0, 200);
+        if (!dedupe || await db.prepare("SELECT 1 FROM notices WHERE dedupe = ?").bind(dedupe).first()) return json({ sent: 0, dup: true });
+        const title = String(body.title || "").slice(0, 200), text = String(body.body || "").slice(0, 1000), link = String(body.url || "").slice(0, 300);
+        const u = await db.prepare("SELECT username, email FROM users WHERE username = ?").bind(String(body.user || "")).first();
+        if (!u) return json({ sent: 0 });
+        await db.prepare("INSERT INTO notices (username, at, title, body, url, dedupe) VALUES (?, ?, ?, ?, ?, ?)").bind(u.username, new Date().toISOString(), title, text, link, dedupe).run();
+        if (u.email) {
+          const { sendEmail } = await import("../../lib/fiscal.js");
+          await sendEmail(env, db, [{ to: u.email, subject: title, text: `${text}\n\n${link}`, html: `<div style="font:16px/1.5 -apple-system,Segoe UI,Arial,sans-serif;color:#333;max-width:560px"><div style="background:#002147;color:#fff;padding:12px 16px;border-bottom:4px solid #e9d8a6;border-radius:8px 8px 0 0;font-weight:600">You're up next · Deseret Docket</div><div style="padding:14px 16px;border:1px solid #dbe3ea;border-top:0;border-radius:0 0 8px 8px;background:#fffdf2"><p style="font-size:17px;color:#002147;font-weight:600">${title.replace(/</g, "&lt;")}</p><p>${text.replace(/</g, "&lt;")}</p>${link ? `<p><a href="${link.replace(/"/g, "&quot;")}" style="display:inline-block;background:#002147;color:#fff;padding:9px 14px;border-radius:6px;text-decoration:none;font-weight:600">Watch the meeting</a></p>` : ""}<p style="color:#8a929b;font-size:11px;text-align:center">Attorney Work Product / Attorney-Client Communication</p></div></div>` }], "upnext");
+        }
+        return json({ sent: 1 });
+      }
+      // Media availability recordings waiting to be analyzed (an admin pasted the link)
+      if (route === "cron/media-queue" && method === "GET") {
+        const s = await db.prepare("SELECT v FROM settings WHERE k = 'media_queue'").first();
+        return json({ queue: s ? arr(s.v) : [] });
+      }
+      if (route === "cron/media-done" && method === "POST") {
+        const s = await db.prepare("SELECT v FROM settings WHERE k = 'media_queue'").first();
+        const q = (s ? arr(s.v) : []).map((x) => (x.url === body.url ? { ...x, status: body.ok ? "done" : "failed", note: String(body.note || "").slice(0, 300) } : x));
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('media_queue', ?, 'job', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, at=excluded.at").bind(JSON.stringify(q.slice(-40)), new Date().toISOString()).run();
+        return json({ ok: true });
+      }
       if (route === "cron/fn-tick" && method === "POST") {
         return json(await fiscalTick(env, db, url.origin));
       }
@@ -380,6 +417,27 @@ export async function onRequest(context) {
     if (route === "bill" && method === "POST") {
       const r = await setBill(db, user, body, (await allPeople(env, db)).all);
       return json({ ok: true, ...r });
+    }
+    if (route === "notices") {
+      await db.prepare("CREATE TABLE IF NOT EXISTS notices (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, at TEXT, title TEXT, body TEXT, url TEXT, dedupe TEXT UNIQUE, seen INTEGER DEFAULT 0)").run();
+      if (method === "GET") {
+        const since = new Date(Date.now() - 864e5).toISOString();
+        const rows = (await db.prepare("SELECT id, at, title, body, url FROM notices WHERE username = ? AND seen = 0 AND at > ? ORDER BY id").bind(user.name, since).all()).results || [];
+        return json({ notices: rows });
+      }
+      await db.prepare("UPDATE notices SET seen = 1 WHERE username = ? AND id <= ?").bind(user.name, +body.upTo || 0).run();
+      return json({ ok: true });
+    }
+    if (route === "media/queue") {
+      if (method === "GET") { const s = await db.prepare("SELECT v FROM settings WHERE k = 'media_queue'").first(); return json({ queue: s ? arr(s.v) : [] }); }
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      const u = String(body.url || "").trim();
+      if (!/^https:\/\/(www\.|m\.|web\.)?(facebook\.com|fb\.watch)\//.test(u)) return bad("Paste a Facebook video link (facebook.com/… or fb.watch/…).");
+      const s = await db.prepare("SELECT v FROM settings WHERE k = 'media_queue'").first();
+      const q = s ? arr(s.v) : [];
+      if (!q.some((x) => x.url === u)) q.push({ url: u, label: String(body.label || "").slice(0, 80), by: user.name, at: new Date().toISOString(), status: "waiting" });
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('media_queue', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(q.slice(-40)), user.name, new Date().toISOString()).run();
+      return json({ ok: true, queue: q });
     }
     if (route === "watch" && method === "POST") {
       if (user.role !== "admin" && !user.perms.watch) return bad("Your account can't change the watch list.", 403);
