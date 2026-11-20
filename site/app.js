@@ -309,25 +309,26 @@ const SHE=new Set('Angela Ann Ariel Ashlee Candice Carol Cheryl Christine Emily 
 const pron=l=>{const o=(CONFIG.pronouns||{})[l&&l.id];const f=o||(l&&SHE.has((l.name||'').split(/\s+/)[0])?'she':'he');return f==='she'?{s:'she',o:'her',p:'her',S:'She',P:'Her'}:{s:'he',o:'him',p:'his',S:'He',P:'His'}};
 const legPhoto=l=>l&&(l.image||(l.id?`https://le.utah.gov/images/legislator/${encodeURIComponent(l.id)}.jpg`:''));
 const legEmail=l=>(l&&l.email)||'';
-function sponsorCardHTML(l,name,b){
+function sponsorCardHTML(l,name,b,ctx){
   const nm=l?l.name:name.replace(/^(Rep|Sen)\.\s*/,'');
   const ttl=l?`${l.house==='H'?'Rep.':'Sen.'} ${nm}`:name;
-  const subj=`${b.file?'Bill file':shortNum(b.num)} – ${b.title}`;
+  // ctx is for cards that aren't about a bill (a budget request): {subj, about}
+  const subj=ctx?ctx.subj:`${b.file?'Bill file':shortNum(b.num)} – ${b.title}`;
   const mail=`mailto:${encodeURIComponent(legEmail(l))}?subject=${encodeURIComponent(subj)}`;
   const ini=nm.split(/\s+/).filter(w=>/^[A-Z]/.test(w)).map(w=>w[0]).filter((c,i,a)=>i===0||i===a.length-1).join('');
   return `<div class="hd">${l&&legPhoto(l)?`<img src="${esc(legPhoto(l))}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ph0',textContent:'${esc(ini)}'}))">`:`<span class="ph0">${esc(ini)}</span>`}
    <div><div class="nm">${esc(ttl)}</div>${l?`<div class="small muted">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${l.party==='R'?'Republican':l.party==='D'?'Democrat':esc(l.party||'')}</div>${l.counties?`<div class="tiny muted">${esc(l.counties)}</div>`:''}`:''}</div></div>
-   <a class="btn primary" href="${esc(mail)}">Email ${l&&l.house==='S'?'senator':l?'representative':'sponsor'} about ${esc(b.file?'this bill file':shortNum(b.num))}</a>
+   <a class="btn primary" href="${esc(mail)}">Email ${l&&l.house==='S'?'senator':l?'representative':'sponsor'} about ${esc(ctx?ctx.about:b.file?'this bill file':shortNum(b.num))}</a>
    ${l&&!legEmail(l)?'<div class="tiny muted" style="margin-top:6px">Their address will fill in after the next data update; for now, add it in your email app.</div>':''}
    ${l?`<a class="btn sm" href="#legislators-${esc(l.id)}" style="margin-top:6px">See ${pron(l).p} bills and profile</a>`:''}`;
 }
 let spTimer=null, spEl=null;
 function closeSp(){clearTimeout(spTimer);if(spEl){spEl.remove();spEl=null}}
 function openSp(t){
-  closeSp();const b=BYKEY[t.dataset.spbill];if(!b)return;
+  closeSp();const b=BYKEY[t.dataset.spbill];const ctx=t.dataset.spsubj?{subj:t.dataset.spsubj,about:'this request'}:null;if(!b&&!ctx)return;
   const l=legFor(t.dataset.sp,t.dataset.spname);
   spEl=document.createElement('div');spEl.className='spcard';spEl.setAttribute('role','dialog');spEl.setAttribute('aria-label','Sponsor');
-  spEl.innerHTML=sponsorCardHTML(l,t.dataset.spname,b);document.body.appendChild(spEl);
+  spEl.innerHTML=sponsorCardHTML(l,t.dataset.spname,b,ctx);document.body.appendChild(spEl);
   const r=t.getBoundingClientRect();const w=280;let left=Math.max(8,Math.min(r.left,innerWidth-w-8));
   let top=r.bottom+6;if(top+spEl.offsetHeight>innerHeight-50)top=Math.max(8,r.top-spEl.offsetHeight-6);
   spEl.style.left=left+'px';spEl.style.top=top+'px';
@@ -759,7 +760,7 @@ function pageBudget(){
   const offReq=typeof budgetReqHTML==='function'?budgetReqHTML():'';
   P.requests=`${offReq?`<div class="bs" id="bs-bud-office">${offReq}</div>`:''}
    <div class="card bs" id="bs-bud-requests"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['sel',selName],['all','All']])}</div>
-    ${byLeg.length?`<div class="small" style="margin-bottom:12px"><b>Most requested:</b> ${byLeg.slice(0,6).map(([n,x])=>`${esc(n)} (${x.n}, ${money(x.v,true)})`).join(' · ')}</div>`:''}
+    ${byLeg.length?`<div class="small" style="margin-bottom:12px"><b>Most requested:</b> ${byLeg.slice(0,6).map(([n,x])=>`<span class="spn" tabindex="0" role="button" data-sp="" data-spname="${esc(n)}" data-spsubj="Budget requests" data-spbill="">${esc(n)}</span> (${x.n}, ${money(x.v,true)})`).join(' · ')}</div>`:''}
     ${reqs.length?`${reqTable(reqs.slice(),reqAmt)}${reqs.length>25&&!reqAll?`<p><button class="btn sm" id="reqMore">Show all ${reqs.length}</button></p>`:''}`:`<p class="empty">No legislator requests posted yet.</p>`}</div>`;
   const tc=talkChart(B);
   P.meetings=`${tc?`<div class="bs" id="bs-bud-talk">${tc}</div>`:''}
@@ -1318,7 +1319,7 @@ function reqTable(reqs,reqAmt){
   const k=key[REQSORT.col]||key.req;
   reqs.sort((a,b)=>{const x=k(a),y=k(b);return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*REQSORT.dir});
   const num=c=>['req','pri','app'].includes(c);
-  const cell={by:r=>`<td class="rq-by">${esc(r.by)}</td>`,
+  const cell={by:r=>`<td class="rq-by"><span class="spn" tabindex="0" role="button" data-sp="" data-spname="${esc(r.by)}" data-spsubj="${esc('Budget request: '+r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}" data-spbill="">${esc(r.by)}</span></td>`,
     name:r=>`<td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub${r.txt.length>180?' hasfull" tabindex="0" data-full="'+esc(r.txt)+'"':'"'}>${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td>`,
     agency:r=>`<td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>`,
     req:r=>`<td class="n">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td>`,
