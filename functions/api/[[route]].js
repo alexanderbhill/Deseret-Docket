@@ -51,7 +51,7 @@ async function ensureSchema(db) {
       username TEXT, opts TEXT, pending TEXT, created_at TEXT, confirm_sent_at TEXT, last TEXT)`),
   ]);
   // Columns added in this version of the site (older databases only have division/flag/note).
-  for (const col of ["departments", "divisions", "designations", "priority", "assignees", "meta", "position", "ag_action"]) {
+  for (const col of ["departments", "divisions", "designations", "priority", "assignees", "meta", "position", "ag_action", "cpos"]) {
     try { await db.prepare(`ALTER TABLE bills ADD COLUMN ${col} TEXT`).run(); } catch { /* already there */ }
   }
   // Carry over the old single division (now a department) and flag (now the office priority).
@@ -79,7 +79,7 @@ function rowOut(user, r) {
   const meta = obj(r.meta);
   const o = {
     departments: arr(r.departments), divisions: arr(r.divisions), designations: arr(r.designations),
-    assignees: arr(r.assignees), position: r.position || null, agAction: r.ag_action || "", meta: {},
+    assignees: arr(r.assignees), position: r.position || null, agAction: r.ag_action || "", cpos: obj(r.cpos), meta: {},
   };
   const show = (f) => (f === "priority" ? user.perms.seePriority || user.role === "admin" : f === "note" ? user.perms.seeNotes || user.role === "admin" : true);
   if (show("priority")) o.priority = r.priority || null;
@@ -114,7 +114,7 @@ async function readState(db, user) {
   const rows = (await db.prepare("SELECT * FROM bills").all()).results || [];
   const bills = {};
   for (const r of rows) {
-    const has = arr(r.departments).length || arr(r.divisions).length || arr(r.designations).length || r.priority || r.note || arr(r.assignees).length || r.position || r.ag_action;
+    const has = arr(r.departments).length || arr(r.divisions).length || arr(r.designations).length || r.priority || r.note || arr(r.assignees).length || r.position || r.ag_action || Object.keys(obj(r.cpos)).length;
     if (!has || !inScope(user, r, r.key)) continue;
     bills[r.key] = rowOut(user, r);
   }
@@ -161,6 +161,24 @@ async function setBill(db, user, body, peopleAll) {
     const v = String(body.agAction || "").slice(0, 3000);
     if (v !== (cur.ag_action || "")) { next.ag_action = v; meta.agAction = { by: user.name, at: now }; logs.push(v ? "agAction:edited" : "agAction:cleared"); }
   }
+  // Outside committees' positions on the bill: { ULELC: "oppose" | "tagged" | null, ... }
+  if ("cpos" in body) {
+    if (!canEdit(user, "designations")) throw new Error("not allowed: committee positions");
+    const curC = obj(cur.cpos), nextC = { ...curC };
+    for (const [c, v] of Object.entries(body.cpos && typeof body.cpos === "object" ? body.cpos : {})) {
+      if (!DESIGNATIONS.has(c)) continue;
+      if (v === null || v === "" || v === "none") { delete nextC[c]; continue; }
+      const val = String(v);
+      if (val !== "tagged" && !POSITIONS.has(val)) throw new Error("bad committee position");
+      if (!curC[c] || curC[c].pos !== val) nextC[c] = { pos: val, by: user.name, at: now, src: "manual" };
+    }
+    if (JSON.stringify(nextC) !== JSON.stringify(curC)) {
+      next.cpos = JSON.stringify(nextC);
+      next.designations = JSON.stringify(Object.keys(nextC));
+      meta.designations = { by: user.name, at: now };
+      logs.push(`cpos:${Object.entries(nextC).map(([c, x]) => c + "=" + x.pos).join(",") || "none"}`);
+    }
+  }
   if ("note" in body) {
     if (!canEdit(user, "note")) throw new Error("not allowed: note");
     const v = String(body.note || "").slice(0, 5000);
@@ -174,12 +192,12 @@ async function setBill(db, user, body, peopleAll) {
   }
   if (!logs.length) return { changed: false, row: rowOut(user, cur) };
   next.meta = JSON.stringify(meta);
-  const stmts = [db.prepare(`INSERT INTO bills (key, departments, divisions, designations, priority, note, assignees, meta, position, ag_action)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const stmts = [db.prepare(`INSERT INTO bills (key, departments, divisions, designations, priority, note, assignees, meta, position, ag_action, cpos)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET departments=excluded.departments, divisions=excluded.divisions, designations=excluded.designations,
-        priority=excluded.priority, note=excluded.note, assignees=excluded.assignees, meta=excluded.meta, position=excluded.position, ag_action=excluded.ag_action`)
+        priority=excluded.priority, note=excluded.note, assignees=excluded.assignees, meta=excluded.meta, position=excluded.position, ag_action=excluded.ag_action, cpos=excluded.cpos`)
     .bind(key, next.departments ?? null, next.divisions ?? null, next.designations ?? null, next.priority ?? null, next.note ?? null, next.assignees ?? null, next.meta,
-      next.position ?? null, next.ag_action ?? null)];
+      next.position ?? null, next.ag_action ?? null, next.cpos ?? null)];
   for (const what of logs) stmts.push(db.prepare("INSERT INTO log (at, by, key, what) VALUES (?, ?, ?, ?)").bind(now, user.name, key, what.slice(0, 300)));
   await db.batch(stmts);
   return { changed: true, row: rowOut(user, next) };
@@ -522,6 +540,57 @@ export async function onRequest(context) {
         return json({ mail: r });
       }
       return bad("Not found", 404);
+    }
+
+    // ---------------- admins: outside committees' positions from a spreadsheet
+    if (route === "cpos/import" && method === "POST") {
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      const rows = (Array.isArray(body.rows) ? body.rows : []).slice(0, 5000);
+      const src = String(body.source || "upload").slice(0, 120);
+      const t = new Date().toISOString();
+      const byKey = {};
+      for (const r of rows) {
+        const key = String(r.key || ""), c = String(r.committee || ""), pos = String(r.pos || "");
+        if (!KEY_RE.test(key) || !DESIGNATIONS.has(c) || !(POSITIONS.has(pos) || pos === "tagged")) continue;
+        (byKey[key] = byKey[key] || {})[c] = { pos, by: user.name, at: t, src };
+      }
+      const keys = Object.keys(byKey);
+      const stmts = [];
+      for (const key of keys) {
+        const cur = (await db.prepare("SELECT cpos, designations, meta FROM bills WHERE key = ?").bind(key).first()) || {};
+        const merged = { ...obj(cur.cpos), ...byKey[key] };
+        const desig = [...new Set([...arr(cur.designations), ...Object.keys(merged)])];
+        const meta = obj(cur.meta); meta.designations = { by: user.name, at: t };
+        stmts.push(db.prepare(`INSERT INTO bills (key, cpos, designations, meta) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET cpos=excluded.cpos, designations=excluded.designations, meta=excluded.meta`)
+          .bind(key, JSON.stringify(merged), JSON.stringify(desig), JSON.stringify(meta)));
+        stmts.push(db.prepare("INSERT INTO log (at, by, key, what) VALUES (?, ?, ?, ?)").bind(t, user.name, key, `cpos:imported from ${src}`.slice(0, 300)));
+      }
+      for (let i = 0; i < stmts.length; i += 80) await db.batch(stmts.slice(i, i + 80));
+      return json({ ok: true, bills: keys.length, positions: Object.values(byKey).reduce((n, o) => n + Object.keys(o).length, 0) });
+    }
+    if (route === "cpos/sheet" && method === "POST") {
+      // A Google Sheet shared as "anyone with the link can view": read it as CSV.
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      const m = String(body.url || "").match(/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/);
+      if (!m) return bad("Paste the link to a Google Sheet (docs.google.com/spreadsheets/…).");
+      const gid = (String(body.url).match(/[#&?]gid=(\d+)/) || [])[1];
+      const r = await fetch(`https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${gid ? "&gid=" + gid : ""}`, { redirect: "follow" });
+      const text = await r.text();
+      if (!r.ok || /^\s*<!doctype html|<html/i.test(text)) return bad("Couldn't read that sheet. In Google Sheets, choose Share → General access → Anyone with the link (Viewer), or download it as .csv or .xlsx and upload the file.");
+      return json({ csv: text.slice(0, 3e6) });
+    }
+    if (route === "budgetreq") {
+      if (method === "GET") {
+        const s = await db.prepare("SELECT v, by, at FROM settings WHERE k = 'budget_request'").first();
+        return json(s ? { ...obj(s.v), by: s.by, at: s.at } : { items: [] });
+      }
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      const items = (Array.isArray(body.items) ? body.items : []).slice(0, 200).map((x) => ({
+        cat: String(x.cat || "").trim().slice(0, 120), req: Math.max(0, Math.round(+x.req || 0)), got: x.got === "" || x.got == null ? null : Math.max(0, Math.round(+x.got || 0)),
+      })).filter((x) => x.cat);
+      const v = { items, label: String(body.label || "").slice(0, 120), file: String(body.file || "").slice(0, 160) };
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('budget_request', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(v), user.name, new Date().toISOString()).run();
+      return json({ ok: true });
     }
 
     // ---------------- admins: account requests from the landing page

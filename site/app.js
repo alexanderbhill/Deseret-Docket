@@ -78,12 +78,19 @@ function off(b){const o=OFFICE[b.key];if(o)return o;if(!b.file&&b.tid){const f=O
 const deptsOf=b=>(off(b)||{}).departments||[];
 const divsOf=b=>(off(b)||{}).divisions||[];
 const desigOf=b=>(off(b)||{}).designations||[];
+// Outside committees' positions: { ULELC: {pos:'oppose', by, at, src}, ... }. A designation with no
+// recorded position shows as "tagged".
+const cposOf=b=>{const o=off(b)||{};const c={...(o.cpos||{})};for(const d of (o.designations||[]))if(!c[d])c[d]={pos:'tagged'};return c};
+const desigName=id=>((CONFIG.designations||[]).find(d=>d.id===id)||{}).name||id;
+const cposLabel=p=>p==='tagged'?'Tagged, no position yet':posName(p)||p;
+function cposChips(b){const c=cposOf(b);const ks=(CONFIG.designations||[]).map(d=>d.id).filter(k=>c[k]);
+  return ks.length?`<div class="cpos">${ks.map(k=>{const x=c[k];return `<span class="cp ${x.pos==='tagged'?'tg':''}" style="--c:${x.pos==='tagged'?'var(--line-2)':posColor(x.pos)}" title="${esc(((CONFIG.designations||[]).find(d=>d.id===k)||{}).full||k)}: ${esc(cposLabel(x.pos))}${x.src&&x.src!=='manual'?' (from '+esc(x.src)+')':''}"><b>${esc(desigName(k))}</b>${x.pos==='tagged'?'':' '+esc(posName(x.pos))}</span>`}).join('')}</div>`:''}
 const priOf=b=>canSee('priority')?((off(b)||{}).priority||null):null;
 const noteOf=b=>canSee('note')?((off(b)||{}).note||''):'';
 const assignOf=b=>(off(b)||{}).assignees||[];
 const posOf=b=>(off(b)||{}).position||null;
 const agActOf=b=>(off(b)||{}).agAction||'';
-const onOffice=b=>{const o=off(b);return !!o&&!!((o.departments||[]).length||(o.divisions||[]).length||(o.designations||[]).length||(o.priority&&o.priority!=='notrelevant')||(o.assignees||[]).length||o.note||o.position||o.agAction)};
+const onOffice=b=>{const o=off(b);return !!o&&!!((o.departments||[]).length||(o.divisions||[]).length||(o.designations||[]).length||Object.keys(o.cpos||{}).length||(o.priority&&o.priority!=='notrelevant')||(o.assignees||[]).length||o.note||o.position||o.agAction)};
 const mineAssigned=b=>!!ME&&assignOf(b).some(a=>[ME.user,(ME.display||'').toLowerCase()].includes(String(a).toLowerCase()));
 async function pullOffice(soft){
   if(!ME) return;
@@ -100,7 +107,7 @@ async function saveBill(b,patch){
   if(!ME){toast('Sign in to save office information. As a guest, nothing is saved.');return false}
   let key=b.key;
   // first change to a numbered bill whose information lives on its bill file: copy it over
-  if(!OFFICE[b.key]&&off(b)){const o=off(b);patch={departments:o.departments,divisions:o.divisions,designations:o.designations,assignees:o.assignees,position:o.position,agAction:o.agAction,...(canEdit('priority')?{priority:o.priority}:{}),...(canEdit('note')?{note:o.note}:{}),...patch};
+  if(!OFFICE[b.key]&&off(b)){const o=off(b);patch={departments:o.departments,divisions:o.divisions,...(o.cpos&&Object.keys(o.cpos).length?{cpos:Object.fromEntries(Object.entries(o.cpos).map(([k,v])=>[k,v.pos]))}:{designations:o.designations}),assignees:o.assignees,position:o.position,agAction:o.agAction,...(canEdit('priority')?{priority:o.priority}:{}),...(canEdit('note')?{note:o.note}:{}),...patch};
     for(const f of Object.keys(patch))if(!canEdit(f))delete patch[f]}
   try{const r=await api('bill',{key,...patch});OFFICE[key]=r.row;officeSig='';return true}
   catch(e){toast(`Couldn’t save that (${e.message}).`);return false}
@@ -413,7 +420,7 @@ const CELL={
   house:b=>sponsorCell(b,'H'), senate:b=>sponsorCell(b,'S'), sponsor:sponsorCol,
   action:b=>`${esc(b.act||'—')}<div class="sub">${esc(b.own||'')}${b.date?', '+fmtMD(b.date):''}</div>`,
   fiscal:fiscalCell, hearing:hearingCell,
-  designations:b=>msHTML('designations',b.key,desigOf(b),canEdit('designations')),
+  designations:b=>`${cposChips(b)||'<span class="muted">—</span>'}${canEdit('designations')?`<div><button type="button" class="linkbtn small" data-cpos="${esc(b.key)}">${Object.keys(cposOf(b)).length?'Edit':'Add'}</button></div>`:''}`,
   assignees:b=>msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…'),
   notes:b=>{const n=noteOf(b);return `${n?`<div class="clamp small">${esc(n)}</div>`:''}${canEdit('note')?`<button type="button" class="linkbtn small" data-note="${esc(b.key)}">${n?'Edit':'Add a note'}</button>`:(n?'':'<span class="muted">—</span>')}`},
   agAction:agActCell,
@@ -536,7 +543,7 @@ function csvFor(rows){
   const lines=[head.map(q).join(',')];
   for(const b of rows){const h=nextHearing(b);
     lines.push([...(office?[posName(posOf(b))]:[]),b.file?fileStatus(b):shortNum(b.num),(outcome(b)||{}).l||'',b.title,b.description||'',...(office?[deptsOf(b).map(deptName).join('; '),divsOf(b).map(divName).join('; ')]:[]),committeeOf(b),spon(b,'H'),spon(b,'S'),`${b.act||''}${b.own?' — '+b.own:''}${b.date?' ('+fmtMDY(b.date)+')':''}`,fis(b),
-      ...(office?CONFIG.designations.map(d=>desigOf(b).includes(d.id)?'X':''):[]),...(office&&canSee('priority')?[priName(priOf(b))]:[]),...(office?[assignOf(b).join('; ')]:[]),...(office&&canSee('note')?[noteOf(b)]:[]),agActOf(b)||(b.agd.length?'From the bill text: '+b.agd.map(x=>x[1]).join(' | '):''),
+      ...(office?CONFIG.designations.map(d=>{const x=cposOf(b)[d.id];return x?(x.pos==='tagged'?'X':posName(x.pos)):''}):[]),...(office&&canSee('priority')?[priName(priOf(b))]:[]),...(office?[assignOf(b).join('; ')]:[]),...(office&&canSee('note')?[noteOf(b)]:[]),agActOf(b)||(b.agd.length?'From the bill text: '+b.agd.map(x=>x[1]).join(' | '):''),
       h?`${fmtMDY(h.d)} ${fmtTime(h.d)} ${h.committee}`:'',location.origin+'/'+billHref(b)].map(q).join(','))}
   return '﻿'+lines.join('\r\n');
 }
@@ -723,6 +730,7 @@ function pageBudget(){
     <p class="desc">The state budget from the Legislature’s Compendium of Budget Information (COBI), the costs in this session’s fiscal notes, the requests legislators have made, and what’s being said about money in appropriations meetings.</p>
     <div class="stat3"><div><span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div><span>Criminal justice share</span><b>${money(cjTotal,true)}</b></div><div><span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div><span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
     <p class="small muted" style="margin:0">Budget figures are COBI’s operating and capital budgets plus expendable funds. Fiscal-note costs are General, Income Tax and Uniform School Fund amounts (ongoing plus one-time) from each bill’s latest fiscal note; a fiscal note isn’t an appropriation.</p></div>
+   ${typeof budgetReqHTML==='function'?budgetReqHTML():''}
    <div class="grid2">
     <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>General budget</h2><p class="desc">${budView.gen==='base'?`By appropriations subcommittee, ${esc(hdrNice)}.`:`Fiscal-note costs by the subcommittee the agency belongs to.`}</p></div>${seg('gen',[['base','Budget'],['fn','Fiscal notes']])}</div>
      ${pieBlock('pieGen',genItems,'General budget',budView.gen==='fn'?'Matched to a subcommittee by the agency named in each fiscal note.':'')}</div>
@@ -812,6 +820,7 @@ function pageAdmin(){
      <td class="small">${u.role==='admin'?'Everything':u.perms.edit&&u.perms.fields.length?esc(u.perms.fields.map(f=>FIELD_LABEL[f]).join(', ')):'View only'}</td><td>${u.role==='admin'||u.perms.seePriority?'Visible':'Hidden'}</td><td>${u.role==='admin'||u.perms.fiscal?'Yes':'No'}</td><td class="small">${u.role==='admin'?'All bills':scopeTxt(u.perms)}</td>
      <td style="white-space:nowrap"><button class="btn sm" data-edituser="${esc(u.username)}">Edit</button> <button class="btn sm" data-useract="${u.disabled?'enable':'disable'}|${esc(u.username)}">${u.disabled?'Enable':'Disable'}</button> <button class="btn sm danger" data-useract="delete|${esc(u.username)}">Delete</button></td></tr>`).join('')}
    </tbody></table></div></div>
+   ${typeof adminExtraHTML==='function'?adminExtraHTML():''}
    <div class="card"><h2>People for “Assigned to”</h2><p class="desc">Everyone with an account is already in the list (${esc(ADMIN.people.all.filter(n=>!ADMIN.people.extra.includes(n)).join(', ')||'nobody yet')}). Add anyone else here, one name per line.</p>
     <textarea id="peopleIn" aria-label="Extra people, one per line">${esc(ADMIN.people.extra.join('\n'))}</textarea><p><button class="btn primary" id="savePeople">Save names</button></p></div>
    <dialog id="userDlg"></dialog>`);
@@ -927,7 +936,7 @@ function officePanel(b){
    <div class="sidegroup"><span class="flabel">Position</span>${[['','No position','var(--line-2)'],...(CONFIG.positions||[]).map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(pos||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pos" value="${v}" ${(pos||'')===v?'checked':''} ${canEdit('position')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('position')}</div>
    <div class="sidegroup"><span class="flabel">Department</span>${msHTML('departments',b.key,deptsOf(b),canEdit('departments'))}${by('departments')}</div>
    <div class="sidegroup"><span class="flabel">Division</span>${msHTML('divisions',b.key,divsOf(b),canEdit('divisions'),deptsOf(b).length?'Choose…':'Department first')}${suggHTML(b)}${by('divisions')}</div>
-   <div class="sidegroup"><span class="flabel">Designations</span>${msHTML('designations',b.key,desigOf(b),canEdit('designations'))}${by('designations')}</div>
+   <div class="sidegroup"><span class="flabel">Committee positions</span>${(CONFIG.designations||[]).map(d=>{const x=cposOf(b)[d.id];return `<div class="cprow"><label for="cp-${d.id}" title="${esc(d.full)}">${esc(d.name)}</label><select id="cp-${d.id}" data-cpsel="${d.id}" ${canEdit('designations')?'':'disabled'} style="--c:${x&&x.pos!=='tagged'?posColor(x.pos):'var(--line-2)'}"><option value="">—</option><option value="tagged" ${x&&x.pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${x&&x.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`}).join('')}${by('designations')}</div>
    ${canSee('priority')?`<div class="sidegroup"><span class="flabel">Office priority</span>${[['','No priority','var(--line-2)'],...CONFIG.priorities.map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(p||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pri" value="${v}" ${(p||'')===v?'checked':''} ${canEdit('priority')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('priority')}</div>`:''}
    <div class="sidegroup"><span class="flabel">Assigned to</span>${msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…')}${by('assignees')}</div>
    ${canSee('note')?`<div class="sidegroup"><label class="flabel" for="noteIn">Notes</label><textarea id="noteIn" ${canEdit('note')?'':'readonly'}>${esc(noteOf(b))}</textarea>${by('note')}${canEdit('note')?'<button class="btn primary" id="saveNote" style="margin-top:8px">Save note</button>':''}</div>`:''}
@@ -1022,6 +1031,10 @@ function bind(){
   on('fPos','onchange',e=>{FLT.pos=e.target.value;PAGE=1;saveFLT();route()});
   app.querySelectorAll('select[data-pos]').forEach(s=>s.onchange=async()=>{const b=BYKEY[s.dataset.pos];if(await saveBill(b,{position:s.value||null}))toast(`${billLabel(b)}: ${s.value?posName(s.value):'position cleared'}`);s.blur();route(true)});
   app.querySelectorAll('input[name=pos]').forEach(r=>r.onchange=async()=>{const b=BYKEY[curKey()];if(await saveBill(b,{position:r.value||null}))toast('Position saved');route(true)});
+  app.querySelectorAll('select[data-cpsel]').forEach(sel=>sel.onchange=async()=>{const b=BYKEY[curKey()];if(await saveBill(b,{cpos:{[sel.dataset.cpsel]:sel.value||null}}))toast(`${desigName(sel.dataset.cpsel)}: ${sel.value?cposLabel(sel.value):'cleared'}`);route(true)});
+  app.querySelectorAll('[data-cpos]').forEach(btn=>btn.onclick=()=>{const b=BYKEY[btn.dataset.cpos];let dlg=$('noteDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='noteDlg';document.body.appendChild(dlg)}const c=cposOf(b);
+    dlg.innerHTML=`<form method="dialog"><h2>Committee positions: ${esc(billLabel(b))}</h2><p class="small muted">${esc(b.title)}</p>${(CONFIG.designations||[]).map(d=>`<div class="cprow"><label for="dcp-${d.id}" title="${esc(d.full)}"><b>${esc(d.name)}</b> <span class="tiny muted">${esc(d.full)}</span></label><select id="dcp-${d.id}" data-dcp="${d.id}"><option value="">—</option><option value="tagged" ${c[d.id]&&c[d.id].pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${c[d.id]&&c[d.id].pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`).join('')}<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgSave">Save</button></div></form>`;
+    dlg.showModal();$('dlgCancel').onclick=()=>dlg.close();$('dlgSave').onclick=async e=>{e.preventDefault();const patch={};dlg.querySelectorAll('[data-dcp]').forEach(s=>{const was=(c[s.dataset.dcp]||{}).pos||'';if(s.value!==was)patch[s.dataset.dcp]=s.value||null});if(!Object.keys(patch).length){dlg.close();return}if(await saveBill(b,{cpos:patch})){toast('Committee positions saved');dlg.close();route(true)}}});
   on('saveAg','onclick',async()=>{const b=BYKEY[curKey()];if(await saveBill(b,{agAction:$('agActIn').value.trim()}))toast('Saved for the office')});
   app.querySelectorAll('[data-agact]').forEach(btn=>btn.onclick=()=>{const b=BYKEY[btn.dataset.agact];let dlg=$('noteDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='noteDlg';document.body.appendChild(dlg)}
     dlg.innerHTML=`<form method="dialog"><h2>AG office action: ${esc(billLabel(b))}</h2><p class="small muted">${esc(b.title)}</p>${b.agd.length?`<p class="small muted">From the bill text: ${esc(b.agd[0][1].slice(0,240))}${b.agd.length>1?' (and '+(b.agd.length-1)+' more)':''}</p>`:''}<textarea id="dlgNote" style="min-height:140px" placeholder="What the office will need to do if this passes">${esc(agActOf(b))}</textarea><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgSave">Save</button></div></form>`;
