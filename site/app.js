@@ -616,10 +616,11 @@ function pageUpdates(){
     <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">${ic('file')}Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
-    ${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
+    <div>${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
+     ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
     <div><div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
      <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
-     ${typeof legNewsHTML==='function'?legNewsHTML():''}${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
+     ${typeof legNewsHTML==='function'?legNewsHTML():''}</div>
    </div>`);
 }
 function pageEmail(token){
@@ -652,7 +653,7 @@ function hearingsCard(){
   return `<div class="card" id="hearingsCard"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Hearings</h2>
    <p class="desc">Committee agendas with these bills, soonest first. Meetings within three days are marked on the Bills tab.</p></div>${seg}</div>
    ${conflicts.length?conflicts.map(([a,b])=>`<div class="conflict"><b>Two at once:</b> ${a.bills.filter(onOffice).map(x=>esc(shortNum(x.num))).join(', ')} in ${esc(a.committee)} (${fmtTime(a.d)}) and ${b.bills.filter(onOffice).map(x=>esc(shortNum(x.num))).join(', ')} in ${esc(b.committee)} (${fmtTime(b.d)}) on ${WD[a.d.getDay()]}, ${fmtLong(a.d)}. ${[...new Set([...a.bills,...b.bills].flatMap(assignOf))].length?'Assigned: '+esc([...new Set([...a.bills,...b.bills].flatMap(assignOf))].join(', '))+'.':'Nobody is assigned yet.'}</div>`).join(''):''}
-   ${hs.length?body:`<p class="empty">No upcoming committee meetings for these bills.</p>`}</div>`;
+   ${hs.length?body:meetings(S).some(h=>h.d&&h.d>=TODAY)?`<p class="empty">No upcoming committee meetings for these bills.</p>`:sampleHearingHTML()}</div>`;
 }
 
 /* ===================== LEGISLATORS ===================== */
@@ -757,11 +758,9 @@ function pageBudget(){
      ${cjBills.slice().sort((a,b)=>(fnCost(b)?costOf(b):-1)-(fnCost(a)?costOf(a):-1)).map(b=>{const c=fnCost(b);return `<tr><td style="padding-left:12px"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a></td><td class="serif">${esc(b.title)}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.on))}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.one))}</td><td class="small">${esc((b.fn.ag||[])[0]||'')}</td><td class="small">${esc(b.act)}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="empty">No fiscal notes for this committee yet.</p>`}</div>`;
   const offReq=typeof budgetReqHTML==='function'?budgetReqHTML():'';
   P.requests=`${offReq?`<div class="bs" id="bs-bud-office">${offReq}</div>`:''}
-   <div class="card bs" id="bs-bud-requests"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, largest first, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['sel',selName],['all','All']])}</div>
+   <div class="card bs" id="bs-bud-requests"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['sel',selName],['all','All']])}</div>
     ${byLeg.length?`<div class="small" style="margin-bottom:12px"><b>Most requested:</b> ${byLeg.slice(0,6).map(([n,x])=>`${esc(n)} (${x.n}, ${money(x.v,true)})`).join(' · ')}</div>`:''}
-    ${reqs.length?`<div class="tablewrap"><table class="compact" style="min-width:900px"><thead><tr><th style="padding-left:12px">Requested by</th><th>Request</th><th>Agency</th><th style="text-align:right">Requested</th><th style="text-align:right">Prioritized</th><th style="text-align:right">Appropriated</th></tr></thead><tbody>
-     ${reqs.slice(0,reqAll?400:25).map(r=>`<tr><td style="padding-left:12px;white-space:nowrap">${esc(r.by)}</td><td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub${r.txt.length>180?' hasfull" tabindex="0" data-full="'+esc(r.txt)+'"':'"'}>${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td><td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>
-      <td style="text-align:right">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td><td style="text-align:right">${money(Math.abs(r.pri[0]||0)+Math.abs(r.pri[1]||0))}</td><td style="text-align:right">${money(Math.abs(r.app[0]||0)+Math.abs(r.app[1]||0))}</td></tr>`).join('')}</tbody></table></div>${reqs.length>25&&!reqAll?`<p><button class="btn sm" id="reqMore">Show all ${reqs.length}</button></p>`:''}`:`<p class="empty">No legislator requests posted yet.</p>`}</div>`;
+    ${reqs.length?`${reqTable(reqs.slice(),reqAmt)}${reqs.length>25&&!reqAll?`<p><button class="btn sm" id="reqMore">Show all ${reqs.length}</button></p>`:''}`:`<p class="empty">No legislator requests posted yet.</p>`}</div>`;
   const tc=talkChart(B);
   P.meetings=`${tc?`<div class="bs" id="bs-bud-talk">${tc}</div>`:''}
    <div class="card bs" id="bs-bud-said"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>What’s being said in appropriations meetings</h2><p class="desc">From the meeting recordings: the official timeline notes about requests, and each moment someone mentions a dollar amount. Captions are automatic and can be wrong; follow the time link to hear it.</p></div>${seg('mtg',[['sel',selName],['all','All subcommittees']])}</div>
@@ -1270,7 +1269,7 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 const calKey=h=>h.id||(h.date+h.committee);
 function calBtn(h,session){return `<button type="button" class="btn sm calbtn" data-cal="${esc(session)}|${esc(calKey(h))}">${ic('calendar')}Add to calendar</button>`}
 function calEvent(session,key){
-  const h=meetings(session).find(x=>calKey(x)===key);if(!h||!h.d)return null;
+  const h=key==='SAMPLE'?SAMPLE_H:meetings(session).find(x=>calKey(x)===key);if(!h||!h.d)return null;
   const start=h.d, end=new Date(start.getTime()+2*3600e3);
   const tracked=b=>ME&&onOffice(b)&&priOf(b)!=='notrelevant';
   const bills=h.bills.slice().sort((a,b)=>tracked(b)-tracked(a)||a.num.localeCompare(b.num,undefined,{numeric:true}));
@@ -1308,3 +1307,46 @@ document.addEventListener('click',e=>{
   m.querySelector('[data-calics]').onclick=()=>{calICS(ev);m.remove()};
   m.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>setTimeout(()=>m.remove(),50)));
 });
+
+// ---------- Legislator requests table: click a heading to sort, drag a heading to move the column (saved in this browser)
+const REQCOLDEFS={by:'Requested by',name:'Request',agency:'Agency',req:'Requested',pri:'Prioritized',app:'Appropriated'};
+let REQCOLS=lsGet('docket-reqcols',Object.keys(REQCOLDEFS)).filter(c=>REQCOLDEFS[c]);Object.keys(REQCOLDEFS).forEach(c=>{if(!REQCOLS.includes(c))REQCOLS.push(c)});
+let REQSORT=lsGet('docket-reqsort',{col:'req',dir:-1});
+function reqTable(reqs,reqAmt){
+  const amt=(x)=>Math.abs((x||[])[0]||0)+Math.abs((x||[])[1]||0);
+  const key={by:r=>r.by||'',name:r=>r.name||'',agency:r=>(r.agency||'')+' '+(r.sub||''),req:r=>reqAmt(r),pri:r=>amt(r.pri),app:r=>amt(r.app)};
+  const k=key[REQSORT.col]||key.req;
+  reqs.sort((a,b)=>{const x=k(a),y=k(b);return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*REQSORT.dir});
+  const num=c=>['req','pri','app'].includes(c);
+  const cell={by:r=>`<td class="rq-by">${esc(r.by)}</td>`,
+    name:r=>`<td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub${r.txt.length>180?' hasfull" tabindex="0" data-full="'+esc(r.txt)+'"':'"'}>${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td>`,
+    agency:r=>`<td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>`,
+    req:r=>`<td class="n">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td>`,
+    pri:r=>`<td class="n">${money(amt(r.pri))}</td>`,app:r=>`<td class="n">${money(amt(r.app))}</td>`};
+  return `<p class="tiny muted" style="margin:0 0 6px">Click a heading to sort. Drag a heading to move the column.</p><div class="tablewrap"><table class="compact reqtbl" style="min-width:900px"><thead><tr>${REQCOLS.map(c=>`<th draggable="true" data-rqcol="${c}" class="${num(c)?'n':''} ${REQSORT.col===c?'sorted':''}" aria-sort="${REQSORT.col===c?(REQSORT.dir>0?'ascending':'descending'):'none'}"><button type="button" class="sort" data-rqsort="${c}">${REQCOLDEFS[c]}${REQSORT.col===c?(REQSORT.dir>0?' ▲':' ▼'):''}</button></th>`).join('')}</tr></thead>
+   <tbody>${reqs.slice(0,reqAll?400:25).map(r=>`<tr>${REQCOLS.map(c=>cell[c](r)).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-rqsort]');if(!b)return;const c=b.dataset.rqsort;REQSORT=REQSORT.col===c?{col:c,dir:-REQSORT.dir}:{col:c,dir:['req','pri','app'].includes(c)?-1:1};lsSet('docket-reqsort',REQSORT);route(true)});
+let RQDRAG=null;
+document.addEventListener('dragstart',e=>{const th=e.target.closest&&e.target.closest('th[data-rqcol]');if(!th)return;RQDRAG=th.dataset.rqcol;th.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',RQDRAG)});
+document.addEventListener('dragover',e=>{const th=e.target.closest&&e.target.closest('th[data-rqcol]');if(th&&RQDRAG){e.preventDefault();document.querySelectorAll('th.dropto').forEach(x=>x.classList.remove('dropto'));th.classList.add('dropto')}});
+document.addEventListener('drop',e=>{const th=e.target.closest&&e.target.closest('th[data-rqcol]');if(!th||!RQDRAG)return;e.preventDefault();const to=th.dataset.rqcol;if(to!==RQDRAG){const a=REQCOLS.filter(c=>c!==RQDRAG);a.splice(a.indexOf(to)+(REQCOLS.indexOf(RQDRAG)<REQCOLS.indexOf(to)?1:0),0,RQDRAG);REQCOLS=a;lsSet('docket-reqcols',REQCOLS)}RQDRAG=null;route(true)});
+document.addEventListener('dragend',()=>{RQDRAG=null;document.querySelectorAll('th.dragging,th.dropto').forEach(x=>x.classList.remove('dragging','dropto'))});
+
+// ---------- A sample hearing, shown only while no real hearings are posted, so people can see how it all works.
+let SAMPLE_H=null;
+function sampleHearingHTML(){
+  // Real bills for the example: this session's if any are numbered, otherwise the most recent session's.
+  const sid=[UI.session,...INDEX.sessions.map(x=>x.id)].find(id=>(INDEX.sessions.find(x=>x.id===id)||{}).count>=3);
+  if(sid&&!BILLS[sid]){loadSession(sid).then(()=>route(true));return `<p class="empty">Loading…</p>`}
+  const pool=sid?(BILLS[sid]||[]).filter(b=>!b.file):[];
+  if(pool.length<3)return `<p class="empty">No upcoming committee meetings yet.</p>`;
+  const off=pool.filter(b=>ME&&onOffice(b)), pick=[...off.slice(0,2),...pool.filter(b=>!off.slice(0,2).includes(b)&&b.agm).slice(0,1),...pool].filter((b,i,a)=>a.indexOf(b)===i).slice(0,4);
+  const d=new Date(TODAY);do{d.setDate(d.getDate()+1)}while(d.getDay()===0||d.getDay()===6);d.setHours(8,0,0,0);
+  SAMPLE_H={id:'SAMPLE',date:d.toISOString(),d,committee:'TEST · House Judiciary Committee',place:'20 House Building',url:'https://le.utah.gov/committee/committee.jsp',bills:pick};
+  const h=SAMPLE_H;
+  return `<div class="hearing sample"><div class="when"><span class="samplebadge">${ic('spark')}Test</span><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span><span class="tiny muted">${WD[h.d.getDay()]}, ${fmtLong(h.d)}</span></div><div><h4>${esc(h.committee)}</h4>
+    <p class="small muted" style="margin:0 0 8px">This is a test hearing, not a real meeting, so you can see how hearings look and try “Add to calendar.” It goes away as soon as the Legislature posts real hearings. The bills are real; the meeting isn’t.</p>
+    ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(a)}</span>`).join('')}${b.agm&&typeof agTip==='function'?`<a class="pill solid tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|hearings|discussed" data-full="${esc(agTip(b))}">${ic('scale')}AG mentioned</a>`:''}</div>`).join('')}
+    <div class="hlinks"><a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a><button type="button" class="btn sm calbtn" data-cal="${esc(UI.session)}|SAMPLE">${ic('calendar')}Add to calendar</button></div></div></div>`;
+}
