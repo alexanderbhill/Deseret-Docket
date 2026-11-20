@@ -345,7 +345,8 @@ export async function onRequest(context) {
     // ---------------- everything below needs a signed-in account
     if (route === "me" && method === "GET") {
       if (!user) return json({ user: null });
-      return json({ user: user.name, display: user.display || "", role: user.role, perms: user.perms, source: user.source, people: (await allPeople(env, db)).all });
+      const pr = await db.prepare("SELECT v FROM prefs WHERE username = ?").bind(user.name).first();
+      return json({ user: user.name, display: user.display || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
     }
     if (!user) return bad("Sign in required", 401);
 
@@ -379,8 +380,13 @@ export async function onRequest(context) {
     if (route === "prefs" && method === "POST") {
       const cols = (Array.isArray(body.cols) ? body.cols : []).filter((c) => typeof c === "string" && /^[a-zA-Z0-9]{1,20}$/.test(c)).slice(0, 40);
       const hidden = (Array.isArray(body.hidden) ? body.hidden : []).filter((c) => typeof c === "string" && /^[a-zA-Z0-9]{1,20}$/.test(c)).slice(0, 40);
-      const v = Number.isInteger(body.v) ? body.v : 1;
-      await db.prepare("INSERT INTO prefs (username, v) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET v=excluded.v").bind(user.name, JSON.stringify({ cols, hidden, v })).run();
+      const pr = await db.prepare("SELECT v FROM prefs WHERE username = ?").bind(user.name).first();
+      const cur = pr ? obj(pr.v) : {};
+      const next = { ...cur };
+      if (Array.isArray(body.cols)) { next.cols = cols; next.hidden = hidden; next.v = Number.isInteger(body.v) ? body.v : 1; }
+      if ("tourDone" in body) next.tourDone = !!body.tourDone;
+      if ("fav" in body) next.fav = String(body.fav || "").slice(0, 40);
+      await db.prepare("INSERT INTO prefs (username, v) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET v=excluded.v").bind(user.name, JSON.stringify(next)).run();
       return json({ ok: true });
     }
     if (route === "password" && method === "POST") {
@@ -393,6 +399,34 @@ export async function onRequest(context) {
       return json({ ok: true, signedOut: true });
     }
 
+    // ---------------- admins: account requests from the landing page
+    if (route === "requests") {
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      if (method === "GET") {
+        const rows = (await db.prepare("SELECT id, first, last, email, section, username, created_at FROM account_requests WHERE status = 'pending' ORDER BY created_at").all()).results || [];
+        return json({ requests: rows });
+      }
+      const r = await db.prepare("SELECT * FROM account_requests WHERE id = ? AND status = 'pending'").bind(String(body.id || "")).first();
+      if (!r) return bad("That request was already handled.", 404);
+      const now = new Date().toISOString();
+      if (body.action === "deny") {
+        await db.prepare("UPDATE account_requests SET status = 'denied', decided_by = ?, decided_at = ?, pass = NULL WHERE id = ?").bind(user.name, now, r.id).run();
+        return json({ ok: true });
+      }
+      if (body.action === "approve") {
+        if (parseEnvAdmins(env).has(r.username) || await db.prepare("SELECT 1 FROM users WHERE username = ?").bind(r.username).first()) return bad("Someone already has that username.");
+        const role = body.role === "admin" ? "admin" : "member";
+        const perms = JSON.stringify(cleanPerms(body.perms || DEFAULT_PERMS));
+        await db.batch([
+          db.prepare("INSERT INTO users (username, pass, role, perms, name, email, ver, disabled, created_at, created_by, first, last, section) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)")
+            .bind(r.username, r.pass, role, perms, `${r.first} ${r.last}`.trim(), r.email, now, user.name, r.first, r.last, r.section),
+          db.prepare("UPDATE account_requests SET status = 'approved', decided_by = ?, decided_at = ?, pass = NULL WHERE id = ?").bind(user.name, now, r.id),
+        ]);
+        return json({ ok: true });
+      }
+      return bad("Unknown action");
+    }
+
     // ---------------- admins
     if (route === "users" || route === "people") {
       if (user.role !== "admin") return bad("Only an admin can do that.", 403);
@@ -403,11 +437,13 @@ export async function onRequest(context) {
         return json({ ok: true, people: await allPeople(env, db) });
       }
       if (method === "GET") {
-        const rows = (await db.prepare("SELECT username, name, email, role, perms, disabled, created_at, created_by FROM users ORDER BY username").all()).results || [];
+        const rows = (await db.prepare("SELECT username, name, email, role, perms, disabled, created_at, created_by, section FROM users ORDER BY username").all()).results || [];
+        const pending = (await db.prepare("SELECT COUNT(*) AS n FROM account_requests WHERE status = 'pending'").first() || {}).n || 0;
         return json({
           admins: [...parseEnvAdmins(env).keys()],
           users: rows.map((r) => ({ ...r, perms: cleanPerms(obj(r.perms)), disabled: !!r.disabled })),
           people: await allPeople(env, db),
+          pending,
         });
       }
       if (method === "POST") {
@@ -419,16 +455,17 @@ export async function onRequest(context) {
           const role = body.role === "admin" ? "admin" : "member";
           const perms = JSON.stringify(cleanPerms(body.perms || DEFAULT_PERMS));
           const name = String(body.name || "").slice(0, 80), email = String(body.email || "").slice(0, 120);
+          const section = String(body.section || "").slice(0, 60);
           const pw = body.password ? String(body.password) : "";
           if (pw && pw.length < 10) return bad("Passwords need at least 10 characters.");
           if (!cur) {
             if (!pw) return bad("Give the new account a starting password.");
-            await db.prepare("INSERT INTO users (username, pass, role, perms, name, email, ver, disabled, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)")
-              .bind(username, await hashPassword(pw), role, perms, name, email, new Date().toISOString(), user.name).run();
+            await db.prepare("INSERT INTO users (username, pass, role, perms, name, email, ver, disabled, created_at, created_by, section) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)")
+              .bind(username, await hashPassword(pw), role, perms, name, email, new Date().toISOString(), user.name, section).run();
           } else if (pw) {
-            await db.prepare("UPDATE users SET pass = ?, role = ?, perms = ?, name = ?, email = ?, ver = ver + 1 WHERE username = ?").bind(await hashPassword(pw), role, perms, name, email, username).run();
+            await db.prepare("UPDATE users SET pass = ?, role = ?, perms = ?, name = ?, email = ?, section = ?, ver = ver + 1 WHERE username = ?").bind(await hashPassword(pw), role, perms, name, email, section, username).run();
           } else {
-            await db.prepare("UPDATE users SET role = ?, perms = ?, name = ?, email = ? WHERE username = ?").bind(role, perms, name, email, username).run();
+            await db.prepare("UPDATE users SET role = ?, perms = ?, name = ?, email = ?, section = ? WHERE username = ?").bind(role, perms, name, email, section, username).run();
           }
           return json({ ok: true });
         }

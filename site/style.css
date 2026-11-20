@@ -363,3 +363,21 @@ table.compact td:first-child,table.compact th:first-child{padding-left:8px}
 #sdTxt{display:inline-flex;gap:10px;align-items:baseline;flex-wrap:wrap;justify-content:center}
 .c-sponsor{min-width:180px}
 .c-sponsor .chief-tag{margin-bottom:2px}
+
+.badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--goldc);color:var(--navy);font-size:12px;font-weight:700;margin-left:4px;vertical-align:2px}
+.guestbar{background:var(--goldc);color:var(--navy);font-size:14.5px;padding-top:8px;padding-bottom:8px}
+.guestbar a{color:var(--navy);font-weight:600}
+.helpwrap{position:relative}
+.helpbtn{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:14px}
+.helpmenu{position:fixed;z-index:80;background:#fff;color:var(--ink);border:1px solid var(--line-2);border-radius:9px;box-shadow:var(--shadow);padding:6px;min-width:220px}
+.helpmenu a,.helpmenu button{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:6px;color:var(--ink);text-decoration:none;font-size:14.5px;cursor:pointer}
+.helpmenu a:hover,.helpmenu button:hover{background:var(--row-alt)}
+/* tour */
+.tour-spot{position:fixed;z-index:90;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,20,45,.55),0 0 0 3px var(--goldc);pointer-events:none;transition:all .25s ease}
+.tour-pop{position:fixed;z-index:91;width:min(360px,calc(100vw - 24px));background:#fff;border-radius:12px;border-top:4px solid var(--goldc);box-shadow:0 18px 50px rgba(0,0,0,.3);padding:18px 18px 14px}
+.tour-pop h3{font-family:var(--sans);font-size:18px;font-weight:700;margin:0 0 6px;color:var(--navy)}
+.tour-pop p{margin:0 0 12px;font-size:15px}
+.tour-pop .nav{display:flex;gap:8px;align-items:center}
+.tour-pop .nav .grow{flex:1;font-size:13px;color:var(--muted)}
+.tour-dots{display:flex;gap:4px;margin-bottom:10px}.tour-dots i{width:7px;height:7px;border-radius:50%;background:var(--line-2)}.tour-dots i.on{background:var(--navy)}
+@media (prefers-reduced-motion: reduce){.tour-spot{transition:none}}

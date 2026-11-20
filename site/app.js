@@ -62,6 +62,8 @@ const legById=id=>(LEGS||[]).find(l=>l.id===id);
 // ME: null for guests. Guests see public bill information only, and nothing they change is saved.
 let ME=null; const OFFICE={}; let WATCHMETA=null, PEOPLE=[], officeSig='';
 const isAdmin=()=>ME&&ME.role==='admin';
+const canFiscal=()=>!!ME&&(isAdmin()||!!(ME.perms&&ME.perms.fiscal));
+let ADMIN_PENDING=0;
 const P=()=>ME?ME.perms:{edit:false,fields:[],seePriority:false,seeNotes:false,watch:false,scope:'all'};
 const canSee=f=>!!ME&&(f==='priority'?isAdmin()||P().seePriority:f==='note'?isAdmin()||P().seeNotes:true);
 const canEdit=f=>!!ME&&(isAdmin()||(P().edit&&P().fields.includes(f)&&canSee(f)));
@@ -274,17 +276,22 @@ function shell(active,inner,compact){
   else if(changed) sum+=` <b>${changed}</b> changed today.`;
   const fine=ME?`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}`:''}<br>Signed in as ${esc(ME.display||ME.user)}${isAdmin()?' (admin)':''}: departments, divisions, designations${canSee('priority')?', priorities':''}${canSee('note')?', notes':''} and assignments are shared with the office.`
     :`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m. You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
-  const tabs=[['updates','Updates'],['bills','Bills'],['hearings','Hearings'],['legislators','Legislators'],['budget','Budget'],['watchlist','Watch list']];
-  if(isAdmin()) tabs.push(['admin','Admin']);
+  const tabs=[['updates','Updates'],['bills','Bills'],['hearings','Hearings'],['legislators','Legislators'],['budget','Budget']];
+  if(ME) tabs.push(['watchlist','Watch list']);
+  if(canFiscal()) tabs.push(['fiscal','Fiscal Hive']);
+  if(ME) tabs.push(['postsession','Session wrap-up']);
+  tabs.push(['learn','Learn']);
+  if(isAdmin()) tabs.push(['admin',`Admin${ADMIN_PENDING?` <span class="badge">${ADMIN_PENDING}</span>`:''}`]);
   return `<header class="mast gut"><div class="wrap">
    <div class="mast-top"><a class="brand" href="#updates">${BEE}<h1>Deseret Docket</h1></a>
     <div class="who"><select id="sessSel" aria-label="Session">${INDEX.sessions.map(s=>`<option value="${s.id}" ${s.id===S?'selected':''}>${esc(sessName(s.id))}</option>`).join('')}</select>
+     <div class="helpwrap"><button type="button" class="helpbtn" id="helpBtn" aria-haspopup="true" aria-expanded="false">Help ▾</button></div>
      ${ME?`<a class="user" href="#account">${esc(ME.display||ME.user)}</a><a href="/logout" class="small">Sign out</a>`:`<span class="guest">Guest view</span><a class="btn sm" href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a>`}</div></div>
    <div class="live">Updated <b>${fmtAP(u)}</b></div>
    ${compact?'':`<p class="summary">${sum}</p>
    <p class="fine">${fine}</p>`}
    <nav class="tabs" aria-label="Sections">${tabs.map(([h,l])=>`<a href="#${h}" class="${active===h?'on':''}" ${active===h?'aria-current="page"':''}>${l}</a>`).join('')}</nav>
-  </div></header><main class="gut"><div class="wrap">${inner}</div></main>${footerHTML()}`;
+  </div></header>${ME?'':`<div class="guestbar gut"><div class="wrap">You’re browsing as a guest: public bill information only, and nothing you change is saved. <a href="/login">Sign in</a> or <a href="/login#signup" data-signup>create an account</a> for full access.</div></div>`}<main class="gut"><div class="wrap">${inner}</div></main>${footerHTML()}`;
 }
 
 /* ===================== SPONSOR CARD ===================== */
@@ -598,7 +605,7 @@ function pageUpdates(){
     <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
-    <div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>
+    ${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
     <div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
      <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
    </div>`);
@@ -754,6 +761,7 @@ function talkChart(B){
 
 /* ===================== WATCH LIST ===================== */
 function pageWatch(){
+  if(!ME) return shell('',`<div class="card" style="max-width:640px"><h2>Watch list</h2><p class="desc">The office’s watch list is for signed-in accounts. <a href="/login">Sign in</a> to see it.</p></div>`);
   const S=UI.session; const canW=ME&&(isAdmin()||P().watch);
   const row=(x,i,kind)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><input type="checkbox" id="wl-${kind}-${i}" ${x.on?'checked':''} data-toggle="${kind}:${i}"><label class="serif" style="flex:1;font-size:17px;${x.on?'':'color:var(--muted);text-decoration:line-through'}" for="wl-${kind}-${i}">${esc(x.t)}</label><button class="linkbtn small" data-remove="${kind}:${i}">Remove</button></div>`;
   const count=allRows(S).filter(b=>matchesFor(b).length).length;
@@ -789,27 +797,38 @@ let ADMIN=null;
 const FIELD_LABEL={position:'Position',agAction:'AG office action',departments:'Departments',divisions:'Divisions',designations:'Designations',priority:'Office priority',note:'Notes',assignees:'Assigned to'};
 function pageAdmin(){
   if(!isAdmin()) return shell('',`<div class="card"><h2>Admins only</h2></div>`);
-  if(!ADMIN){api('users').then(j=>{ADMIN=j;route(true)}).catch(e=>{ADMIN={error:e.message};route(true)});return shell('admin',`<div class="card"><p>Loading accounts…</p></div>`)}
+  if(!ADMIN){Promise.all([api('users'),api('requests').catch(()=>({requests:[]}))]).then(([j,r])=>{ADMIN=j;ADMIN.requests=r.requests||[];route(true)}).catch(e=>{ADMIN={error:e.message};route(true)});return shell('admin',`<div class="card"><p>Loading accounts…</p></div>`)}
   if(ADMIN.error) return shell('admin',`<div class="card"><h2>Accounts</h2><p class="desc">${esc(ADMIN.error)}</p></div>`);
   const scopeTxt=p=>p.scope==='all'?'All bills':p.scope==='departments'?esc(p.departments.map(deptName).join(', ')||'No departments'):p.scope==='assigned'?'Assigned to them':`${p.bills.length} chosen bills`;
-  return shell('admin',`<div class="card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div><h2>Accounts</h2><p class="desc">Admins see and change everything. For everyone else, choose what they can change, whether they see the office priority and notes, and which bills they can see. By default new accounts can’t see priorities.</p></div><button class="btn primary" id="addUser">Add an account</button></div>
-   <div class="tablewrap" style="border:0"><table class="users" style="min-width:760px"><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Can change</th><th>Priority</th><th>Bills</th><th></th></tr></thead><tbody>
-   ${ADMIN.admins.map(a=>`<tr><td><b>${esc(a)}</b></td><td class="muted">—</td><td>Admin</td><td>Everything</td><td>Visible</td><td>All bills</td><td class="small muted">Set in Cloudflare</td></tr>`).join('')}
-   ${ADMIN.users.map(u=>`<tr style="${u.disabled?'opacity:.55':''}"><td><b>${esc(u.username)}</b>${u.disabled?' <span class="pill muted">Disabled</span>':''}</td><td>${esc(u.name||'—')}<div class="sub">${esc(u.email||'')}</div></td><td>${u.role==='admin'?'Admin':'Member'}</td>
-     <td class="small">${u.role==='admin'?'Everything':u.perms.edit&&u.perms.fields.length?esc(u.perms.fields.map(f=>FIELD_LABEL[f]).join(', ')):'View only'}</td><td>${u.role==='admin'||u.perms.seePriority?'Visible':'Hidden'}</td><td class="small">${u.role==='admin'?'All bills':scopeTxt(u.perms)}</td>
+  const reqs=ADMIN.requests||[];
+  return shell('admin',`${reqs.length?`<div class="card" id="reqCard"><h2>Account requests (${reqs.length})</h2><p class="desc">People who asked for an account on the sign-in page. Approve to choose what they can see and change; they can sign in right away with the password they picked.</p>
+   <div class="tablewrap" style="border:0"><table class="users"><thead><tr><th>Name</th><th>Email</th><th>Section</th><th>Username</th><th>Asked</th><th></th></tr></thead><tbody>
+   ${reqs.map(r=>`<tr><td><b>${esc(r.first)} ${esc(r.last)}</b></td><td>${esc(r.email)}</td><td>${esc(sectionName(r.section))}</td><td>${esc(r.username)}</td><td class="small">${fmtLong(new Date(r.created_at))}</td>
+    <td style="white-space:nowrap"><button class="btn sm primary" data-approve="${esc(r.id)}">Approve…</button> <button class="btn sm danger" data-deny="${esc(r.id)}">Deny</button></td></tr>`).join('')}</tbody></table></div></div>`:''}
+   <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div><h2>Accounts</h2><p class="desc">Admins see and change everything. For everyone else, choose what they can change, whether they see the office priority and notes, and which bills they can see. By default new accounts can’t see priorities.</p></div><button class="btn primary" id="addUser">Add an account</button></div>
+   <div class="tablewrap" style="border:0"><table class="users" style="min-width:760px"><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Can change</th><th>Priority</th><th>Fiscal Hive</th><th>Bills</th><th></th></tr></thead><tbody>
+   ${ADMIN.admins.map(a=>`<tr><td><b>${esc(a)}</b></td><td class="muted">—</td><td>Admin</td><td>Everything</td><td>Visible</td><td>Yes</td><td>All bills</td><td class="small muted">Set in Cloudflare</td></tr>`).join('')}
+   ${ADMIN.users.map(u=>`<tr style="${u.disabled?'opacity:.55':''}"><td><b>${esc(u.username)}</b>${u.disabled?' <span class="pill muted">Disabled</span>':''}</td><td>${esc(u.name||'—')}<div class="sub">${esc(u.email||'')}${u.section?' · '+esc(sectionName(u.section)):''}</div></td><td>${u.role==='admin'?'Admin':'Member'}</td>
+     <td class="small">${u.role==='admin'?'Everything':u.perms.edit&&u.perms.fields.length?esc(u.perms.fields.map(f=>FIELD_LABEL[f]).join(', ')):'View only'}</td><td>${u.role==='admin'||u.perms.seePriority?'Visible':'Hidden'}</td><td>${u.role==='admin'||u.perms.fiscal?'Yes':'No'}</td><td class="small">${u.role==='admin'?'All bills':scopeTxt(u.perms)}</td>
      <td style="white-space:nowrap"><button class="btn sm" data-edituser="${esc(u.username)}">Edit</button> <button class="btn sm" data-useract="${u.disabled?'enable':'disable'}|${esc(u.username)}">${u.disabled?'Enable':'Disable'}</button> <button class="btn sm danger" data-useract="delete|${esc(u.username)}">Delete</button></td></tr>`).join('')}
    </tbody></table></div></div>
    <div class="card"><h2>People for “Assigned to”</h2><p class="desc">Everyone with an account is already in the list (${esc(ADMIN.people.all.filter(n=>!ADMIN.people.extra.includes(n)).join(', ')||'nobody yet')}). Add anyone else here, one name per line.</p>
     <textarea id="peopleIn" aria-label="Extra people, one per line">${esc(ADMIN.people.extra.join('\n'))}</textarea><p><button class="btn primary" id="savePeople">Save names</button></p></div>
    <dialog id="userDlg"></dialog>`);
 }
-function userForm(u){
-  const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,scope:'all',departments:[],bills:[]};
-  return `<form id="userForm" method="dialog"><h2>${u?'Edit '+esc(u.username):'Add an account'}</h2>
-   <div class="grid2" style="gap:12px;margin:12px 0"><div class="field"><label for="uName">Username</label><input id="uName" ${u?'readonly':''} value="${esc(u?u.username:'')}" required pattern="[a-z0-9._\\-]{2,40}" style="width:100%" placeholder="e.g. jsmith"></div>
-    <div class="field"><label for="uDisp">Full name</label><input id="uDisp" value="${esc(u?u.name:'')}" style="width:100%"></div>
-    <div class="field"><label for="uEmail">Email</label><input id="uEmail" type="email" value="${esc(u?u.email:'')}" style="width:100%"></div>
-    <div class="field"><label for="uPw">${u?'New password (leave blank to keep)':'Starting password'}</label><div style="display:flex;gap:6px"><input id="uPw" type="text" autocomplete="off" ${u?'':'required'} minlength="10" style="flex:1;min-width:0"><button type="button" class="btn sm" id="genPw">Make one</button></div></div></div>
+const sectionName=id=>id==='other'?'Other / not listed':divName(id)||id||'';
+function sectionSelect(cur){return `<select id="uSection" style="width:100%"><option value="">—</option>${CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id).map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}<option value="other" ${cur==='other'?'selected':''}>Other / not listed</option></select>`}
+function userForm(u,req){
+  const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,scope:'all',departments:[],bills:[]};
+  if(req&&req.section){const dv=divById(req.section);if(dv){p.scope='departments';p.departments=[dv.dept]}}
+  const val=(k)=>esc(u?u[k]||'':req?(k==='username'?req.username:k==='name'?`${req.first} ${req.last}`:k==='email'?req.email:''):'');
+  return `<form id="userForm" method="dialog"><h2>${req?'Approve '+esc(req.first+' '+req.last):u?'Edit '+esc(u.username):'Add an account'}</h2>
+   ${req?`<p class="small muted">They chose their own password when they asked. Pick their permissions below; you can change them any time.</p>`:''}
+   <div class="grid2" style="gap:12px;margin:12px 0"><div class="field"><label for="uName">Username</label><input id="uName" ${u||req?'readonly':''} value="${val('username')}" required pattern="[a-z0-9._\\-]{2,40}" style="width:100%" placeholder="e.g. jsmith"></div>
+    <div class="field"><label for="uDisp">Full name</label><input id="uDisp" value="${val('name')}" style="width:100%" ${req?'readonly':''}></div>
+    <div class="field"><label for="uEmail">Email</label><input id="uEmail" type="email" value="${val('email')}" style="width:100%" ${req?'readonly':''}></div>
+    <div class="field"><label for="uSection">Section</label>${sectionSelect(u?u.section:req?req.section:'')}</div>
+    ${req?'':`<div class="field"><label for="uPw">${u?'New password (leave blank to keep)':'Starting password'}</label><div style="display:flex;gap:6px"><input id="uPw" type="text" autocomplete="off" ${u?'':'required'} minlength="10" style="flex:1;min-width:0"><button type="button" class="btn sm" id="genPw">Make one</button></div></div>`}</div>
    <span class="flabel">Role</span><label class="check"><input type="radio" name="uRole" value="member" ${!u||u.role!=='admin'?'checked':''}><span>Member, with the permissions below</span></label><label class="check"><input type="radio" name="uRole" value="admin" ${u&&u.role==='admin'?'checked':''}><span>Admin: sees and changes everything, manages accounts</span></label>
    <div id="permBox"><hr style="margin:14px 0"><span class="flabel">Can change</span>
     <label class="check"><input type="checkbox" id="pEdit" ${p.edit?'checked':''}><span>Can edit office information</span></label>
@@ -817,6 +836,7 @@ function userForm(u){
     <label class="check"><input type="checkbox" id="pPri" ${p.seePriority?'checked':''}><span>Can see the office priority</span></label>
     <label class="check"><input type="checkbox" id="pNotes" ${p.seeNotes?'checked':''}><span>Can see notes</span></label>
     <label class="check"><input type="checkbox" id="pWatch" ${p.watch?'checked':''}><span>Can change the watch list</span></label>
+    <label class="check"><input type="checkbox" id="pFiscal" ${p.fiscal?'checked':''}><span>Can open the Fiscal Hive (fiscal note dashboard)</span></label>
     <span class="flabel" style="margin-top:10px">Bills they can see the office’s information for</span>
     <label class="check"><input type="radio" name="pScope" value="all" ${p.scope==='all'?'checked':''}><span>All bills</span></label>
     <label class="check"><input type="radio" name="pScope" value="departments" ${p.scope==='departments'?'checked':''}><span>Only bills in these departments</span></label>
@@ -826,19 +846,19 @@ function userForm(u){
     <textarea id="pBills" style="min-height:60px;margin-left:26px;width:calc(100% - 26px)" placeholder="HB 20, SB 101">${esc(p.bills.filter(k=>k.startsWith(UI.session+'/')).map(k=>shortNum(k.split('/')[1])).join(', '))}</textarea></div>
    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button type="button" class="btn" id="userCancel">Cancel</button><button class="btn primary" id="userSave" value="save">Save</button></div></form>`;
 }
-function openUserDlg(u){
-  const dlg=$('userDlg');dlg.innerHTML=userForm(u);dlg.showModal();
+function openUserDlg(u,req){
+  const dlg=$('userDlg');dlg.innerHTML=userForm(u,req);dlg.showModal();
   const sync=()=>{$('permBox').style.display=document.querySelector('input[name=uRole]:checked').value==='admin'?'none':''};sync();
   dlg.querySelectorAll('input[name=uRole]').forEach(r=>r.onchange=sync);
-  $('genPw').onclick=()=>{const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';$('uPw').value=[...crypto.getRandomValues(new Uint8Array(14))].map(x=>a[x%a.length]).join('')};
+  if($('genPw'))$('genPw').onclick=()=>{const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';$('uPw').value=[...crypto.getRandomValues(new Uint8Array(14))].map(x=>a[x%a.length]).join('')};
   $('userCancel').onclick=()=>dlg.close();
   $('userForm').onsubmit=async e=>{e.preventDefault();
     const toKey=s=>{const m=s.trim().toUpperCase().replace(/\./g,'').match(/^([A-Z]{2,4})\s*0*(\d{1,4})$/);return m?`${UI.session}/${m[1]}${m[2].padStart(4,'0')}`:null};
     const keepOther=u&&u.perms?u.perms.bills.filter(k=>!k.startsWith(UI.session+'/')):[];
-    const body={action:'save',username:$('uName').value.trim().toLowerCase(),name:$('uDisp').value.trim(),email:$('uEmail').value.trim(),password:$('uPw').value,role:document.querySelector('input[name=uRole]:checked').value,
-      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,
+    const body={action:req?'approve':'save',id:req?req.id:undefined,username:$('uName').value.trim().toLowerCase(),name:$('uDisp').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,password:$('uPw')?$('uPw').value:'',role:document.querySelector('input[name=uRole]:checked').value,
+      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]}};
-    try{await api('users',body);dlg.close();toast(body.password?`Saved. Give ${body.username} their password: ${body.password}`:'Saved');ADMIN=null;route(true)}catch(err){toast(err.message)}};
+    try{await api(req?'requests':'users',body);dlg.close();toast(req?`Approved. ${body.name} can sign in as ${body.username}.`:body.password?`Saved. Give ${body.username} their password: ${body.password}`:'Saved');ADMIN=null;route(true)}catch(err){toast(err.message)}};
 }
 
 /* ===================== BILL PAGE ===================== */
@@ -1033,6 +1053,8 @@ function bind(){
   // account and admin
   on('pwForm','onsubmit',async e=>{e.preventDefault();try{await api('password',{old:$('pwOld').value,new:$('pwNew').value});toast('Password changed. Sign in again with the new one.');setTimeout(()=>location.href='/login',1500)}catch(err){toast(err.message)}});
   on('addUser','onclick',()=>openUserDlg(null));
+  app.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>openUserDlg(null,ADMIN.requests.find(r=>r.id===b.dataset.approve)));
+  app.querySelectorAll('[data-deny]').forEach(b=>b.onclick=async()=>{const r=ADMIN.requests.find(x=>x.id===b.dataset.deny);if(!confirm(`Deny ${r.first} ${r.last}'s request? They won't be able to sign in.`))return;try{await api('requests',{action:'deny',id:r.id});toast('Request denied');ADMIN=null;route(true)}catch(e){toast(e.message)}});
   app.querySelectorAll('[data-edituser]').forEach(b=>b.onclick=()=>openUserDlg(ADMIN.users.find(u=>u.username===b.dataset.edituser)));
   app.querySelectorAll('[data-useract]').forEach(b=>b.onclick=async()=>{const [action,username]=b.dataset.useract.split('|');if(action==='delete'&&!confirm(`Delete the account ${username}? They’ll be signed out and can’t sign in again.`))return;
     try{await api('users',{action,username});toast(action==='delete'?'Account deleted':action==='disable'?'Account disabled':'Account enabled');ADMIN=null;route(true)}catch(err){toast(err.message)}});
@@ -1064,7 +1086,7 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     const meP=fetch('/api/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():{user:null}).catch(()=>({user:null}));
     [INDEX,CONFIG]=await Promise.all([getJSON('data/index.json'),getJSON('config.json')]);
     const me=await meP;
-    if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people};PEOPLE=me.people||[]}
+    if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{}};PEOPLE=me.people||[]}
     loadCols();
     getJSON('data/legislators.json').then(l=>{LEGS=l;if(booted&&location.hash.startsWith('#legislators'))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);

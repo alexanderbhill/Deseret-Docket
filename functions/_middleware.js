@@ -10,35 +10,21 @@
 //   SESSION_DAYS    optional, how long a sign-in lasts (default 14)
 //   RESEND_API_KEY, MAIL_FROM, CRON_KEY   for email alerts (see README)
 import { COOKIE, USER_COOKIE, findUser, checkPassword, makeSession, sessionUser, ITER, pbkdf2 } from "../lib/auth.js";
-import { BEE, BEE_CSS } from "../lib/logo.js";
+import { landingPage } from "../lib/landing.js";
+import { ensureUsersTable, hashPassword, parseEnvAdmins } from "../lib/auth.js";
 
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function loginPage(message, status = 200, next = "/", disabled = false) {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in · Deseret Docket</title><meta name="robots" content="noindex">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
-<style>
-:root{--bg:#f7f7f5;--surface:#fff;--ink:#1d1d1b;--muted:#6b6b66;--line:#e3e2dd;--field:#c9c7c0;--accent:#1d1d1b;--on-accent:#fff;--red:#9e3a34;--red-bg:#fbefed;--honey:#e3a52a;--bee-ink:#2a2418;--wing:#eef3f7;--wing-line:#9aa8b4;--link:#7a4a0a}
-@media (prefers-color-scheme:dark){:root{--bg:#161614;--surface:#1f1f1c;--ink:#ecebe6;--muted:#a3a29b;--line:#34332f;--field:#4a4943;--accent:#ecebe6;--on-accent:#161614;--red:#f0958c;--red-bg:#3a1d1a;--honey:#e8b04a;--bee-ink:#f3e3bf;--wing:#2b3238;--wing-line:#7d8a95;--link:#e0b36a;color-scheme:dark}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;padding:0 16px}
-.box{max-width:400px;margin:12vh auto 40px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:28px}
-.brand{display:flex;align-items:center;gap:10px;font:500 26px "Source Serif 4",Georgia,serif;margin-bottom:6px}
-.brand svg{width:36px;height:36px}${BEE_CSS}
-label{display:block;font-weight:600;margin:14px 0 6px}input{width:100%;padding:10px 12px;border:1px solid var(--field);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
-button{margin-top:18px;width:100%;padding:10px;border:0;border-radius:6px;background:var(--accent);color:var(--on-accent);font:600 16px inherit;cursor:pointer}
-.msg{background:var(--red-bg);color:var(--red);border-radius:6px;padding:8px 12px;font-size:14px;margin-top:12px}.muted{color:var(--muted);font-size:14px;margin:0}
-a{color:var(--link)}:focus-visible{outline:2px solid var(--link);outline-offset:2px}
-</style></head><body><form class="box" method="post" action="/login">
-<div class="brand">${BEE}Deseret Docket</div>
-<p class="muted">Sign in to see and edit the office's departments, designations, priorities and notes.</p>
-${message ? `<div class="msg" role="alert">${esc(message)}</div>` : ""}
-<input type="hidden" name="next" value="${esc(next)}">
-<label for="u">Username</label><input id="u" name="username" autocomplete="username" required autofocus ${disabled ? "disabled" : ""}>
-<label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required ${disabled ? "disabled" : ""}>
-<button type="submit" ${disabled ? "disabled" : ""}>Sign in</button>
-<p class="muted" style="margin-top:16px"><a href="/">Continue as a guest</a>: browse every bill, hearing and the budget without signing in.</p></form></body></html>`;
-  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } });
+async function sectionList(env, origin) {
+  // The same division list the rest of the site uses, grouped by department.
+  try {
+    const r = await env.ASSETS.fetch(new Request(origin + "/config.json"));
+    const c = await r.json();
+    const dept = Object.fromEntries((c.departments || []).map((d) => [d.id, d.name]));
+    return (c.divisions || []).map((d) => ({ id: d.id, name: d.name, group: dept[d.dept] || "Other" }));
+  } catch { return []; }
+}
+async function loginPage(env, url, message, status = 200, next = "/", disabled = false, extra = {}) {
+  return landingPage({ message, status, next, disabled, sections: await sectionList(env, url.origin), ...extra });
 }
 
 function safeNext(n) {
@@ -61,7 +47,7 @@ export async function onRequest(context) {
   }
 
   if (url.pathname === "/login") {
-    if (!env.SESSION_SECRET) return loginPage("Sign-in is switched off until SESSION_SECRET is set in the Cloudflare Pages settings. You can still browse as a guest.", 503, "/", true);
+    if (!env.SESSION_SECRET) return loginPage(env, url, "Sign-in is switched off until SESSION_SECRET is set in the Cloudflare Pages settings. You can still browse as a guest.", 503, "/", true);
     if (request.method === "POST") {
       const form = await request.formData();
       const username = String(form.get("username") || "").trim().toLowerCase();
@@ -71,7 +57,7 @@ export async function onRequest(context) {
       const ok = u ? await checkPassword(u, password) : (await pbkdf2(password, "00", ITER), false); // same work either way
       if (!ok) {
         await new Promise((r) => setTimeout(r, 600));
-        return loginPage("That username and password don't match. Check both and try again.", 401, dest);
+        return loginPage(env, url, "That username and password don't match. Check both and try again. If you asked for an account, it may still be waiting for approval.", 401, dest);
       }
       const days = +(env.SESSION_DAYS || 14);
       const s = await makeSession(env, u, days);
@@ -81,11 +67,50 @@ export async function onRequest(context) {
       return new Response(null, { status: 303, headers: h });
     }
     if (await sessionUser(request, env)) return Response.redirect(new URL("/", url), 302);
-    return loginPage("", 200, safeNext(url.searchParams.get("next") || "/"));
+    return loginPage(env, url, "", 200, safeNext(url.searchParams.get("next") || "/"), false, url.searchParams.get("requested") ? { notice: "Thanks! Your request is in. You can sign in as soon as an admin approves it." } : {});
+  }
+
+  // Ask for an account: stored as a pending request until an admin approves it on the Admin page.
+  if (url.pathname === "/signup" && request.method === "POST") {
+    const f = await request.formData();
+    const v = (k, n) => String(f.get(k) || "").trim().slice(0, n);
+    const signup = { first: v("first", 40), last: v("last", 40), email: v("email", 120).toLowerCase(), section: v("section", 60), username: v("username", 40).toLowerCase() };
+    const pw = String(f.get("password") || "");
+    const back = (msg) => loginPage(env, url, msg, 400, "/", false, { mode: "signup", signup });
+    if (v("website", 10)) return Response.redirect(new URL("/login?requested=1", url), 303); // bots fill the hidden field
+    if (!env.DB) return back("Accounts can't be requested until the database is set up.");
+    if (!signup.first || !signup.last) return back("Enter your first and last name.");
+    if (!/^[^\s@<>()",;:]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}$/.test(signup.email)) return back("That email address doesn't look right.");
+    if (!signup.section) return back("Choose the section you work in.");
+    if (!/^[a-z0-9._-]{2,40}$/.test(signup.username)) return back("Usernames are 2-40 letters, numbers, dots, dashes or underscores.");
+    if (pw.length < 10) return back("Use a password with at least 10 characters.");
+    await ensureUsersTable(env.DB);
+    const taken = parseEnvAdmins(env).has(signup.username)
+      || await env.DB.prepare("SELECT 1 FROM users WHERE username = ?").bind(signup.username).first()
+      || await env.DB.prepare("SELECT 1 FROM account_requests WHERE username = ? AND status = 'pending'").bind(signup.username).first();
+    if (taken) return back("That username is taken. Try another.");
+    const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_requests WHERE status = 'pending'").first();
+    if (recent && recent.n > 200) return back("Too many requests are waiting right now. Try again later.");
+    const id = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    await env.DB.prepare("INSERT INTO account_requests (id, first, last, email, section, username, pass, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)")
+      .bind(id, signup.first, signup.last, signup.email, signup.section, signup.username, await hashPassword(pw), new Date().toISOString()).run();
+    return Response.redirect(new URL("/login?requested=1", url), 303);
+  }
+
+  // Guests choose to browse; remember it so the landing page doesn't come back on every visit.
+  if (url.pathname === "/guest") {
+    const h = new Headers({ Location: "/" });
+    h.append("Set-Cookie", `docket_guest=1; Path=/; Max-Age=${60 * 60 * 24 * 30}; Secure; SameSite=Lax`);
+    return new Response(null, { status: 302, headers: h });
   }
 
   const user = await sessionUser(request, env);
   context.data.user = user; // null for guests; the API checks permissions
+
+  // First visit: show the landing page (sign in / create account) instead of the app.
+  if (!user && (url.pathname === "/" || url.pathname === "/index.html") && request.method === "GET" && !/(?:^|;\s*)docket_guest=1/.test(request.headers.get("Cookie") || "")) {
+    return Response.redirect(new URL("/login", url), 302);
+  }
   const res = await next();
   const out = new Response(res.body, res);
   out.headers.set("X-Robots-Tag", "noindex");
