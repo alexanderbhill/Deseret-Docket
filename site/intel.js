@@ -74,14 +74,14 @@ function billExtraParts(b){
   return o;
 }
 function billOverviewExtras(b){const o=billExtraParts(b);return (o.plain||'')+(o.version||'')+(o.floor||'')+(o.collisions||'')}
-const BILL_TABS=[['overview','Overview'],['hearings','Hearings and debate'],['text','Text and watch list'],['history','History and votes'],['media','News']];
+const BILL_TABS=[['overview','Overview'],['hearings','Hearings and debate'],['text','Text and watch list'],['history','History and votes'],['media','News']];const BTICON={overview:'home',hearings:'mic',text:'diff',history:'clock',media:'news'};
 function billTabsNav(b,secs){
   if(b.file)return '';
   if(BILLTAB_KEY!==b.key){BILLTAB_KEY=b.key;BILLTAB='overview'}
   const m=(loadMedia()||{bills:{}}).bills[b.num]&&MEDIA.session===b.session?MEDIA.bills[b.num]:null;
   const label=k=>{const l=BILL_TABS.find(t=>t[0]===k)[1];return k==='media'&&m?`${l} (${m.items.length})`:l};
   const jump=secs&&secs.length?`<label class="sr" for="billJump">Jump to a section</label><select id="billJump" class="billjump"><option value="">Jump to…</option>${BILL_TABS.map(([k])=>{const ss=secs.filter(x=>x[0]===k);return ss.length?`<optgroup label="${esc(label(k))}">${ss.map(x=>`<option value="${k}|${x[1]}">${esc(x[2])}</option>`).join('')}</optgroup>`:''}).join('')}</select>`:'';
-  return `<nav class="billtabs" aria-label="Bill sections">${BILL_TABS.map(([k])=>`<button type="button" data-billtab="${k}" class="${BILLTAB===k?'on':''}" aria-pressed="${BILLTAB===k}">${esc(label(k))}</button>`).join('')}<span class="grow"></span>${jump}${ME?`<a class="btn sm" href="#packet-${esc(b.session)}-${esc(b.num)}">Prep packet</a>`:''}</nav>`;
+  return `<nav class="billtabs" aria-label="Bill sections">${BILL_TABS.map(([k])=>`<button type="button" data-billtab="${k}" class="${BILLTAB===k?'on':''}" aria-pressed="${BILLTAB===k}">${ic(BTICON[k])}${esc(label(k))}</button>`).join('')}<span class="grow"></span>${jump}${ME?`<a class="btn sm" href="#packet-${esc(b.session)}-${esc(b.num)}">Prep packet</a>`:''}</nav>`;
 }
 function meterSVG(score,n){
   const a=Math.PI*(1-(score+1)/2), r=70, cx=90, cy=86, x=cx+r*Math.cos(a), y=cy-r*Math.sin(a);

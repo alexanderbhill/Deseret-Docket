@@ -622,3 +622,33 @@ table.lgb td:first-child{width:40px}
 .flash{animation:bsflash 1.6s ease-out}
 @keyframes bsflash{0%{box-shadow:0 0 0 3px var(--goldc)}100%{box-shadow:0 0 0 3px transparent}}
 .lg-flag{text-align:center;margin:10px 0 0}
+/* ---------- icons */
+.ic{width:1.05em;height:1.05em;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.15em;margin-right:.4em}
+h2 .ic.h{width:.95em;height:.95em;color:var(--steel);margin-right:.45em;vertical-align:-.1em}
+nav.tabs a .ic{opacity:.85;margin-right:.45em}
+.billtabs button .ic{margin-right:.4em;opacity:.8}
+.flabel .ic{color:var(--steel);margin-right:.35em}
+/* ---------- bill progress tracker (chevrons) */
+ol.prog{list-style:none;display:flex;margin:18px 0 6px;padding:0;overflow-x:auto;scrollbar-width:thin}
+ol.prog li{flex:1 0 118px;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:118px}
+ol.prog .pl{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:40px;padding:0 10px 0 22px;font-size:13.5px;font-weight:600;color:var(--muted);background:var(--surface-2);clip-path:polygon(0 0,calc(100% - 14px) 0,100% 50%,calc(100% - 14px) 100%,0 100%,14px 50%);white-space:nowrap;margin-left:-6px}
+ol.prog li:first-child .pl{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 50%,calc(100% - 14px) 100%,0 100%);margin-left:0;border-radius:8px 0 0 8px;padding-left:12px}
+ol.prog li.done .pl{background:color-mix(in srgb,var(--lightblue) 55%,#fff);color:var(--navy)}
+ol.prog li.done.fin .pl{background:var(--green-bg);color:var(--green)}
+ol.prog li.here .pl{background:var(--goldc);color:var(--navy)}
+ol.prog li.stop .pl{background:var(--red-bg);color:var(--maroon)}
+ol.prog .pl .ic{margin-right:.35em}
+ol.prog .pd{font-size:12px;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-variant-numeric:tabular-nums;min-height:20px}
+ol.prog li:not(.done):not(.here):not(.stop) .pd{border-color:transparent;background:none}
+/* mini tracker in the Bills table */
+.progmini{display:flex;gap:2px;margin:2px 0 6px;max-width:140px}
+.progmini i{flex:1;height:5px;border-radius:2px;background:var(--line)}
+.progmini i.on{background:var(--steel)}
+.progmini i.x{background:var(--maroon)}
+.progmini.stopped i.on{background:#b9c2cc}
+/* at-a-glance chips */
+.glances{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 2px}
+.glance{display:inline-flex;align-items:center;gap:9px;padding:7px 14px 7px 11px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--c);border-radius:9px;font-size:14.5px;font-weight:600;color:var(--ink)}
+.glance>.ic{color:var(--c);width:20px;height:20px;margin:0}
+.glance small{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;line-height:1.2}
+@media (max-width:700px){ol.prog li{min-width:104px}ol.prog .pl{font-size:12.5px}}

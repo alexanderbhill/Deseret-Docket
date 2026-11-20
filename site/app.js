@@ -285,7 +285,7 @@ function shell(active,inner,compact){
   else if(changed) sum+=` <b>${changed}</b> changed today.`;
   const fine=ME?`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}`:''}<br>Signed in as ${esc(ME.display||ME.user)}${isAdmin()?' (admin)':''}: departments, divisions, designations${canSee('priority')?', priorities':''}${canSee('note')?', notes':''} and assignments are shared with the office.`
     :`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m. You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
-  const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];
+  const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];const TABICON={updates:'bell',bills:'list',budget:'chart',fiscal:'hive',postsession:'wrap',learn:'book',admin:'gear'};
   if(canFiscal()) tabs.push(['fiscal','Fiscal Hive']);
   if(ME&&wrapVisible()) tabs.push(['postsession','Session wrap-up']);
   tabs.push(['learn','Learn']);
@@ -298,8 +298,8 @@ function shell(active,inner,compact){
    <div class="live">Updated <b>${fmtAP(u)}</b></div>
    ${compact?'':`<p class="summary">${sum}</p>
    <p class="fine">${fine}</p>`}
-   <nav class="tabs" aria-label="Sections">${tabs.map(([h,l])=>`<a href="#${h}" class="${active===h?'on':''}" ${active===h?'aria-current="page"':''}>${l}</a>`).join('')}</nav>
-  </div></header>${ME?'':`<div class="guestbar gut"><div class="wrap">You’re browsing as a guest: public bill information only, and nothing you change is saved. <a href="/login">Sign in</a> or <a href="/login#signup" data-signup>create an account</a> for full access.</div></div>`}<main class="gut"><div class="wrap">${inner}</div></main>${footerHTML()}`;
+   <nav class="tabs" aria-label="Sections">${tabs.map(([h,l])=>`<a href="#${h}" class="${active===h?'on':''}" ${active===h?'aria-current="page"':''}>${typeof ic==='function'?ic(TABICON[h]):''}${l}</a>`).join('')}</nav>
+  </div></header>${ME?'':`<div class="guestbar gut"><div class="wrap">You’re browsing as a guest: public bill information only, and nothing you change is saved. <a href="/login">Sign in</a> or <a href="/login#signup" data-signup>create an account</a> for full access.</div></div>`}<main class="gut"><div class="wrap">${typeof iconHeads==='function'?iconHeads(inner):inner}</div></main>${footerHTML()}`;
 }
 
 /* ===================== SPONSOR CARD ===================== */
@@ -419,7 +419,7 @@ const CELL={
   departments:b=>msHTML('departments',b.key,deptsOf(b),canEdit('departments')),
   committee:b=>esc(committeeOf(b))||'<span class="muted">—</span>',
   house:b=>sponsorCell(b,'H'), senate:b=>sponsorCell(b,'S'), sponsor:sponsorCol,
-  action:b=>`${esc(b.act||'—')}<div class="sub">${esc(b.own||'')}${b.date?', '+fmtMD(b.date):''}</div>`,
+  action:b=>`${typeof progMini==='function'?progMini(b):''}${esc(b.act||'—')}<div class="sub">${esc(b.own||'')}${b.date?', '+fmtMD(b.date):''}</div>`,
   fiscal:fiscalCell, hearing:hearingCell,
   designations:b=>`${cposChips(b)||'<span class="muted">—</span>'}${canEdit('designations')?`<div><button type="button" class="linkbtn small" data-cpos="${esc(b.key)}">${Object.keys(cposOf(b)).length?'Edit':'Add'}</button></div>`:''}`,
   assignees:b=>msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…'),
@@ -947,13 +947,13 @@ function officePanel(b){
   const p=priOf(b);
   const pos=posOf(b);
   return `<aside class="side"><h3>Office information</h3><div class="tiny muted">Shared with the office${isAdmin()||P().scope==='all'?'':' (your account sees some bills)'}.</div>
-   <div class="sidegroup"><span class="flabel">Position</span>${[['','No position','var(--line-2)'],...(CONFIG.positions||[]).map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(pos||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pos" value="${v}" ${(pos||'')===v?'checked':''} ${canEdit('position')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('position')}</div>
-   <div class="sidegroup"><span class="flabel">Department</span>${msHTML('departments',b.key,deptsOf(b),canEdit('departments'))}${by('departments')}</div>
-   <div class="sidegroup"><span class="flabel">Division</span>${msHTML('divisions',b.key,divsOf(b),canEdit('divisions'),deptsOf(b).length?'Choose…':'Department first')}${suggHTML(b)}${by('divisions')}</div>
-   <div class="sidegroup"><span class="flabel">Association positions</span>${(CONFIG.designations||[]).map(d=>{const x=cposOf(b)[d.id];return `<div class="cprow"><label for="cp-${d.id}" title="${esc(d.full)}">${esc(d.name)}</label><select id="cp-${d.id}" data-cpsel="${d.id}" ${canEdit('designations')?'':'disabled'} style="--c:${x&&x.pos!=='tagged'?posColor(x.pos):'var(--line-2)'}"><option value="">—</option><option value="tagged" ${x&&x.pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${x&&x.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`}).join('')}${by('designations')}</div>
-   ${canSee('priority')?`<div class="sidegroup"><span class="flabel">Office priority</span>${[['','No priority','var(--line-2)'],...CONFIG.priorities.map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(p||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pri" value="${v}" ${(p||'')===v?'checked':''} ${canEdit('priority')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('priority')}</div>`:''}
-   <div class="sidegroup"><span class="flabel">Assigned to</span>${msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…')}${by('assignees')}</div>
-   ${canSee('note')?`<div class="sidegroup"><label class="flabel" for="noteIn">Notes</label><textarea id="noteIn" ${canEdit('note')?'':'readonly'}>${esc(noteOf(b))}</textarea>${by('note')}${canEdit('note')?'<button class="btn primary" id="saveNote" style="margin-top:8px">Save note</button>':''}</div>`:''}
+   <div class="sidegroup"><span class="flabel">${ic('flag')}Position</span>${[['','No position','var(--line-2)'],...(CONFIG.positions||[]).map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(pos||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pos" value="${v}" ${(pos||'')===v?'checked':''} ${canEdit('position')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('position')}</div>
+   <div class="sidegroup"><span class="flabel">${ic('building')}Department</span>${msHTML('departments',b.key,deptsOf(b),canEdit('departments'))}${by('departments')}</div>
+   <div class="sidegroup"><span class="flabel">${ic('layers')}Division</span>${msHTML('divisions',b.key,divsOf(b),canEdit('divisions'),deptsOf(b).length?'Choose…':'Department first')}${suggHTML(b)}${by('divisions')}</div>
+   <div class="sidegroup"><span class="flabel">${ic('users')}Association positions</span>${(CONFIG.designations||[]).map(d=>{const x=cposOf(b)[d.id];return `<div class="cprow"><label for="cp-${d.id}" title="${esc(d.full)}">${esc(d.name)}</label><select id="cp-${d.id}" data-cpsel="${d.id}" ${canEdit('designations')?'':'disabled'} style="--c:${x&&x.pos!=='tagged'?posColor(x.pos):'var(--line-2)'}"><option value="">—</option><option value="tagged" ${x&&x.pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${x&&x.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`}).join('')}${by('designations')}</div>
+   ${canSee('priority')?`<div class="sidegroup"><span class="flabel">${ic('priority')}Office priority</span>${[['','No priority','var(--line-2)'],...CONFIG.priorities.map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(p||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pri" value="${v}" ${(p||'')===v?'checked':''} ${canEdit('priority')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('priority')}</div>`:''}
+   <div class="sidegroup"><span class="flabel">${ic('user')}Assigned to</span>${msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…')}${by('assignees')}</div>
+   ${canSee('note')?`<div class="sidegroup"><label class="flabel" for="noteIn">${ic('pencil')}Notes</label><textarea id="noteIn" ${canEdit('note')?'':'readonly'}>${esc(noteOf(b))}</textarea>${by('note')}${canEdit('note')?'<button class="btn primary" id="saveNote" style="margin-top:8px">Save note</button>':''}</div>`:''}
    <details class="sidegroup" id="teamLog" data-key="${esc(OFFICE[b.key]||!b.tid?b.key:`${b.session}/F-${b.tid}`)}"><summary class="small" style="cursor:pointer;color:var(--link)">Office history</summary><div class="small muted" id="teamLogBody">Loading…</div></details></aside>`;
 }
 function pageBill(session,num){
@@ -965,7 +965,8 @@ function pageBill(session,num){
    <div class="billhead"><div class="no">${b.file?esc(fileStatus(b))+' (no bill number yet)':esc(shortNum(b.num))} · ${esc(sessName(session))}</div><h2>${esc(b.title)}${outcome(b)?` <span class="pill ${outcome(b).k}" style="font-size:15px;vertical-align:middle">${esc(outcome(b).l)}</span>`:''}</h2>
     <div class="sponsors"><div><span class="l">House</span>${sp('H')}</div><div><span class="l">Senate</span>${sp('S')}</div>${b.cosp.length?`<div><span class="l">Cosponsors</span>${esc(b.cosp.join(', '))}</div>`:''}</div>
     <div class="where"><span class="muted">Where it is now</span><span class="now">${esc(b.own)}</span><span>${esc(b.act)}${b.date?', '+fmtMDY(b.date):''}</span></div>
-    ${b.file?'':`<a class="small" href="https://le.utah.gov/~${yr}/bills/static/${esc(b.num)}.html" target="_blank" rel="noopener">Open on le.utah.gov</a>`}</div>
+    ${b.file?'':`<a class="small" href="https://le.utah.gov/~${yr}/bills/static/${esc(b.num)}.html" target="_blank" rel="noopener">Open on le.utah.gov</a>`}
+    ${typeof progressHTML==='function'?progressHTML(b)+glanceHTML(b):''}</div>
    ${b.file?`<div class="detail"><div>${billSecs(b,m,hs).filter(x=>x.t==='overview'||x.t==='hearings').map(x=>x.h).join('')}</div>${officePanel(b)}</div>`:(()=>{
      const secs=billSecs(b,m,hs);const tab=BILLTAB_KEY===b.key?BILLTAB:'overview';
      const nav=billTabsNav(b,secs.map(x=>[x.t,x.id,x.l]));
