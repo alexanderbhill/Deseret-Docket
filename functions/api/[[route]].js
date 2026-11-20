@@ -418,6 +418,40 @@ export async function onRequest(context) {
       const r = await setBill(db, user, body, (await allPeople(env, db)).all);
       return json({ ok: true, ...r });
     }
+    // ---------------- session wrap-up: implementation tracker and personal season stats
+    if (route === "impl") {
+      await db.prepare(`CREATE TABLE IF NOT EXISTS impl (id TEXT PRIMARY KEY, key TEXT, item TEXT, division TEXT, due TEXT, status TEXT, notes TEXT,
+        by TEXT, at TEXT, r30 INTEGER DEFAULT 0, r7 INTEGER DEFAULT 0)`).run();
+      if (method === "GET") {
+        const ses = String(url.searchParams.get("session") || "");
+        const rows = (await db.prepare("SELECT * FROM impl WHERE key LIKE ? ORDER BY due").bind(ses + "/%").all()).results || [];
+        return json({ items: rows });
+      }
+      if (!canEdit(user, "agAction")) return bad("Your account can't change the implementation tracker.", 403);
+      const t = new Date().toISOString();
+      if (body.action === "delete") { await db.prepare("DELETE FROM impl WHERE id = ?").bind(String(body.id || "")).run(); return json({ ok: true }); }
+      const items = (Array.isArray(body.items) ? body.items : [body]).slice(0, 50);
+      const stmts = [];
+      for (const it of items) {
+        const key = String(it.key || "");
+        if (!KEY_RE.test(key) || !String(it.item || "").trim()) continue;
+        const id = /^[0-9a-f]{16}$/.test(String(it.id || "")) ? it.id : frand(8);
+        const due = /^\d{4}-\d{2}-\d{2}$/.test(String(it.due || "")) ? it.due : null;
+        const cur = await db.prepare("SELECT due FROM impl WHERE id = ?").bind(id).first();
+        const reset = cur && cur.due !== due; // a new due date gets fresh reminders
+        stmts.push(db.prepare(`INSERT INTO impl (id, key, item, division, due, status, notes, by, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET item=excluded.item, division=excluded.division, due=excluded.due, status=excluded.status, notes=excluded.notes, by=excluded.by, at=excluded.at${reset ? ", r30=0, r7=0" : ""}`)
+          .bind(id, key, String(it.item).trim().slice(0, 500), DIV_RE.test(String(it.division || "")) ? it.division : null, due,
+            ["todo", "doing", "done"].includes(it.status) ? it.status : "todo", String(it.notes || "").slice(0, 1000), user.name, t));
+      }
+      if (stmts.length) await db.batch(stmts);
+      return json({ ok: true, saved: stmts.length });
+    }
+    if (route === "mystats" && method === "GET") {
+      const rows = (await db.prepare("SELECT key, what, at FROM log WHERE by = ? AND key <> '*'").bind(user.name).all()).results || [];
+      const pr = await db.prepare("SELECT v FROM prefs WHERE username = ?").bind(user.name).first();
+      return json({ log: rows.map((r) => [r.key, r.what.split(":")[0], r.at.slice(0, 10)]), prefs: pr ? obj(pr.v) : {} });
+    }
     if (route === "notices") {
       await db.prepare("CREATE TABLE IF NOT EXISTS notices (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, at TEXT, title TEXT, body TEXT, url TEXT, dedupe TEXT UNIQUE, seen INTEGER DEFAULT 0)").run();
       if (method === "GET") {
@@ -468,6 +502,10 @@ export async function onRequest(context) {
       if (Array.isArray(body.cols)) { next.cols = cols; next.hidden = hidden; next.v = Number.isInteger(body.v) ? body.v : 1; }
       if ("tourDone" in body) next.tourDone = !!body.tourDone;
       if ("fav" in body) next.fav = String(body.fav || "").slice(0, 40);
+      if (body.pred && typeof body.pred === "object" && KEY_RE.test(String(body.pred.key || ""))) {
+        next.pred = { ...(next.pred || {}) };
+        if (["pass", "fail"].includes(body.pred.v)) next.pred[body.pred.key] = body.pred.v; else delete next.pred[body.pred.key];
+      }
       await db.prepare("INSERT INTO prefs (username, v) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET v=excluded.v").bind(user.name, JSON.stringify(next)).run();
       return json({ ok: true });
     }

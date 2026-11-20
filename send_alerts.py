@@ -160,7 +160,7 @@ def daily_email(site, session, bills, sub, now, files):
     changes = []
     for b in mine:
         for c in b.get("ch", []):
-            if c[0] > since and c[1] in ("New substitute", "Amended", "Enrolled", "Fiscal note", "Moved", "New hearing") and (c[1] != "Fiscal note" or opts.get("fiscal", True)):
+            if c[0] > since and c[1] in ("New substitute", "Amended", "Enrolled", "Fiscal note", "Moved", "New hearing", "Floor calendar") and (c[1] != "Fiscal note" or opts.get("fiscal", True)):
                 changes.append((c, b))
     changes.sort(key=lambda x: x[0][0], reverse=True)
     body = ""

@@ -654,7 +654,7 @@ function pageHearings(){
 
 /* ===================== LEGISLATORS ===================== */
 let legSort='total', legHouse='all';
-function pageLegislators(){
+function pageLegislators(openId){
   const S=UI.session; const rows=allRows(S);
   if(!LEGS) return shell('legislators',`<div class="card"><p>Loading legislators…</p></div>`);
   const stats=LEGS.map(l=>{const chief=rows.filter(b=>!b.file&&(b.spId===l.id||(!b.spId&&legMatchName(l,b.sponsor))));const floor=rows.filter(b=>!b.file&&(b.flId===l.id||(!b.flId&&legMatchName(l,b.floor))));const files=rows.filter(b=>b.file&&legMatchName(l,b.sponsor));
@@ -664,12 +664,12 @@ function pageLegislators(){
   list.sort(sorts[legSort]||sorts.total);
   const max=Math.max(1,...list.map(s=>s.total));
   return shell('legislators',`<div class="card"><h2>Legislators</h2>
-   <p class="desc">Who is sponsoring the most legislation this session. <b>Chief</b> counts numbered bills they’re the chief sponsor of plus their bill files that aren’t numbered yet. <b>Floor</b> counts bills they carry in the other house. Click a name to see their bills.</p>
+   <p class="desc">Who is sponsoring the most legislation this session. <b>Chief</b> counts numbered bills they’re the chief sponsor of plus their bill files that aren’t numbered yet. <b>Floor</b> counts bills they carry in the other house. Click a name for their profile, with their bills grouped by committee.</p>
    <div class="filters"><div class="field"><label for="legSort">Sort by</label><select id="legSort">${[['total','Most bills'],['floor','Most floor sponsorships'],['files','Most unnumbered bill files'],...(ME?[['office','Most on the office list']]:[]),['name','Name'],['district','House and district']].map(([k,l])=>`<option value="${k}" ${legSort===k?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="seg" role="group" aria-label="Chamber" style="align-self:flex-end">${[['all','Both'],['H','House'],['S','Senate']].map(([k,l])=>`<button type="button" data-leghouse="${k}" class="${legHouse===k?'on':''}">${l}</button>`).join('')}</div></div>
    <div class="leg head"><span></span><span>Legislator</span><span class="n">Chief</span><span class="n">Floor</span><span class="n hide-m">${ME?'Office list':'Bill files'}</span><span class="hide-m"></span></div>
-   ${list.map(s=>`<div class="leg party-${s.l.party==='R'||s.l.party==='D'?s.l.party:'O'}"><span class="ini" aria-hidden="true">${esc((s.l.name||'').split(/\s+/).filter(w=>/^[A-Z]/.test(w)).map(w=>w[0]).filter((c,i,a)=>i===0||i===a.length-1).join(''))}</span><div><div class="nm"><a href="#bills" data-sponsor="${esc(s.l.id)}">${esc(s.l.name)}</a></div><div class="sub"><span class="dot"></span> ${s.l.party==='R'?'Republican':s.l.party==='D'?'Democrat':esc(s.l.party||'')} · ${s.l.house==='H'?'House':'Senate'} District ${esc(s.l.district)}</div></div>
-    <span class="n"><b>${s.total}</b>${s.files?`<div class="sub">${s.files} not numbered</div>`:''}</span><span class="n">${s.floor}</span><span class="n hide-m">${ME?s.office:s.files}</span><span class="hide-m"><div class="bar"><i style="width:${(s.total/max*100).toFixed(1)}%"></i></div></span></div>`).join('')}</div>`);
+   ${list.map(s=>`<div class="leg party-${s.l.party==='R'||s.l.party==='D'?s.l.party:'O'}"><span class="ini" aria-hidden="true">${esc((s.l.name||'').split(/\s+/).filter(w=>/^[A-Z]/.test(w)).map(w=>w[0]).filter((c,i,a)=>i===0||i===a.length-1).join(''))}</span><div><div class="nm"><a href="#legislators-${esc(s.l.id)}">${esc(s.l.name)}</a></div><div class="sub"><span class="dot"></span> ${s.l.party==='R'?'Republican':s.l.party==='D'?'Democrat':esc(s.l.party||'')} · ${s.l.house==='H'?'House':'Senate'} District ${esc(s.l.district)}</div></div>
+    <span class="n"><b>${s.total}</b>${s.files?`<div class="sub">${s.files} not numbered</div>`:''}</span><span class="n">${s.floor}</span><span class="n hide-m">${ME?s.office:s.files}</span><span class="hide-m"><div class="bar"><i style="width:${(s.total/max*100).toFixed(1)}%"></i></div></span></div>`).join('')}</div>${openId&&typeof legProfile==='function'?legProfile(openId):''}`);
 }
 
 /* ===================== BUDGET ===================== */
@@ -942,6 +942,7 @@ function officePanel(b){
    ${canSee('priority')?`<div class="sidegroup"><span class="flabel">Office priority</span>${[['','No priority','var(--line-2)'],...CONFIG.priorities.map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(p||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pri" value="${v}" ${(p||'')===v?'checked':''} ${canEdit('priority')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('priority')}</div>`:''}
    <div class="sidegroup"><span class="flabel">Assigned to</span>${msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…')}${by('assignees')}</div>
    ${canSee('note')?`<div class="sidegroup"><label class="flabel" for="noteIn">Notes</label><textarea id="noteIn" ${canEdit('note')?'':'readonly'}>${esc(noteOf(b))}</textarea>${by('note')}${canEdit('note')?'<button class="btn primary" id="saveNote" style="margin-top:8px">Save note</button>':''}</div>`:''}
+   ${b.file?'':(()=>{const pv=((ME.prefs||{}).pred||{})[b.key];return `<div class="sidegroup"><span class="flabel">Your prediction</span><div class="seg" role="group" aria-label="Your prediction"><button type="button" data-pred="pass" class="${pv==='pass'?'on':''}">Will pass</button><button type="button" data-pred="fail" class="${pv==='fail'?'on':''}">Won’t pass</button>${pv?'<button type="button" data-pred="">Clear</button>':''}</div><div class="tiny muted" style="margin-top:3px">Private to you. Counts toward your season recap.</div></div>`})()}
    <details class="sidegroup" id="teamLog" data-key="${esc(OFFICE[b.key]||!b.tid?b.key:`${b.session}/F-${b.tid}`)}"><summary class="small" style="cursor:pointer;color:var(--link)">Office history</summary><div class="small muted" id="teamLogBody">Loading…</div></details></aside>`;
 }
 function pageBill(session,num){
@@ -981,7 +982,7 @@ function route(soft){
   if(view==='updates') html=pageUpdates();
   else if(view==='bills') html=pageBills();
   else if(view==='hearings') html=pageHearings();
-  else if(view==='legislators') html=pageLegislators();
+  else if(view==='legislators') html=pageLegislators(parts.slice(1).join('-'));
   else if(view==='budget') html=pageBudget();
   else if(view==='watchlist') html=pageWatch();
   else if(view==='account') html=pageAccount();
@@ -1097,7 +1098,7 @@ function bind(){
     try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':x.by)} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
     catch(e){$('teamLogBody').textContent='History didn’t load.';delete tl.dataset.done}});
   // page modules in their own files
-  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
+  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
 }
 const curKey=()=>{const p=decodeURIComponent(location.hash.slice(1)).split('-');return p[1]+'/'+p.slice(2).join('-')};
 let lastPull=0;
