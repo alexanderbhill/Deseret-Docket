@@ -722,3 +722,103 @@ a.welcome-card:hover{box-shadow:0 10px 30px rgba(0,33,71,.25)}
 .wc-prog{display:flex;gap:3px;margin-bottom:10px}.wc-prog i{flex:1;height:14px;background:#eef2f5;clip-path:polygon(0 0,80% 0,100% 50%,80% 100%,0 100%,20% 50%)}.wc-prog i.d{background:#cfe3ec}.wc-prog i.h{background:var(--goldc)}
 .wc-chips{display:flex;gap:6px}.wc-chips i{flex:1;height:22px;border:1px solid var(--line);border-left:3px solid var(--c);border-radius:5px}
 @media (max-width:700px){.wc-mini{display:none}}
+/* Budget tabs */
+.budtabs{margin:0 0 18px}
+.budtabs .budcom-l{font-size:13px;font-weight:600;color:var(--muted);margin-right:6px}
+.budtabs #budCom{min-height:34px;padding:4px 30px 4px 10px;font-size:14px;max-width:280px;margin:4px 0}
+/* ================= Phones ================= */
+@media (max-width:900px){
+  .row{grid-template-columns:minmax(0,1fr)}
+  .row .r{flex-wrap:wrap}
+}
+@media (max-width:700px){
+  body{font-size:15.5px}
+  .gut{padding-left:12px;padding-right:12px}
+  /* compact header: brand and Help on one line, session picker under it; the long explanations hide */
+  .mast{padding-top:10px}
+  .mast-top{align-items:center;gap:8px}
+  .brand h1{font-size:23px}
+  .mast .brand svg{width:34px;height:34px}
+  .who{width:100%;margin:0;padding-top:4px;gap:8px 10px}
+  .who select{flex:1 1 170px;min-width:0;font-size:14px}
+  .mast .live{font-size:13px;margin-top:6px}
+  .mast .summary,.mast .fine{display:none}
+  /* main tabs: icon over label so all of them fit */
+  nav.tabs{margin-top:8px;gap:0;justify-content:space-between}
+  nav.tabs a{flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 9px;font-size:11.5px;text-align:center;white-space:normal;line-height:1.15}
+  nav.tabs a .ic{width:20px;height:20px;margin:0}
+  nav.tabs a{position:relative}nav.tabs a .badge{position:absolute;top:2px;left:calc(50% + 6px)}
+  /* cards and headings */
+  .card{padding:16px 14px;border-radius:12px}
+  h2{font-size:20px}
+  .desc{font-size:14.5px}
+  /* section tabs on bill and budget pages: one scrolling row */
+  .billtabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-left:-12px;margin-right:-12px;padding:0 12px}
+  .billtabs::-webkit-scrollbar{display:none}
+  .billtabs button{flex:none;padding:9px 10px;font-size:14px;white-space:nowrap}
+  .billtabs .grow{display:none}
+  .billtabs .billjump,.billtabs #budCom,.billtabs .btn,.billtabs .budcom-l{flex:none}
+  /* bill page */
+  .billhead h2{font-size:26px}
+  .where{flex-wrap:wrap;gap:4px 10px}
+  ol.prog li{min-width:96px;flex-basis:96px}
+  ol.prog .pl{font-size:11.5px;padding:0 6px 0 16px;height:36px}
+  .glances{gap:8px}.glance{padding:6px 10px 6px 8px;font-size:13.5px}
+  .detail{gap:14px}
+  .chdl .dlbig{flex-basis:100%}
+  /* Bills table becomes stacked cards */
+  table.bills thead{display:none}
+  table.bills,table.bills tbody,table.bills tr,table.bills td{display:block;width:100%}
+  .tablewrap:has(table.bills){border:0;background:none;overflow:visible}
+  table.bills tr{background:#fff!important;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,33,71,.04)}
+  table.bills td{border:0!important;padding:5px 0!important;min-width:0!important;max-width:none!important;position:static!important;background:none!important}
+  table.bills td:empty{display:none}
+  table.bills td::before{content:attr(data-l);display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+  table.bills td.c-num::before,table.bills td.c-title::before{display:none}
+  table.bills td.c-num{font-size:18px}
+  table.bills select,table.bills .ms>button{width:100%}
+  /* forms and filters */
+  .filters{gap:10px}
+  .filters .field{flex:1 1 140px;min-width:0}
+  .filters .field.grow{flex-basis:100%}
+  input,select,textarea{font-size:16px}
+  dialog{max-width:calc(100vw - 16px);margin:auto}
+  dialog form,dialog .invdraft,dialog .fbform{min-width:0!important}
+  .invbtns .btn,.fbbtns .dlbig{flex:1 1 100%}
+  /* stats, budget, fiscal hive, learn */
+  .stat3.icstat{grid-template-columns:1fr 1fr}
+  .stat3.icstat>div{grid-template-columns:1fr;padding:10px}
+  .stat3.icstat>div>.ic{grid-row:auto;width:30px;height:30px;padding:6px;margin-bottom:4px}
+  .stat3 div b{font-size:20px}
+  .fh-card{padding:16px 14px}
+  .fh-card h3{font-size:20px}
+  .fh-actions{flex-wrap:wrap}.fh-actions .grow{display:none}.fh-actions .btn{flex:1 1 auto}
+  .fh-bar .small.muted{display:none}
+  .learn-nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+  .learn-nav a{flex:none}
+  .lg-name{font-size:22px}
+  .lg-quote{font-size:17px}
+  .lg-keys{display:none}
+  .lg-face{padding:6px}
+  .feats{grid-template-columns:1fr}
+  a.welcome-card{flex-direction:column;align-items:flex-start}
+  /* legislator profile and lists */
+  .leg{grid-template-columns:40px minmax(0,1fr) 46px 46px;gap:10px}
+  .lnews a.ln img,.ln-ph{width:64px;height:48px}
+  .sinedie{font-size:12.5px}
+  .sinedie .cd b{font-size:14px}
+}
+@media (max-width:380px){
+  nav.tabs a{font-size:10.5px}
+  .stat3.icstat{grid-template-columns:1fr}
+}
+@media (max-width:700px){
+  table.bills{min-width:0!important;width:100%!important;table-layout:auto!important}
+  table.bills td>*{max-width:100%}
+  table.bills .clamp{-webkit-line-clamp:5}
+  table.bills td.c-title .pill{white-space:normal}
+  .fh-chip{max-width:100%;white-space:normal}
+  .fh-divs select{max-width:100%}
+  .seg{max-width:100%;flex-wrap:wrap}
+}
+@media (max-width:700px){.row .pill,.pill{white-space:normal;max-width:100%}}

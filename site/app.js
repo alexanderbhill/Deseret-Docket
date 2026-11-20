@@ -502,7 +502,7 @@ function filteredBills(){
 function legMatchName(l,sp){if(!sp)return false;const last=(l.full||'').split(',')[0].trim();const house=l.house==='H'?'Rep.':'Sen.';return sp.startsWith(house)&&sp.includes(last+',')}
 function billTable(rows,cols){
   return `<div class="tablewrap"><table class="bills"><thead><tr>${cols.map(c=>`<th class="c-${c} ${FLT.sort.col===c?'sorted':''}" draggable="true" data-col="${c}" aria-sort="${FLT.sort.col===c?(FLT.sort.dir>0?'ascending':'descending'):'none'}"><span class="h"><button class="sort" data-sort="${c}" title="Sort. Drag the heading to move the column.">${esc(COLDEFS[c].label)}${FLT.sort.col===c?(FLT.sort.dir>0?' ▲':' ▼'):''}</button></span></th>`).join('')}</tr></thead>
-   <tbody>${rows.map(b=>`<tr>${cols.map(c=>`<td class="c-${c}">${CELL[c](b)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+   <tbody>${rows.map(b=>`<tr>${cols.map(c=>`<td class="c-${c}" data-l="${esc(COLDEFS[c].label)}">${CELL[c](b)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 function colMenu(){
   const all=COLS.order.filter(colAllowed);
@@ -739,33 +739,37 @@ function pageBudget(){
   const mtgs=(B.meetings||[]).filter(m=>m.status==='ok'&&(budView.mtg!=='sel'||m.name.toLowerCase().includes(selName.toLowerCase().split(/[ ,]/)[0]))).slice(0,12);
   const vAtM=(m,vi,s)=>m.videos&&m.videos[vi]?`${m.videos[vi]}#t=${Math.max(0,Math.floor(s))}s`:m.page;
   const seg=(k,opts)=>`<div class="seg" role="group">${opts.map(([v,l])=>`<button type="button" data-bud="${k}|${v}" class="${budView[k]===v?'on':''}" aria-pressed="${budView[k]===v}">${l}</button>`).join('')}</div>`;
-  return shell('budget',`
+  const T=BUDTAB, tabs=[['overview','Overview','chart'],['committee','Committee budget','layers'],['requests','Requests','user'],['meetings','Appropriations meetings','mic']];
+  const nav=`<nav class="billtabs budtabs" aria-label="Budget sections">${tabs.map(([k,l,i])=>`<button type="button" data-budtab="${k}" class="${T===k?'on':''}" aria-pressed="${T===k}">${ic(i)}${l}</button>`).join('')}<span class="grow"></span>${T!=='overview'?`<label class="budcom-l" for="budCom">Committee</label>${comSel}`:''}</nav>`;
+  const P={};
+  P.overview=`
    <div class="card"><h2>How the budget is shaping up</h2>
     <p class="desc">The state budget from the Legislature’s Compendium of Budget Information (COBI), the costs in this session’s fiscal notes, the requests legislators have made, and what’s being said about money in appropriations meetings.</p>
     <div class="stat3 icstat"><div>${ic('chart')}<span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div>${ic('layers')}<span>${esc(selName)} share</span><b>${money(cjTotal,true)}</b></div><div>${ic('file')}<span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div>${ic('dollar')}<span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
     <p class="small muted" style="margin:0">Budget figures are COBI’s operating and capital budgets plus expendable funds. Fiscal-note costs are General, Income Tax and Uniform School Fund amounts (ongoing plus one-time) from each bill’s latest fiscal note; a fiscal note isn’t an appropriation.</p></div>
-   ${typeof budgetReqHTML==='function'?budgetReqHTML():''}
-   <div class="grid2">
-    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>General budget</h2><p class="desc">${budView.gen==='base'?`By appropriations subcommittee, ${esc(hdrNice)}.`:`Fiscal-note costs by the subcommittee the agency belongs to.`}</p></div>${seg('gen',[['base','Budget'],['fn','Fiscal notes']])}</div>
-     ${pieBlock('pieGen',genItems,'General budget',budView.gen==='fn'?'Matched to a subcommittee by the agency named in each fiscal note.':'')}</div>
-    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Committee budget</h2><div class="field" style="margin:4px 0 6px">${comSel}</div><p class="desc">${budView.cj==='base'?`${esc(selName)} agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on bills in this committee’s area, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
+   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>General budget</h2><p class="desc">${budView.gen==='base'?`By appropriations subcommittee, ${esc(hdrNice)}.`:`Fiscal-note costs by the subcommittee the agency belongs to.`}</p></div>${seg('gen',[['base','Budget'],['fn','Fiscal notes']])}</div>
+     ${pieBlock('pieGen',genItems,'General budget',budView.gen==='fn'?'Matched to a subcommittee by the agency named in each fiscal note.':'')}</div>`;
+  P.committee=`
+    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Committee budget</h2><p class="desc">${budView.cj==='base'?`${esc(selName)} agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on bills in this committee’s area, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
      ${pieBlock('pieCj',cjItems,selName+' budget')}</div>
-   </div>
    <div class="card"><h2>${esc(selName)} fiscal notes</h2><p class="desc">Every ${esc(sessName(S))} bill with a fiscal note that falls under the ${esc(selName)} committee (${cjBills.length}), largest cost first. Bills are matched by the agency named in the fiscal note.</p>
     ${cjBills.length?`<div class="tablewrap"><table class="compact" style="min-width:760px"><thead><tr><th style="padding-left:12px">Bill</th><th>Title</th><th style="text-align:right">Ongoing</th><th style="text-align:right">One-time</th><th>Agency</th><th>Where it is</th></tr></thead><tbody>
-     ${cjBills.slice().sort((a,b)=>(fnCost(b)?costOf(b):-1)-(fnCost(a)?costOf(a):-1)).map(b=>{const c=fnCost(b);return `<tr><td style="padding-left:12px"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a></td><td class="serif">${esc(b.title)}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.on))}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.one))}</td><td class="small">${esc((b.fn.ag||[])[0]||'')}</td><td class="small">${esc(b.act)}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="empty">No fiscal notes for this committee yet.</p>`}</div>
+     ${cjBills.slice().sort((a,b)=>(fnCost(b)?costOf(b):-1)-(fnCost(a)?costOf(a):-1)).map(b=>{const c=fnCost(b);return `<tr><td style="padding-left:12px"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a></td><td class="serif">${esc(b.title)}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.on))}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.one))}</td><td class="small">${esc((b.fn.ag||[])[0]||'')}</td><td class="small">${esc(b.act)}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="empty">No fiscal notes for this committee yet.</p>`}</div>`;
+  P.requests=`${typeof budgetReqHTML==='function'?budgetReqHTML():''}
    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, largest first, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['sel',selName],['all','All']])}</div>
     ${byLeg.length?`<div class="small" style="margin-bottom:12px"><b>Most requested:</b> ${byLeg.slice(0,6).map(([n,x])=>`${esc(n)} (${x.n}, ${money(x.v,true)})`).join(' · ')}</div>`:''}
     ${reqs.length?`<div class="tablewrap"><table class="compact" style="min-width:900px"><thead><tr><th style="padding-left:12px">Requested by</th><th>Request</th><th>Agency</th><th style="text-align:right">Requested</th><th style="text-align:right">Prioritized</th><th style="text-align:right">Appropriated</th></tr></thead><tbody>
-     ${reqs.slice(0,reqAll?400:25).map(r=>`<tr><td style="padding-left:12px;white-space:nowrap">${esc(r.by)}</td><td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub">${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td><td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>
-      <td style="text-align:right">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td><td style="text-align:right">${money(Math.abs(r.pri[0]||0)+Math.abs(r.pri[1]||0))}</td><td style="text-align:right">${money(Math.abs(r.app[0]||0)+Math.abs(r.app[1]||0))}</td></tr>`).join('')}</tbody></table></div>${reqs.length>25&&!reqAll?`<p><button class="btn sm" id="reqMore">Show all ${reqs.length}</button></p>`:''}`:`<p class="empty">No legislator requests posted yet.</p>`}</div>
-   ${talkChart(B)}
+     ${reqs.slice(0,reqAll?400:25).map(r=>`<tr><td style="padding-left:12px;white-space:nowrap">${esc(r.by)}</td><td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub${r.txt.length>180?' hasfull" tabindex="0" data-full="'+esc(r.txt)+'"':'"'}>${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td><td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>
+      <td style="text-align:right">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td><td style="text-align:right">${money(Math.abs(r.pri[0]||0)+Math.abs(r.pri[1]||0))}</td><td style="text-align:right">${money(Math.abs(r.app[0]||0)+Math.abs(r.app[1]||0))}</td></tr>`).join('')}</tbody></table></div>${reqs.length>25&&!reqAll?`<p><button class="btn sm" id="reqMore">Show all ${reqs.length}</button></p>`:''}`:`<p class="empty">No legislator requests posted yet.</p>`}</div>`;
+  P.meetings=`${talkChart(B)}
    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>What’s being said in appropriations meetings</h2><p class="desc">From the meeting recordings: the official timeline notes about requests, and each moment someone mentions a dollar amount. Captions are automatic and can be wrong; follow the time link to hear it.</p></div>${seg('mtg',[['sel',selName],['all','All subcommittees']])}</div>
     ${mtgs.length?mtgs.map((m,i)=>{const d=pd(m.date);return `<details class="disc" ${i===0?'open':''}><summary style="list-style:none;cursor:pointer"><div class="kicker">${d?fmtLong(d):''}</div><h4>${esc(m.name)}</h4><span class="small muted">${m.rfa.length?plural(m.rfa.length,'request')+' presented · ':''}${plural(m.money.length,'money mention')}</span></summary>
       <div class="links"><a href="${esc(m.page)}" target="_blank" rel="noopener">Meeting page</a>${m.agenda?`<a href="${esc(m.agenda)}" target="_blank" rel="noopener">Agenda</a>`:''}</div>
       ${m.rfa.length?`<div class="agbox" style="margin-bottom:10px"><b>Requests for appropriation</b><ul>${m.rfa.map(x=>`<li><a class="ts" href="${esc(vAtM(m,x[2],x[0]))}" target="_blank" rel="noopener">${clock(x[0])}</a><span>${esc(x[1])}</span></li>`).join('')}</ul></div>`:''}
-      ${m.money.slice(0,40).map(x=>`<div class="money-moment"><a class="ts" href="${esc(vAtM(m,x[3],x[0]))}" target="_blank" rel="noopener">${clock(x[0])}</a><div>${x[1]?`<div class="ctx">${esc(x[1])}</div>`:''}${esc(x[2]).replace(/(\$\s?\d[\d,.]*\s*(?:million|billion|thousand)?|\b\d[\d,.]*\s+(?:million|billion)\b)/gi,'<mark>$1</mark>')}</div></div>`).join('')}</details>`}).join(''):`<p class="empty">No appropriations meeting transcripts yet.</p>`}</div>`);
+      ${m.money.slice(0,40).map(x=>`<div class="money-moment"><a class="ts" href="${esc(vAtM(m,x[3],x[0]))}" target="_blank" rel="noopener">${clock(x[0])}</a><div>${x[1]?`<div class="ctx">${esc(x[1])}</div>`:''}${esc(x[2]).replace(/(\$\s?\d[\d,.]*\s*(?:million|billion|thousand)?|\b\d[\d,.]*\s+(?:million|billion)\b)/gi,'<mark>$1</mark>')}</div></div>`).join('')}</details>`}).join(''):`<p class="empty">No appropriations meeting transcripts yet.</p>`}</div>`;
+  return shell('budget',nav+(P[T]||P.overview));
 }
+let BUDTAB='overview';
 
 
 // How much money talk each subcommittee's meetings have had lately, from the recordings.
@@ -1113,6 +1117,7 @@ function bind(){
   app.querySelectorAll('[data-leghouse]').forEach(b=>b.onclick=()=>{legHouse=b.dataset.leghouse;route(true)});
   app.querySelectorAll('[data-sponsor]').forEach(a=>a.onclick=()=>{FLT.sponsor=a.dataset.sponsor;FLT.show='all';PAGE=1;saveFLT()});
   on('reqMore','onclick',()=>{reqAll=true;route(true)});
+  app.querySelectorAll('[data-budtab]').forEach(b=>b.onclick=()=>{BUDTAB=b.dataset.budtab;route(true);scrollTo(0,0)});
   app.querySelectorAll('[data-bud]').forEach(b=>b.onclick=()=>{const [k,v]=b.dataset.bud.split('|');budView[k]=v;route(true)});
   on('budCom','onchange',e=>{budView.com=e.target.value;reqAll=false;e.target.blur();route()});
   app.querySelectorAll('.pie-wrap').forEach(w=>{w.querySelectorAll('.li').forEach(li=>{li.onmouseenter=()=>{const p=w.querySelector(`path[data-i="${li.dataset.i}"]`);p&&p.classList.add('hl')};li.onmouseleave=()=>w.querySelectorAll('path.hl').forEach(p=>p.classList.remove('hl'))})});
