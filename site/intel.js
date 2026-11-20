@@ -57,9 +57,9 @@ function runBefore(b){
 
 // ---------- tags on the Bills table
 function billExtraTags(b){const t=[];
-  if(floorMoves(b,3).length)t.push(`<span class="pill warn" title="${esc(floorMoves(b,3).map(h=>h[1]).join('; '))}">${esc(floorWords(floorMoves(b,3)[0][1]))}</span>`);
+  if(floorMoves(b,3).length)t.push(`<a class="pill warn tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|hearings|floor" data-full="${esc('Floor calendar, last 3 days:\n'+floorMoves(b,3).map(h=>`• ${h[1]} (${fmtMD(pd(h[0]))})`).join('\n')+'\n\nClick to open the floor calendar for this bill.')}">${esc(floorWords(floorMoves(b,3)[0][1]))}</a>`);
   if(ME&&subWatchHits(b).length)t.push('<span class="pill warn">Sub touches watched code</span>');
-  if(!b.file&&(collisions()[b.key]||[]).some(x=>x.nd))t.push('<span class="pill ink" title="Another bill amends the same code section with different wording">Collision</span>');
+  if(!b.file&&(collisions()[b.key]||[]).some(x=>x.nd))t.push(`<a class="pill ink tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|text|collisions" data-full="${esc(collTip(b))}">${ic('merge')}Collision</a>`);
   return t.join('');
 }
 
@@ -78,6 +78,7 @@ const BILL_TABS=[['overview','Overview'],['hearings','Hearings and debate'],['te
 function billTabsNav(b,secs){
   if(b.file)return '';
   if(BILLTAB_KEY!==b.key){BILLTAB_KEY=b.key;BILLTAB='overview'}
+  if(PENDJUMP&&PENDJUMP.key===b.key)BILLTAB=PENDJUMP.tab;
   const m=(loadMedia()||{bills:{}}).bills[b.num]&&MEDIA.session===b.session?MEDIA.bills[b.num]:null;
   const label=k=>{const l=BILL_TABS.find(t=>t[0]===k)[1];return k==='media'&&m?`${l} (${m.items.length})`:l};
   const jump=secs&&secs.length?`<label class="sr" for="billJump">Jump to a section</label><select id="billJump" class="billjump"><option value="">Jump to…</option>${BILL_TABS.map(([k])=>{const ss=secs.filter(x=>x[0]===k);return ss.length?`<optgroup label="${esc(label(k))}">${ss.map(x=>`<option value="${k}|${x[1]}">${esc(x[2])}</option>`).join('')}</optgroup>`:''}).join('')}</select>`:'';
@@ -144,7 +145,26 @@ function mavHTML(){
 }
 
 
+// Hover text for the tags: what the collision is, or what was said about the Attorney General.
+function collTip(b){
+  const c=(collisions()[b.key]||[]).filter(x=>x.nd).sort((x,y)=>y.nd-x.nd);
+  return `Amends the same Utah Code as ${plural(c.length,'other bill')}, with different wording:\n`+c.slice(0,5).map(x=>`• ${shortNum(x.other.num)}, ${x.other.title}: Section ${x.sec}, different in ${x.diff.slice(0,3).join(', ')}${x.nd>x.diff.length?' and more':''}`).join('\n')+(c.length>5?`\n• …and ${c.length-5} more`:'')+'\n\nUsually needs a coordination clause. Click to see every collision.';
+}
+function agTip(b){
+  const q=(b.tx||[]).flatMap(t=>(t.ag||[]).map(a=>({t,a}))).sort((x,y)=>(y.t.date||'').localeCompare(x.t.date||''));
+  if(!q.length)return `The Attorney General came up ${plural(b.agm||0,'time')} in hearing or floor transcripts. Click to read them.`;
+  const cut=s=>{s=String(s).replace(/\s+/g,' ').trim();return s.length>190?s.slice(0,190)+'…':s};
+  return `The Attorney General came up ${plural(q.length,'time')}:\n`+q.slice(0,3).map(({t,a})=>`• “${cut(a[1])}”\n   ${t.label}${t.date?', '+fmtMD(pd(t.date)):''}`).join('\n')+(q.length>3?`\n• …and ${q.length-3} more`:'')+'\n\nClick to read them with the video.';
+}
+// Clicking a tag opens the bill on the right tab and scrolls to that section.
+let PENDJUMP=null;
+document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('[data-jump]');if(!a)return;const [key,tab,id]=a.dataset.jump.split('|');PENDJUMP={key,tab,id};
+  if(location.hash===a.getAttribute('href')){e.preventDefault();BILLTAB=tab;route()}},true);
 function billExtraBind(){
+  if(PENDJUMP&&location.hash.startsWith('#bill-')){const j=PENDJUMP;const el=document.getElementById('bs-'+j.id);if(el){PENDJUMP=null;
+    // Scroll a few times: data that finishes loading re-draws the page and can put the scroll back.
+    const go=(flash)=>{const e2=document.getElementById('bs-'+j.id);if(!e2||!location.hash.startsWith('#bill-'))return;const t=j.id==='discussed'&&e2.querySelector('.disc.hasag .agbox')||e2;const r=t.getBoundingClientRect();if(Math.abs(r.top-16)>40)scrollTo(0,scrollY+r.top-16);if(flash){const f=t.closest('.disc')||e2;f.classList.add('flash');setTimeout(()=>f.classList.remove('flash'),1800)}};
+    setTimeout(()=>go(true),60);setTimeout(()=>go(),700);setTimeout(()=>go(),1600)}}
   app.querySelectorAll('[data-billtab]').forEach(b=>b.onclick=()=>{BILLTAB=b.dataset.billtab;route(true)});
   on('billJump','onchange',e=>{const [t,id]=e.target.value.split('|');if(!t)return;e.target.blur();BILLTAB=t;route();
     setTimeout(()=>{const el=document.getElementById('bs-'+id);if(el){el.scrollIntoView({behavior:'smooth',block:'start'});el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1600)}},60)});

@@ -396,7 +396,7 @@ function fiscalCell(b){
 function hearingCell(b){const h=nextHearing(b);if(!h)return '<span class="muted">—</span>';return `<span ${soon(h)?'class="pill new"':''}>${WD[h.d.getDay()].slice(0,3)} ${fmtMD(h.d)}</span><div class="sub">${fmtTime(h.d)}</div>`}
 function tagsFor(b){const t=[];
   if(changedToday(b)) t.push('<span class="pill new">Changed today</span>');
-  if(b.agm) t.push(`<span class="pill solid" title="The Attorney General came up ${b.agm} time${b.agm>1?'s':''} in hearing or floor transcripts">AG mentioned</span>`);
+  if(b.agm) t.push(typeof agTip==='function'?`<a class="pill solid tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|hearings|discussed" data-full="${esc(agTip(b))}">${ic('scale')}AG mentioned</a>`:`<span class="pill solid">AG mentioned</span>`);
   if(b.vd&&b.vd.at&&b.vd.at.slice(0,10)>=ymd(new Date(Date.now()-3*864e5))) t.push('<span class="pill ink">New version</span>');
   if(matchesFor(b).length) t.push('<span class="pill muted">Watch list</span>');
   if(typeof billExtraTags==='function'){const x=billExtraTags(b);if(x)t.push(x)}
@@ -595,7 +595,7 @@ const emFromApi=o=>({...EM_DEFAULT(),...o,bills:(o.bills||[]).map(shortNum).join
 function updateRows(items){
   return `<div class="rows">${items.map(({b,c})=>`<div class="row"><a class="k" href="${billHref(b)}">${esc(billLabel(b))}</a>
    <div class="what">${esc(c[2])}<span class="sub">${esc(b.title)}${b.file?'':' · '+esc(b.sponsor)}</span></div>
-   <div class="r">${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}<span class="pill ${c[1]==='AG mentioned'?'solid':c[1]==='New bill file'?'muted':'new'}">${ic(changeIcon(c[1]))}${esc(c[1])}</span><span class="small muted">${fmtTime(pd(c[0]))}</span></div></div>`).join('')}</div>`;
+   <div class="r">${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${c[1]==='AG mentioned'&&!b.file?`<a class="pill solid tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|hearings|discussed" data-full="${esc(typeof agTip==='function'?agTip(b):c[2])}">${ic('scale')}AG mentioned</a>`:`<span class="pill ${c[1]==='New bill file'?'muted':'new'}">${ic(changeIcon(c[1]))}${esc(c[1])}</span>`}<span class="small muted">${fmtTime(pd(c[0]))}</span></div></div>`).join('')}</div>`;
 }
 function pageUpdates(){
   const S=UI.session; if(!updScope) updScope=ME?'office':'all';
@@ -619,7 +619,7 @@ function pageUpdates(){
     ${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
     <div><div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
      <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
-     ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}${typeof legNewsHTML==='function'?legNewsHTML():''}</div>
+     ${typeof legNewsHTML==='function'?legNewsHTML():''}${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
    </div>`);
 }
 function pageEmail(token){
@@ -819,7 +819,7 @@ let ADMIN=null;
 const FIELD_LABEL={position:'Position',agAction:'AG office action',departments:'Departments',divisions:'Divisions',designations:'Designations',priority:'Office priority',note:'Notes',assignees:'Assigned to'};
 function pageAdmin(){
   if(!isAdmin()) return shell('',`<div class="card"><h2>Admins only</h2></div>`);
-  if(!ADMIN){Promise.all([api('users'),api('requests').catch(()=>({requests:[]}))]).then(([j,r])=>{ADMIN=j;ADMIN.requests=r.requests||[];route(true)}).catch(e=>{ADMIN={error:e.message};route(true)});return shell('admin',`<div class="card"><p>Loading accounts…</p></div>`)}
+  if(!ADMIN){Promise.all([api('users'),api('requests').catch(()=>({requests:[]})),api('invites').catch(()=>({invites:[]}))]).then(([j,r,v])=>{ADMIN=j;ADMIN.requests=r.requests||[];ADMIN.invites=v.invites||[];route(true)}).catch(e=>{ADMIN={error:e.message};route(true)});return shell('admin',`<div class="card"><p>Loading accounts…</p></div>`)}
   if(ADMIN.error) return shell('admin',`<div class="card"><h2>Accounts</h2><p class="desc">${esc(ADMIN.error)}</p></div>`);
   const scopeTxt=p=>p.scope==='all'?'All bills':p.scope==='departments'?esc(p.departments.map(deptName).join(', ')||'No departments'):p.scope==='assigned'?'Assigned to them':`${p.bills.length} chosen bills`;
   const reqs=ADMIN.requests||[];
@@ -827,7 +827,9 @@ function pageAdmin(){
    <div class="tablewrap" style="border:0"><table class="users"><thead><tr><th>Name</th><th>Email</th><th>Section</th><th>Username</th><th>Asked</th><th></th></tr></thead><tbody>
    ${reqs.map(r=>`<tr><td><b>${esc(r.first)} ${esc(r.last)}</b></td><td>${esc(r.email)}</td><td>${esc(sectionName(r.section))}</td><td>${esc(r.username)}</td><td class="small">${fmtLong(new Date(r.created_at))}</td>
     <td style="white-space:nowrap"><button class="btn sm primary" data-approve="${esc(r.id)}">Approve…</button> <button class="btn sm danger" data-deny="${esc(r.id)}">Deny</button></td></tr>`).join('')}</tbody></table></div></div>`:''}
-   <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div><h2>Accounts</h2><p class="desc">Admins see and change everything. For everyone else, choose what they can change, whether they see the office priority and notes, and which bills they can see. By default new accounts can’t see priorities.</p></div><button class="btn primary" id="addUser">Add an account</button></div>
+   <div class="card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div><h2>Accounts</h2><p class="desc">Admins see and change everything. For everyone else, choose what they can change, whether they see the office priority and notes, and which bills they can see. By default new accounts can’t see priorities.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="inviteUser">${ic('mail')}Invite someone</button><button class="btn" id="addUser">Add an account</button></div></div>
+   <p class="small muted" style="margin-top:-4px">“Invite someone” sets their access now and makes an email for you to send. They pick their own username and password from the link and can sign in right away, with no approval step.</p>
+   ${(ADMIN.invites||[]).length?`<div class="invites"><span class="flabel">Invitations waiting to be used</span>${ADMIN.invites.map(v=>`<div class="inv"><span>${ic('mail')}<b>${esc((v.first+' '+v.last).trim())}</b> · ${esc(v.email)}${v.section?' · '+esc(sectionName(v.section)):''} <span class="tiny muted">${v.role==='admin'?'Admin · ':''}sent by ${esc(v.created_by)}, link works until ${fmtMD(new Date(v.expires_at))}</span></span><span style="white-space:nowrap"><button class="btn sm" data-invdraft="${esc(v.token)}">Email again</button> <button class="btn sm danger" data-invrevoke="${esc(v.token)}">Cancel</button></span></div>`).join('')}</div>`:''}
    <div class="tablewrap" style="border:0"><table class="users" style="min-width:760px"><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Can change</th><th>Priority</th><th>Fiscal Hive</th><th>Bills</th><th></th></tr></thead><tbody>
    ${ADMIN.admins.map(a=>`<tr><td><b>${esc(a)}</b></td><td class="muted">—</td><td>Admin</td><td>Everything</td><td>Visible</td><td>Yes</td><td>All bills</td><td class="small muted">Set in Cloudflare</td></tr>`).join('')}
    ${ADMIN.users.map(u=>`<tr style="${u.disabled?'opacity:.55':''}"><td><b>${esc(u.username)}</b>${u.disabled?' <span class="pill muted">Disabled</span>':''}</td><td>${esc(u.name||'—')}<div class="sub">${esc(u.email||'')}${u.section?' · '+esc(sectionName(u.section)):''}</div></td><td>${u.role==='admin'?'Admin':'Member'}</td>
@@ -841,10 +843,14 @@ function pageAdmin(){
 }
 const sectionName=id=>id==='other'?'Other / not listed':divName(id)||id||'';
 function sectionSelect(cur){return `<select id="uSection" style="width:100%"><option value="">—</option>${CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id).map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}<option value="other" ${cur==='other'?'selected':''}>Other / not listed</option></select>`}
-function userForm(u,req){
+function userForm(u,req,inv){
   const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,scope:'all',departments:[],bills:[]};
   if(req&&req.section){const dv=divById(req.section);if(dv){p.scope='departments';p.departments=[dv.dept]}}
   const val=(k)=>esc(u?u[k]||'':req?(k==='username'?req.username:k==='name'?`${req.first} ${req.last}`:k==='email'?req.email:''):'');
+  if(inv)return `<form id="userForm" method="dialog"><h2>${ic('mail')}Invite someone</h2><p class="small muted">Choose what they can see and change now. Next you’ll get an email draft with their sign-up link; they choose their own username and password.</p>
+   <div class="grid2" style="gap:12px;margin:12px 0"><div class="field"><label for="iFirst">First name</label><input id="iFirst" required maxlength="40" style="width:100%"></div><div class="field"><label for="iLast">Last name</label><input id="iLast" maxlength="40" style="width:100%"></div>
+    <div class="field"><label for="uEmail">Email</label><input id="uEmail" type="email" required style="width:100%" placeholder="name@agutah.gov"></div><div class="field"><label for="uSection">Section</label>${sectionSelect('')}</div></div>
+   ${permsHTML(p)}<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button type="button" class="btn" id="userCancel">Cancel</button><button class="btn primary" id="userSave" value="save">Make the invitation</button></div></form>`;
   return `<form id="userForm" method="dialog"><h2>${req?'Approve '+esc(req.first+' '+req.last):u?'Edit '+esc(u.username):'Add an account'}</h2>
    ${req?`<p class="small muted">They chose their own password when they asked. Pick their permissions below; you can change them any time.</p>`:''}
    <div class="grid2" style="gap:12px;margin:12px 0"><div class="field"><label for="uName">Username</label><input id="uName" ${u||req?'readonly':''} value="${val('username')}" required pattern="[a-z0-9._\\-]{2,40}" style="width:100%" placeholder="e.g. jsmith"></div>
@@ -852,7 +858,11 @@ function userForm(u,req){
     <div class="field"><label for="uEmail">Email</label><input id="uEmail" type="email" value="${val('email')}" style="width:100%" ${req?'readonly':''}></div>
     <div class="field"><label for="uSection">Section</label>${sectionSelect(u?u.section:req?req.section:'')}</div>
     ${req?'':`<div class="field"><label for="uPw">${u?'New password (leave blank to keep)':'Starting password'}</label><div style="display:flex;gap:6px"><input id="uPw" type="text" autocomplete="off" ${u?'':'required'} minlength="10" style="flex:1;min-width:0"><button type="button" class="btn sm" id="genPw">Make one</button></div></div>`}</div>
-   <span class="flabel">Role</span><label class="check"><input type="radio" name="uRole" value="member" ${!u||u.role!=='admin'?'checked':''}><span>Member, with the permissions below</span></label><label class="check"><input type="radio" name="uRole" value="admin" ${u&&u.role==='admin'?'checked':''}><span>Admin: sees and changes everything, manages accounts</span></label>
+   ${permsHTML(p,u)}
+   <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button type="button" class="btn" id="userCancel">Cancel</button><button class="btn primary" id="userSave" value="save">Save</button></div></form>`;
+}
+function permsHTML(p,u){
+  return `<span class="flabel">Role</span><label class="check"><input type="radio" name="uRole" value="member" ${!u||u.role!=='admin'?'checked':''}><span>Member, with the permissions below</span></label><label class="check"><input type="radio" name="uRole" value="admin" ${u&&u.role==='admin'?'checked':''}><span>Admin: sees and changes everything, manages accounts</span></label>
    <div id="permBox"><hr style="margin:14px 0"><span class="flabel">Can change</span>
     <label class="check"><input type="checkbox" id="pEdit" ${p.edit?'checked':''}><span>Can edit office information</span></label>
     <div class="daypick" style="margin:4px 0 10px 26px">${Object.entries(FIELD_LABEL).map(([f,l])=>`<label><input type="checkbox" data-pf="${f}" ${p.fields.includes(f)?'checked':''}>${l}</label>`).join('')}</div>
@@ -866,11 +876,10 @@ function userForm(u,req){
     <div class="daypick" style="margin:0 0 6px 26px">${CONFIG.departments.map(d=>`<label><input type="checkbox" data-pd="${d.id}" ${p.departments.includes(d.id)?'checked':''}>${esc(d.name)}</label>`).join('')}</div>
     <label class="check"><input type="radio" name="pScope" value="assigned" ${p.scope==='assigned'?'checked':''}><span>Only bills assigned to them</span></label>
     <label class="check"><input type="radio" name="pScope" value="bills" ${p.scope==='bills'?'checked':''}><span>Only these bills (${esc(sessName(UI.session))})</span></label>
-    <textarea id="pBills" style="min-height:60px;margin-left:26px;width:calc(100% - 26px)" placeholder="HB 20, SB 101">${esc(p.bills.filter(k=>k.startsWith(UI.session+'/')).map(k=>shortNum(k.split('/')[1])).join(', '))}</textarea></div>
-   <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button type="button" class="btn" id="userCancel">Cancel</button><button class="btn primary" id="userSave" value="save">Save</button></div></form>`;
+    <textarea id="pBills" style="min-height:60px;margin-left:26px;width:calc(100% - 26px)" placeholder="HB 20, SB 101">${esc(p.bills.filter(k=>k.startsWith(UI.session+'/')).map(k=>shortNum(k.split('/')[1])).join(', '))}</textarea></div>`;
 }
-function openUserDlg(u,req){
-  const dlg=$('userDlg');dlg.innerHTML=userForm(u,req);dlg.showModal();
+function openUserDlg(u,req,inv){
+  const dlg=$('userDlg');dlg.innerHTML=userForm(u,req,inv);dlg.showModal();
   const sync=()=>{$('permBox').style.display=document.querySelector('input[name=uRole]:checked').value==='admin'?'none':''};sync();
   dlg.querySelectorAll('input[name=uRole]').forEach(r=>r.onchange=sync);
   if($('genPw'))$('genPw').onclick=()=>{const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';$('uPw').value=[...crypto.getRandomValues(new Uint8Array(14))].map(x=>a[x%a.length]).join('')};
@@ -878,6 +887,10 @@ function openUserDlg(u,req){
   $('userForm').onsubmit=async e=>{e.preventDefault();
     const toKey=s=>{const m=s.trim().toUpperCase().replace(/\./g,'').match(/^([A-Z]{2,4})\s*0*(\d{1,4})$/);return m?`${UI.session}/${m[1]}${m[2].padStart(4,'0')}`:null};
     const keepOther=u&&u.perms?u.perms.bills.filter(k=>!k.startsWith(UI.session+'/')):[];
+    const perms={edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,
+        scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]};
+    if(inv){const b={first:$('iFirst').value.trim(),last:$('iLast').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,role:document.querySelector('input[name=uRole]:checked').value,perms};
+      try{const j=await api('invites',b);dlg.close();ADMIN=null;route(true);setTimeout(()=>inviteDraft({...b,token:j.token,expires_at:j.expires}),50)}catch(err){toast(err.message)}return}
     const body={action:req?'approve':'save',id:req?req.id:undefined,username:$('uName').value.trim().toLowerCase(),name:$('uDisp').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,password:$('uPw')?$('uPw').value:'',role:document.querySelector('input[name=uRole]:checked').value,
       perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]}};
@@ -905,8 +918,10 @@ function changesCard(b){
   const items=(vd&&vd.items||[]).map(it=>({it,hit:terms.some(re=>re.test(it[2])||re.test(it[3]))})).sort((a,b)=>b.hit-a.hit);
   const one=({it,hit})=>`<div class="vd ${hit?'hit':''}"><div class="w">${esc(it[0])} · ${it[1]==='add'?'Added':it[1]==='del'?'Removed':'Changed'}${hit?' · <span style="color:var(--link)">matches the watch list</span>':''}</div>${it[2]?`<div class="old">${markTerms(it[2])}</div>`:''}${it[3]?`<div class="new">${markTerms(it[3])}</div>`:''}</div>`;
   const d=vd&&pd(vd.at);
+  const ss=typeof subSummary==='function'?subSummary(b):null;
   return `<div class="changes-card"><div class="kicker">Latest text changes</div><h3>${vd?`${esc(vd.from)} → ${esc(vd.to)}`:esc(cmp[0])}</h3>
-   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">${cmp?`<a class="btn primary" href="${esc(cmp[2])}" target="_blank" rel="noopener">Open the comparison PDF</a>`:''}<span class="small muted" style="align-self:center">${cmp?esc(cmp[0])+(pd(cmp[1])?', '+fmtLong(pd(cmp[1])):''):''}</span></div>
+   ${ss?`<div class="chsum">${ic('spark')}<div><b>What changed</b><p>${ss.html?ss.txt:esc(ss.txt)}</p></div></div>`:''}
+   <div class="chdl">${vd?`<button type="button" class="dlbig" data-chdoc="${esc(b.key)}">${ic('file')}<span><b>Download the changes</b><small>Word document: summary first, then every change with struck and added text</small></span></button>`:''}${cmp?`<a class="dlbig alt" href="${esc(cmp[2])}" target="_blank" rel="noopener">${ic('external')}<span><b>Official comparison PDF</b><small>${esc(cmp[0])}${pd(cmp[1])?', '+fmtLong(pd(cmp[1])):''}</small></span></a>`:''}</div>
    ${vd?`<p class="small muted" style="margin:0 0 6px">${plural(vd.n,'section')} changed${d?' · '+fmtLong(d):''}. Struck text in red, new text in green${terms.length?'; sections with watch-list words come first':''}.</p>${items.slice(0,6).map(one).join('')}${items.length>6?`<details><summary class="small" style="cursor:pointer;color:var(--link);margin-top:8px">Show ${items.length-6} more</summary>${items.slice(6).map(one).join('')}</details>`:''}${vd.n>items.length?`<p class="small muted">Showing ${items.length} of ${vd.n}. The comparison PDF has everything.</p>`:''}`:''}</div>`;
 }
 function discussionSection(b){
@@ -1170,3 +1185,62 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
   document.addEventListener('mouseover',e=>{const el=e.target.closest&&e.target.closest('[data-full]');if(el)show(el);else if(!(e.target.closest&&e.target.closest('.fulltip')))hide()});
   document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('[data-full]');if(el)show(el)});
   document.addEventListener('focusout',hide);addEventListener('scroll',hide,true);addEventListener('hashchange',hide);})();
+
+// The email an admin sends with an invitation link. No email service yet, so it opens as a draft in their mail app.
+function inviteDraft(v){
+  const link=`${location.origin}/login?invite=${v.token}`;
+  const who=(ME.display||ME.user);
+  const subject='Your Deseret Docket account';
+  const body=`Hi ${v.first},\n\nI've set up access for you on Deseret Docket, the office's tracker for bills in the Utah Legislature. Use this link to choose your username and password. Your permissions are already set, so you can start right away:\n\n${link}\n\nThe link works until ${fmtLong(new Date(v.expires_at))} and can be used once.\n\nThanks,\n${who}`;
+  const q=`subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const dlg=$('userDlg');
+  dlg.innerHTML=`<form method="dialog" class="invdraft"><h2>${ic('mail')}Send the invitation to ${esc(v.first)}</h2>
+   <p class="small muted">Email isn’t connected yet, so open this as a draft in your own mail and press send. Anyone with the link can create this account, so send it only to ${esc(v.email)}.</p>
+   <div class="invbtns"><a class="btn primary" href="mailto:${encodeURIComponent(v.email)}?${q}">${ic('mail')}Open draft in Outlook</a><a class="btn" href="https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(v.email)}&${q}" target="_blank" rel="noopener">${ic('external')}Outlook on the web</a><button type="button" class="btn" id="invCopy">Copy the email</button><button type="button" class="btn" id="invLink">Copy just the link</button></div>
+   <div class="invprev"><div><b>To:</b> ${esc(v.email)}</div><div><b>Subject:</b> ${esc(subject)}</div><pre>${esc(body)}</pre></div>
+   <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn" id="invDone">Done</button></div></form>`;
+  if(!dlg.open)dlg.showModal();
+  const copy=(t,m)=>navigator.clipboard.writeText(t).then(()=>toast(m)).catch(()=>toast('Copy didn’t work. Select the text and copy it.'));
+  $('invCopy').onclick=()=>copy(`To: ${v.email}\nSubject: ${subject}\n\n${body}`,'Email copied');
+  $('invLink').onclick=()=>copy(link,'Link copied');
+  $('invDone').onclick=()=>dlg.close();
+}
+document.addEventListener('click',async e=>{
+  const t=e.target.closest&&e.target.closest('#inviteUser,[data-invdraft],[data-invrevoke]');if(!t)return;
+  if(t.id==='inviteUser')return openUserDlg(null,null,true);
+  if(t.dataset.invdraft){const v=(ADMIN.invites||[]).find(x=>x.token===t.dataset.invdraft);if(v)inviteDraft(v);return}
+  if(t.dataset.invrevoke){if(!confirm('Cancel this invitation? The link will stop working.'))return;try{await api('invites',{revoke:t.dataset.invrevoke});ADMIN=null;route(true);toast('Invitation canceled')}catch(err){toast(err.message)}}
+});
+
+// Download a bill's latest text changes as a Word document: summary at the top, then each change.
+function changesDoc(b){
+  const vd=b.vd;if(!vd)return;const ss=typeof subSummary==='function'?subSummary(b):null;
+  const strip=t=>String(t||'').replace(/[\u0001\u0002]/g,'');
+  const sum=ss?(ss.html?ss.txt.replace(/<[^>]+>/g,''):ss.txt):'';
+  const secs=[...new Set(vd.items.map(i=>i[0]))];
+  const hp=vd.items.find(i=>i[0]==='Highlighted provisions');
+  const kind=k=>k==='add'?'Added':k==='del'?'Removed':'Changed';
+  const d=pd(vd.at);
+  const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${esc(shortNum(b.num))} changes</title>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#222}h1{font-size:18pt;color:#002147;margin:0 0 4pt}h2{font-size:13pt;color:#002147;border-bottom:1px solid #c9d3dc;padding-bottom:3pt;margin:18pt 0 6pt}h3{font-size:11pt;margin:12pt 0 4pt;color:#3c5a78}
+.meta{color:#5b6672;font-size:10pt}.box{background:#f3f7fa;border-left:4pt solid #e9d8a6;padding:8pt 10pt;margin:10pt 0}.old{color:#9b1c2e;text-decoration:line-through}.new{color:#1f6b35;text-decoration:underline}.lbl{font-size:9pt;color:#5b6672;text-transform:uppercase;letter-spacing:.5pt}
+p{margin:3pt 0 6pt}.foot{color:#8a929b;font-size:8.5pt;margin-top:24pt;text-align:center}</style></head><body>
+<h1>${esc(shortNum(b.num))}: ${esc(b.title)}</h1>
+<p class="meta">${esc(b.sponsor)} · ${esc(sessName(b.session))} · Changes from <b>${esc(vd.from)}</b> to <b>${esc(vd.to)}</b>${d?' · '+esc(fmtLong(d)):''}</p>
+<h2>Summary of the changes</h2>
+<div class="box"><p><b>${esc(sum||`${vd.to} changes ${plural(vd.n,'section')}.`)}</b></p>
+<p>${plural(vd.n,'section')} changed: ${vd.items.filter(i=>i[1]==='add').length} added, ${vd.items.filter(i=>i[1]==='del').length} removed, ${vd.items.filter(i=>i[1]!=='add'&&i[1]!=='del').length} rewritten.</p>
+<p><b>Where:</b> ${esc(secs.slice(0,30).join('; '))}${secs.length>30?'…':''}</p></div>
+${hp&&hp[3]?`<h3>The bill’s highlighted provisions now say</h3><p>${esc(strip(hp[3]))}</p>`:''}
+<h2>Every change</h2>
+<p class="meta">Removed text is <span class="old">struck through in red</span>; new text is <span class="new">underlined in green</span>.</p>
+${vd.items.map(it=>`<h3>${esc(it[0])} · ${kind(it[1])}</h3>${it[2]?`<p class="lbl">Before</p><p class="old">${esc(strip(it[2]))}</p>`:''}${it[3]?`<p class="lbl">After</p><p class="new">${esc(strip(it[3]))}</p>`:''}`).join('')}
+${vd.n>vd.items.length?`<p class="meta">This shows ${vd.items.length} of ${vd.n} changes. The official comparison PDF has all of them.</p>`:''}
+${b.cmp?`<p>Official comparison: <a href="${esc(b.cmp[2])}">${esc(b.cmp[2])}</a></p>`:''}
+<p>Bill text: <a href="https://le.utah.gov/~${esc(b.session.slice(0,4))}/bills/static/${esc(b.num)}.html">le.utah.gov</a></p>
+<p class="foot">Attorney Work Product / Attorney-Client Communication · Made by Deseret Docket</p></body></html>`;
+  const blob=new Blob(['﻿',html],{type:'application/msword'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${shortNum(b.num).replace(/\s+/g,'')} ${vd.from} to ${vd.to} changes.doc`.replace(/[\\/:*?"<>|]+/g,'-');
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-chdoc]');if(t){const b=BYKEY[t.dataset.chdoc];if(b)changesDoc(b)}});

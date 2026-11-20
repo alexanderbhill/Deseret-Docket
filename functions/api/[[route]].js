@@ -718,6 +718,32 @@ export async function onRequest(context) {
       return json({ ok: true });
     }
 
+    // ---------------- admins: invitations (permissions chosen up front, no approval needed)
+    if (route === "invites") {
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      await ensureUsersTable(db);
+      const now = new Date().toISOString();
+      if (method === "GET") {
+        const rows = (await db.prepare("SELECT token, email, first, last, section, role, created_by, created_at, expires_at FROM invites WHERE used_at IS NULL AND expires_at > ? ORDER BY created_at DESC").bind(now).all()).results || [];
+        return json({ invites: rows });
+      }
+      if (body.revoke) {
+        await db.prepare("DELETE FROM invites WHERE token = ? AND used_at IS NULL").bind(String(body.revoke)).run();
+        return json({ ok: true });
+      }
+      const email = String(body.email || "").trim().toLowerCase().slice(0, 120);
+      const first = String(body.first || "").trim().slice(0, 40), last = String(body.last || "").trim().slice(0, 40);
+      if (!/^[^\s@<>()",;:]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}$/.test(email)) return bad("That email address doesn't look right.");
+      if (!first) return bad("Add their first name.");
+      if (await db.prepare("SELECT 1 FROM users WHERE lower(email) = ?").bind(email).first()) return bad("Someone with that email already has an account.");
+      const role = body.role === "admin" ? "admin" : "member";
+      const token = [...crypto.getRandomValues(new Uint8Array(24))].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const expires = new Date(Date.now() + 14 * 864e5).toISOString();
+      await db.prepare("DELETE FROM invites WHERE lower(email) = ? AND used_at IS NULL").bind(email).run();
+      await db.prepare("INSERT INTO invites (token, email, first, last, section, role, perms, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(token, email, first, last, String(body.section || "").slice(0, 60), role, JSON.stringify(cleanPerms(body.perms || DEFAULT_PERMS)), user.name, now, expires).run();
+      return json({ ok: true, token, expires });
+    }
     // ---------------- admins: account requests from the landing page
     if (route === "requests") {
       if (user.role !== "admin") return bad("Only an admin can do that.", 403);

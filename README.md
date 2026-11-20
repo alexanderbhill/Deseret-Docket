@@ -16,6 +16,9 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   positions, Fiscal Hive, watch list or email alerts. Nothing a guest changes is saved.
 - **Admins** are the logins in the `DOCKET_USERS` secret. They see and change everything and manage the
   other accounts on the **Admin** tab.
+- **Invitations:** on the Admin tab, **Invite someone** sets a person's permissions first and opens an email draft
+  (Outlook or Outlook on the web) with a one-time sign-up link that works for 14 days. They choose their own username and
+  password and are signed in right away, with no approval step.
 - **Members** are accounts an admin makes on the Admin tab. For each one the admin picks what they can
   change, whether they see the office priority and notes, and which bills they see (all, certain
   departments, only bills assigned to them, or a list), and whether they can open the **Fiscal Hive**.
