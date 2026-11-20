@@ -614,6 +614,40 @@ export async function onRequest(context) {
       await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('legfacts', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(facts), user.name, new Date().toISOString()).run();
       return json({ ok: true, facts });
     }
+    // ---------------- Learn: quotes people add to "Who said it?"
+    if (route === "wsquotes") {
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'wsquotes'").first();
+      let quotes = f ? arr(f.v) : [];
+      if (method === "GET") return json({ quotes });
+      if (body.del) {
+        const q = quotes.find((x) => x.at === body.del);
+        if (!q) return bad("That quote is already gone.");
+        if (user.role !== "admin" && q.by !== user.name) return bad("You can only remove quotes you added.", 403);
+        quotes = quotes.filter((x) => x.at !== body.del);
+      } else {
+        const id = String(body.id || ""), q = String(body.q || "").trim().slice(0, 400), ctx = String(body.ctx || "").trim().slice(0, 120);
+        if (!/^[A-Z]{3,10}$/.test(id) || q.split(/\s+/).length < 5) return bad("Pick a legislator and write a quote of at least five words.");
+        if (quotes.filter((x) => x.by === user.name).length >= 50) return bad("You've added 50 quotes. Remove one to add another.");
+        quotes = [...quotes, { id, q, ctx, by: user.name, at: new Date().toISOString() }].slice(-500);
+      }
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('wsquotes', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(quotes), user.name, new Date().toISOString()).run();
+      return json({ ok: true, quotes });
+    }
+    // ---------------- Learn: game leaderboard (each person's best streak per game)
+    if (route === "lgboard") {
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'lgboard'").first();
+      const board = f ? obj(f.v) : {};
+      if (method === "POST") {
+        const game = String(body.game || ""), score = Math.floor(+body.score || 0);
+        if (!/^[a-z]{2,12}$/.test(game) || score < 1 || score > 10000) return bad("That score doesn't look right.");
+        const me = board[user.name] || { s: {} };
+        me.n = user.display || user.name;
+        if (score > (me.s[game] || 0)) { me.s[game] = score; me.at = new Date().toISOString(); }
+        board[user.name] = me;
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('lgboard', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(board), user.name, new Date().toISOString()).run();
+      }
+      return json({ board, me: user.name });
+    }
     if (route === "flags" && method === "POST") {
       if (user.role !== "admin") return bad("Only an admin can do that.", 403);
       await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('wrap_on', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(body.wrap ? "1" : "0", user.name, new Date().toISOString()).run();

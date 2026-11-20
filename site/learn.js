@@ -5,7 +5,40 @@
 let LG={score:0,streak:0,best:lsGet('docket-learn-best',{}),q:null,answered:null};
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const legTitle=l=>`${l.house==='H'?'Rep.':'Sen.'} ${l.name}`;
-function lgBest(k,v){if(v>(LG.best[k]||0)){LG.best[k]=v;lsSet('docket-learn-best',LG.best)}}
+const GAMES=[['faces','🧑‍⚖️ Face match'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['order','🔀 Put it in order'],['terms','📖 Floor vocabulary']];
+function lgBest(k,v){if(v>(LG.best[k]||0)){LG.best[k]=v;lsSet('docket-learn-best',LG.best)}
+  // Post to the shared leaderboard when it beats what the board has for you.
+  if(ME&&LGB&&v>(((LGB.board[ME.user]||{}).s||{})[k]||0))api('lgboard',{game:k,score:v}).then(j=>{LGB=j}).catch(()=>{})}
+// ---------- leaderboard: everyone's best streak in each game (best points for Put it in order)
+let LGB=null, LGBGAME='all';
+function loadBoard(){if(LGB===null&&ME){LGB=undefined;api('lgboard').then(j=>{LGB=j;
+  // Send any personal bests from this browser the board doesn't have yet.
+  const mine=(j.board[j.me]||{}).s||{};for(const [k] of GAMES)if((LG.best[k]||0)>(mine[k]||0))api('lgboard',{game:k,score:LG.best[k]}).then(x=>{LGB=x}).catch(()=>{});
+  if(location.hash.startsWith('#learn'))route(true)}).catch(()=>{LGB={board:{},me:ME.user}})}return LGB}
+function boardHTML(){
+  if(!ME)return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">Sign in to put your scores on the office leaderboard.</p></div>`;
+  const B=loadBoard();if(!B)return '<div class="card"><p>Loading the leaderboard…</p></div>';
+  const g=LGBGAME, rows=Object.entries(B.board).map(([u,x])=>({u,n:x.n||u,v:g==='all'?Object.values(x.s||{}).reduce((a,b)=>a+b,0):((x.s||{})[g]||0),s:x.s||{}})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v||a.n.localeCompare(b.n));
+  let rank=0,prev=null;rows.forEach((r,i)=>{if(r.v!==prev){rank=i+1;prev=r.v}r.rank=rank});
+  const medal=n=>n===1?'🥇':n===2?'🥈':n===3?'🥉':n;
+  return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">Everyone’s best streak in each game (best points for Put it in order). “All games” adds up your bests.</p>
+   <div class="seg lgb-seg" role="group" aria-label="Game">${[['all','All games'],...GAMES].map(([k,l])=>`<button type="button" data-lgb="${k}" class="${g===k?'on':''}">${l}</button>`).join('')}</div>
+   ${rows.length?`<table class="lgb"><thead><tr><th>#</th><th>Player</th>${g==='all'?GAMES.map(([k,l])=>`<th class="n hide-m" title="${esc(l.slice(2).trim())}">${l.split(' ')[0]}</th>`).join(''):''}<th class="n">${g==='all'?'Total':g==='order'?'Points':'Best streak'}</th></tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr class="${r.u===B.me?'me':''}"><td>${medal(r.rank)}</td><td>${esc(r.n)}${r.u===B.me?' <span class="tiny muted">(you)</span>':''}</td>${g==='all'?GAMES.map(([k])=>`<td class="n hide-m">${r.s[k]||''}</td>`).join(''):''}<td class="n"><b>${r.v}</b></td></tr>`).join('')}</tbody></table>`:'<p class="empty">No scores yet. Play a game to get on the board.</p>'}</div>`;
+}
+// ---------- keyboard: 1–4 (or R and D) to answer, Enter, space or → for the next card
+document.addEventListener('keydown',e=>{
+  if(!location.hash.startsWith('#learn')||e.metaKey||e.ctrlKey||e.altKey)return;
+  const el=document.activeElement;if(el&&(['INPUT','TEXTAREA','SELECT'].includes(el.tagName)||el.isContentEditable))return;
+  const card=document.querySelector('#app .card.lg');if(!card)return;
+  const next=$('lgNext');
+  if(next&&(e.key==='Enter'||e.key===' '||e.key==='ArrowRight')){e.preventDefault();next.click();return}
+  const btns=[...card.querySelectorAll('[data-lgface],[data-lgquote],[data-lgparty],[data-lgfact],[data-lgquirk],[data-lgterm],[data-lgorder]')].filter(b=>!b.disabled);
+  if(!btns.length)return;
+  let b=null;const k=e.key.toLowerCase();
+  if(/^[1-9]$/.test(k))b=btns[+k-1];else if(k==='r'||k==='d')b=btns.find(x=>x.dataset.lgparty===k.toUpperCase());
+  if(b){e.preventDefault();b.click()}
+});
+const keyHint=(n=4)=>`<p class="tiny muted lg-keys">Keys: <kbd>1</kbd>–<kbd>${n}</kbd> to answer · <kbd>Enter</kbd> for the next one</p>`;
 
 const STEPS=[
  ['Bill file opened','A legislator asks Legislative Research and General Counsel to draft a bill. Only the title is public at first.','📝'],
@@ -35,16 +68,17 @@ const TERMS=[
  ['Interim','The months between sessions when committees study issues and draft bills.',['The last week of session','A recess during floor debate','A vote by mail']],
 ];
 
-function pageLearn(sub){
+function pageLearn(sub,extra=''){
   if(LG.sub!==(sub||'')){LG.sub=sub||'';LG.q=null;LG.answered=null}
   if(!LEGS)return shell('learn','<div class="card"><p>Loading legislators…</p></div>');
-  const head=`<div class="card learn-hero"><div><h2>Learn the Legislature</h2><p class="desc">Learn the members and how the process works, mostly by looking and playing. Built for interns and anyone new to the session.</p></div>
-   <nav class="learn-nav">${[['','🏠 Start'],['faces','🧑‍⚖️ Face match'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🔁 The do-over'],['process','🛤️ How a bill becomes law'],['order','🔀 Put it in order'],['terms','📖 Floor vocabulary'],['members','👥 Meet the members']].map(([k,l])=>`<a href="#learn${k?'-'+k:''}" class="${(sub||'')===k?'on':''}">${l}</a>`).join('')}</nav></div>`;
+  const head=`<div class="card learn-hero"><div><h2>Learn the Legislature</h2></div>
+   <nav class="learn-nav">${[['','🏠 Start'],['faces','🧑‍⚖️ Face match'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['process','🛤️ How a bill becomes law'],['order','🔀 Put it in order'],['terms','📖 Floor vocabulary'],['members','👥 Members and their bills'],['board','🏆 Leaderboard']].map(([k,l])=>`<a href="#learn${k?'-'+k:''}" class="${(sub||'')===k?'on':''}">${l}</a>`).join('')}</nav></div>`;
   let body='';
-  if(sub==='faces')body=gameFaces();else if(sub==='party')body=gameParty();else if(sub==='redo')body=gameRedo();else if(sub==='facts')body=gameFacts();else if(sub==='quotes')body=gameQuotes();else if(sub==='process')body=guideProcess();else if(sub==='order')body=gameOrder();else if(sub==='terms')body=gameTerms();else if(sub==='members')body=memberGrid();
-  else body=`<div class="learn-grid">${[['faces','🧑‍⚖️','Face match','See a photo, pick the legislator. Then flip it: see a name, pick the face.'],['party','🗳️','Red or blue?','Guess whether each legislator is a Republican or a Democrat from the photo.'],['facts','✨','Fun facts','A clue about someone’s job, hometown or years in office. Who is it?'],['quotes','💬','Who said it?','A real line from a committee hearing. Guess which legislator said it.'],['redo','🔁','The do-over','Laws passed in a rush often come back the next year to be fixed. Can you spot the do-overs?'],['process','🛤️','How a bill becomes law','An illustrated walk from bill file to effective date.'],['order','🔀','Put it in order','Tap the steps of the process in the right order, against the clock.'],['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],['members','👥','Meet the members','Every legislator’s photo, district and committees in one place.']].map(([k,i,t,d])=>`<a class="learn-tile" href="#learn-${k}"><span class="ico">${i}</span><b>${t}</b><span>${d}</span>${LG.best[k]?`<span class="best">Best: ${LG.best[k]}</span>`:''}</a>`).join('')}</div>
+  if(sub==='faces')body=gameFaces();else if(sub==='party')body=gameParty();else if(sub==='redo')body=gameRedo();else if(sub==='facts')body=gameFacts();else if(sub==='quotes')body=gameQuotes();else if(sub==='process')body=guideProcess();else if(sub==='order')body=gameOrder();else if(sub==='terms')body=gameTerms();else if(sub==='members')body=memberGrid();else if(sub==='board')body=boardHTML();
+  if(body.startsWith('<div class="card lg"')&&body.endsWith('</div>'))body=body.slice(0,-6)+(sub==='party'?`<p class="tiny muted lg-keys">Keys: <kbd>R</kbd> or <kbd>D</kbd> to answer · <kbd>Enter</kbd> for the next one</p>`:sub==='order'?`<p class="tiny muted lg-keys">Keys: <kbd>1</kbd>–<kbd>6</kbd> pick the step in that spot · <kbd>Enter</kbd> to play again</p>`:keyHint())+'</div>';
+  if(!body) body=`<div class="learn-grid">${[['faces','🧑‍⚖️','Face match','See a photo, pick the legislator. Then flip it: see a name, pick the face.'],['party','🗳️','Red or blue?','Guess whether each legislator is a Republican or a Democrat from the photo.'],['facts','✨','Fun facts','A clue about someone’s job, hometown or years in office. Who is it?'],['quotes','💬','Who said it?','A real line from a committee hearing. Guess which legislator said it.'],['redo','🏛️','Capitol quirks','Jell-O, the state dinosaur, a 45-day session: odd bills and fun facts from Utah’s Legislature.'],['process','🛤️','How a bill becomes law','An illustrated walk from bill file to effective date.'],['order','🔀','Put it in order','Tap the steps of the process in the right order, against the clock.'],['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],['members','👥','Members and their bills','Every legislator with a photo, ranked by how many bills they’re sponsoring this session.'],['board','🏆','Leaderboard','See who in the office has the longest streak in each game.']].map(([k,i,t,d])=>`<a class="learn-tile" href="#learn-${k}"><span class="ico">${i}</span><b>${t}</b><span>${d}</span>${LG.best[k]?`<span class="best">Best: ${LG.best[k]}</span>`:''}</a>`).join('')}</div>
    <div class="card"><h2>Go deeper: Adam Brown’s Guide to the Utah Legislature</h2><p class="desc">Adam R. Brown is a political science professor at BYU who studies Utah politics, wrote the book <i>Utah Politics and Government</i>, and runs a Utah Legislature internship program. His guide collects data on every session: bill statistics, how legislators vote, ideology scores and rankings. It’s a great next step once you know the faces.</p><a class="btn primary" href="https://adambrown.info/p/research/utah_legislature" target="_blank" rel="noopener">Open Adam Brown’s guide</a></div>`;
-  return shell('learn',head+body);
+  return shell('learn',head+body+extra);
 }
 
 // ---------- face match
@@ -58,8 +92,8 @@ function gameFaces(){
   const {l,opts,rev}=LG.q, a=LG.answered;
   const fb=a?(a===l.id?`<div class="lg-fb ok">Yes! That’s ${esc(legTitle(l))}, ${l.house==='H'?'House':'Senate'} District ${esc(l.district)} (${esc(l.counties||'')}).</div>`:`<div class="lg-fb no">Not quite. That’s ${esc(legTitle(l))}, ${l.house==='H'?'House':'Senate'} District ${esc(l.district)}.</div>`):'';
   return `<div class="card lg"><div class="lg-top"><h2>${rev?'Which one is…':'Who is this?'}</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.faces||0}</b></div></div>
-   ${rev?`<p class="lg-name">${esc(legTitle(l))}</p><div class="lg-faces">${opts.map(o=>`<button class="lg-face ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgface="${esc(o.id)}" ${a?'disabled':''} aria-label="Option"><img src="${esc(legPhoto(o))}" alt="" loading="lazy">${a?`<span>${esc(o.name)}</span>`:''}</button>`).join('')}</div>`
-   :`<div class="lg-photo"><img src="${esc(legPhoto(l))}" alt="Photo of a legislator"></div><div class="lg-opts">${opts.map(o=>`<button class="btn lg-opt ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgface="${esc(o.id)}" ${a?'disabled':''}>${esc(legTitle(o))}</button>`).join('')}</div>`}
+   ${rev?`<p class="lg-name">${esc(legTitle(l))}</p><div class="lg-faces">${opts.map((o,i)=>`<button class="lg-face ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgface="${esc(o.id)}" ${a?'disabled':''} aria-label="Option ${i+1}"><span class="kn">${i+1}</span><img src="${esc(legPhoto(o))}" alt="" loading="lazy">${a?`<span>${esc(o.name)}</span>`:''}</button>`).join('')}</div>`
+   :`<div class="lg-photo"><img src="${esc(legPhoto(l))}" alt="Photo of a legislator"></div><div class="lg-opts">${opts.map((o,i)=>`<button class="btn lg-opt ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgface="${esc(o.id)}" ${a?'disabled':''}><span class="kn">${i+1}</span>${esc(legTitle(o))}</button>`).join('')}</div>`}
    ${fb}${a?'<p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>':''}</div>`;
 }
 
@@ -69,7 +103,7 @@ function gameParty(){
   const {l}=LG.q,a=LG.answered;
   return `<div class="card lg"><div class="lg-top"><h2>Republican or Democrat?</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.party||0}</b></div></div>
    <div class="lg-photo"><img src="${esc(legPhoto(l))}" alt="Photo of a legislator"></div>
-   <div class="lg-opts"><button class="btn lg-opt party-btn r ${a?(l.party==='R'?'right':a==='R'?'wrong':''):''}" data-lgparty="R" ${a?'disabled':''}>Republican</button><button class="btn lg-opt party-btn d ${a?(l.party==='D'?'right':a==='D'?'wrong':''):''}" data-lgparty="D" ${a?'disabled':''}>Democrat</button></div>
+   <div class="lg-opts"><button class="btn lg-opt party-btn r ${a?(l.party==='R'?'right':a==='R'?'wrong':''):''}" data-lgparty="R" ${a?'disabled':''}><span class="kn">R</span>Republican</button><button class="btn lg-opt party-btn d ${a?(l.party==='D'?'right':a==='D'?'wrong':''):''}" data-lgparty="D" ${a?'disabled':''}><span class="kn">D</span>Democrat</button></div>
    ${a?`<div class="lg-fb ${a===l.party?'ok':'no'}">${a===l.party?'Right!':'Not this time.'} ${esc(legTitle(l))} is a ${l.party==='R'?'Republican':'Democrat'} representing ${l.house==='H'?'House':'Senate'} District ${esc(l.district)} (${esc(l.counties||'')}).</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}</div>`;
 }
 // ---------- fun facts (job, hometown counties, years in office, committees, and facts an admin added)
@@ -92,87 +126,103 @@ function gameFacts(){
   const {l,fact,opts}=LG.q,a=LG.answered;
   return `<div class="card lg"><div class="lg-top"><h2>Who is it?</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.facts||0}</b></div></div>
    <blockquote class="lg-quote">✨ ${esc(fact[0])}</blockquote>
-   <div class="lg-faces">${opts.map(o=>`<button class="lg-face ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgfact="${esc(o.id)}" ${a?'disabled':''}><img src="${esc(legPhoto(o))}" alt="" loading="lazy"><span>${esc(legTitle(o))}</span></button>`).join('')}</div>
+   <div class="lg-faces">${opts.map((o,i)=>`<button class="lg-face ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgfact="${esc(o.id)}" ${a?'disabled':''}><span class="kn">${i+1}</span><img src="${esc(legPhoto(o))}" alt="" loading="lazy"><span>${esc(legTitle(o))}</span></button>`).join('')}</div>
    ${a?`<div class="lg-fb ${a===l.id?'ok':'no'}">${a===l.id?'Right!':'Not quite.'} It’s ${esc(legTitle(l))}. ${esc(fact[1])}</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}
    ${isAdmin()?`<details class="small" style="margin-top:12px"><summary>Add a fun fact about a legislator</summary><form id="factForm" class="filters" style="margin-top:8px"><div class="field"><label for="factLeg">Legislator</label><select id="factLeg">${LEGS.slice().sort((x,y)=>x.full.localeCompare(y.full)).map(o=>`<option value="${o.id}">${esc(o.full)}</option>`).join('')}</select></div><div class="field grow"><label for="factTxt">Fact (write it about them, e.g. “She ran the Boston Marathon.”)</label><input id="factTxt" maxlength="200"></div><button class="btn">Add</button></form></details>`:''}</div>`;
 }
 
-// ---------- the do-over: bills that come back to fix last year's law
+// ---------- Capitol quirks: fun facts, odd bills and how Utah's short session compares
 const REDO_QUOTES=[
  ['“In the legislature, promptitude of decision is oftener an evil than a benefit.”','Alexander Hamilton, Federalist No. 70 (1788)',''],
  ['“It appears that the act was conceived and passed in haste, on March 9, 1961, in the compulsory closing hours of an overtaxed legislature, producing an unconstitutional pregnancy, resulting in a birth in which its legislative pains could not be anaesthetized by any proper judicial ministration.”','Utah Supreme Court (1962)','https://law.justia.com/cases/utah/supreme-court/1962/9697-0.html'],
 ];
-const REDO_TRIVIA=[
- ['A law passed last year cites the wrong code section. How does it usually get fixed?','A cleanup bill the next session',['The governor edits it','It fixes itself on the effective date','The court rewrites it']],
- ['Two bills passed the same year change the same code section in different ways. What is supposed to reconcile them?','A coordination clause',['A coin flip','Whichever was signed last wins','The Rules Committee']],
- ['A new program was created with a sunset date and nobody acted before it arrived. What happens?','The program ends unless a new bill extends it',['It continues forever','It moves to the next session automatically','The governor decides']],
- ['Why do so many mistakes slip into bills passed on the last night?','Hundreds of bills get final votes in a few hours before the 45-day deadline',['Legislators are on vacation','Bills skip committee entirely','The text isn’t public']],
- ['A court strikes down part of a law. What usually comes next?','The Legislature passes a revised version',['The law is gone for good','The court passes a new law','Nothing changes']],
- ['What is a bill that only fixes errors, outdated references and typos in existing law often called?','A technical corrections bill',['A sine die bill','A concurrent resolution','A veto override']],
+// [question, answer, wrong answers, what to know, source link, show the quotes?]
+const QUIRKS=[
+ ['Utah’s general session lasts 45 days. In 2025, which was the only other state with a regular session that short?','Virginia',['Texas','California','Montana'],'Most legislatures meet for four months or more, and some meet all year. Only 11 states put no limit on session length at all. A short session packs hundreds of final votes into the last few nights, which is when mistakes slip in.','',1],
+ ['Before Utah settled on a 45-day session in the early 1980s, what did it have?','A 60-day session one year and a 20-day budget session the next',['A 90-day session every year','No time limit','A 10-day session'],'The 45-day general session replaced the old pattern. Even then, people worried that a short session forces lawmakers to rush.','',1],
+ ['In 1962, the Utah Supreme Court looked at an act passed in the “compulsory closing hours” of the 1961 session. What did it find?','It was unconstitutional',['It was the best law of the year','It had never been voted on','It belonged to another state'],'The court blamed the haste of the last night of session. Its full sentence is one of the most colorful lines in a Utah opinion (see below).','https://law.justia.com/cases/utah/supreme-court/1962/9697-0.html',1],
+ ['Texas’s legislature meets for how long?','140 days, every other year',['45 days a year','All year round','Two weeks a year'],'A few states still meet only every other year. Utah meets every year, but for fewer days than almost anyone.','',1],
+ ['In 2001, the Utah Senate passed a resolution recognizing which food as “a favorite snack food of Utah”?','Jell-O',['Fry sauce','Funeral potatoes','Snelgrove’s ice cream'],'S.R. 5 followed a BYU student campaign with more than 14,000 signatures. During debate a few senators joked that the state snack should come from Utah, like Snelgrove’s ice cream.','https://le.utah.gov/~2001/bills/sbillenr/SR0005.pdf'],
+ ['Who talked Sen. Curt Bramble into sponsoring the 2018 bill that made the Utahraptor the state dinosaur?','A 10-year-old boy',['A museum lobbyist','The governor','A paleontology professor'],'Kenyon Roberts first wanted the Utahraptor to replace the Allosaurus as the state fossil. The compromise kept the Allosaurus and added a brand-new symbol: state dinosaur.','https://onlinelibrary.utah.gov/state-symbol/dinosaur/'],
+ ['The bill making the Gila monster Utah’s state reptile in 2019 was pushed by whom?','Students at Lava Ridge Intermediate School in Santa Clara',['A reptile breeders’ group','The Division of Wildlife Resources','A Utah Jazz player'],'H.B. 144 passed the Senate unanimously in the closing minutes of the 2019 session. It was the last thing the Legislature did that year.','https://www.stgeorgeutah.com/news/archive/2019/03/18/lgl19-jmr-lava-ridge-students-persuade-lawmakers-to-make-gila-monster-utahs-state-reptile/'],
+ ['In 2011, Utah named an official state firearm. Which one?','The Browning M1911 pistol',['The Winchester rifle','The Colt Peacemaker','The Remington shotgun'],'John Browning was born in Ogden. Utah is often credited as the first state to name an official firearm.','https://sltrib.com/news/politics/2019/01/19/utahs-state-reptile-gila'],
+ ['Utah’s official state cooking pot is the…','Dutch oven',['Crock-Pot','Cast-iron skillet','Pressure cooker'],'The Legislature named it in 1997. It sits in the same section of code as the state bird (the California gull) and the state animal (the elk).',''],
+ ['A Daybreak Elementary-backed bill to name a state dog fell short. Which breed was it?','Golden retriever',['Border collie','German shepherd','Labrador retriever'],'Student-backed state symbols are a session tradition, but not all of them make it.','https://sltrib.com/news/politics/2019/01/19/utahs-state-reptile-gila'],
+ ['Which work of land art in the Great Salt Lake became Utah’s state work of art in 2016?','The Spiral Jetty',['Sun Tunnels','The Tree of Utah','Gilgal Garden'],'H.B. 134 (2016) designated it. Robert Smithson built the 1,500-foot coil of rock in 1970.','https://le.utah.gov/~2016/bills/hbillint/HB0134.pdf'],
+ ['What was the very first state symbol the Utah Legislature adopted, on April 3, 1896?','The Great Seal',['The beehive','The sego lily','The state flag'],'It came in the Legislature’s first regular session after statehood. The beehive emblem wasn’t made official until 1959.',''],
+ ['Utah adopted a new state flag in 2023. About how many designs did people submit?','More than 7,000',['About 50','About 400','More than 100,000'],'An earlier bill for a new flag in 2019 didn’t make it out of the Legislature.',''],
+ ['In 2026, a lawmaker proposed limiting how many bills each legislator could introduce. What happened?','It went nowhere, and lawmakers introduced a record number of bills',['It passed unanimously','The governor vetoed it','It was struck down in court'],'The governor had even endorsed the idea in his State of the State address.','https://www.fox13now.com/news/politics/2026-utah-legislature-miscellaneous'],
+ ['In the final hour of the 2018 session, the House raced through a bill lowering the penalty for keeping which animals in captivity?','Raccoons and coyotes',['Pet skunks','Bison','Gila monsters'],'Late-night bills often pass with little introduction and no debate.','https://www.ksl.com/article/46278350'],
+ ['A law passed last year cites the wrong section of code. How does it usually get fixed?','A cleanup bill the next session',['The governor edits it','It fixes itself on the effective date','A court rewrites it'],'Bills that only fix errors, outdated references and typos are often called technical corrections bills. Many of them trace back to the last-night rush.',''],
 ];
-function redoRounds(){
-  // Current-session bills that change code a law from an earlier session just changed.
-  const H=typeof loadHist==='function'?loadHist():null;if(!H)return null;const S=UI.session;
-  const laws={};for(const [ses,bills] of Object.entries(H)){if(ses>=S||ses[0]==='_')continue;for(const r of Object.values(bills)){if(r.stage!=='Became law')continue;for(const sec of r.secs)(laws[sec]=laws[sec]||[]).push({ses,r})}}
-  const pool=(BILLS[S]||[]).filter(b=>!b.file&&b.secs.length);if(!pool.length||!Object.keys(laws).length)return [];
-  return pool.map(b=>{const hit=b.secs.flatMap(sec=>(laws[sec]||[]).map(x=>({...x,sec})));return {b,hit}});
+// A shuffled deck per game, so nothing repeats until every question has been seen.
+function deckNext(key,n){
+  LG.decks=LG.decks||{};let d=LG.decks[key];
+  if(!d||!d.left.length){let left=shuffle([...Array(n).keys()]);if(d&&d.last!=null&&left[0]===d.last&&n>1)left.push(left.shift());d={left,last:null};LG.decks[key]=d}
+  d.last=d.left.shift();return d.last;
 }
 function gameRedo(){
+  if(!LG.q||LG.q.kind!=='quirk'){const t=QUIRKS[deckNext('quirks',QUIRKS.length)];LG.q={kind:'quirk',t,opts:shuffle([t[1],...t[2]])};LG.answered=null}
+  const {t,opts}=LG.q,a=LG.answered,ok=a===t[1];
   const quotes=`<div class="redo-q">${REDO_QUOTES.map(q=>`<figure><blockquote>${esc(q[0])}</blockquote><figcaption>${q[2]?`<a href="${q[2]}" target="_blank" rel="noopener">${esc(q[1])}</a>`:esc(q[1])}</figcaption></figure>`).join('')}</div>`;
-  const rounds=redoRounds();
-  if(rounds===null)return '<div class="card"><p>Loading…</p></div>';
-  const yes=rounds.filter(x=>x.hit.length), no=rounds.filter(x=>!x.hit.length);
-  const live=yes.length>=3&&no.length>=3;
-  if(!LG.q){
-    if(live&&Math.random()<.65){const pick=Math.random()<.5?yes:no;const x=pick[Math.floor(Math.random()*pick.length)];LG.q={kind:'bill',...x}}
-    else{const t=REDO_TRIVIA[Math.floor(Math.random()*REDO_TRIVIA.length)];LG.q={kind:'trivia',t,opts:shuffle([t[1],...t[2]])}}
-    LG.answered=null}
-  const q=LG.q,a=LG.answered;let body;
-  if(q.kind==='bill'){const is=q.hit.length>0;const ex=q.hit.slice(0,2);
-    body=`<p class="lg-name" style="font-size:22px">${esc(shortNum(q.b.num))}: ${esc(q.b.title)}</p><p class="small muted" style="text-align:center">Does this bill go back and change a law passed in the last few years?</p>
-     <div class="lg-opts"><button class="btn lg-opt ${a?(is?'right':a==='y'?'wrong':''):''}" data-lgredo="y" ${a?'disabled':''}>Yes, it’s a do-over</button><button class="btn lg-opt ${a?(!is?'right':a==='n'?'wrong':''):''}" data-lgredo="n" ${a?'disabled':''}>No, it’s new ground</button></div>
-     ${a?`<div class="lg-fb ${(a==='y')===is?'ok':'no'}">${(a==='y')===is?'Right!':'Not quite.'} ${is?`It changes Section ${esc(ex[0].sec)}, which ${esc(shortNum(ex[0].r.n))} (${esc(ex[0].ses.slice(0,4))}) also changed${ex[1]&&ex[1].r.n!==ex[0].r.n?`, along with ${esc(shortNum(ex[1].r.n))} (${esc(ex[1].ses.slice(0,4))})`:''}.`:'None of the code it changes was changed by a law in the last few sessions.'} <a href="${billHref(q.b)}">Open the bill</a></div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}`}
-  else{const {t,opts}=q;
-    body=`<p class="lg-name" style="font-size:21px">${esc(t[0])}</p><div class="lg-opts col">${opts.map(o=>`<button class="btn lg-opt ${a?(o===t[1]?'right':o===a?'wrong':''):''}" data-lgredot="${esc(o)}" ${a?'disabled':''}>${esc(o)}</button>`).join('')}</div>
-     ${a?`<div class="lg-fb ${a===t[1]?'ok':'no'}">${a===t[1]?'Right!':'Not quite.'} ${esc(t[1])}.</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}`}
-  const stat=yes.length?`<p class="small muted" style="text-align:center">${plural(yes.length,'bill')} this session revisit code that a law changed in the last few years.</p>`:'';
-  return `<div class="card lg"><div class="lg-top"><h2>The do-over</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.redo||0}</b></div></div>
-   <p class="desc">Laws passed in a hurry, especially in the final hours of a session, often come back the next year to be fixed: a wrong cross-reference, a missed coordination clause, a sunset nobody remembered. ${live?'Some rounds use real bills: guess whether each one goes back to change a recent law.':'Real-bill rounds unlock once earlier sessions finish loading.'}</p>
-   ${quotes}${body}${stat}</div>`;
+  const seen=QUIRKS.length-((LG.decks.quirks||{left:[]}).left.length);
+  return `<div class="card lg"><div class="lg-top"><h2>Capitol quirks</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.redo||0}</b></div></div>
+   <p class="lg-name" style="font-size:21px">${esc(t[0])}</p><div class="lg-opts col">${opts.map((o,i)=>`<button class="btn lg-opt ${a?(o===t[1]?'right':o===a?'wrong':''):''}" data-lgquirk="${esc(o)}" ${a?'disabled':''}><span class="kn">${i+1}</span>${esc(o)}</button>`).join('')}</div>
+   ${a?`<div class="lg-fb ${ok?'ok':'no'}"><b>${ok?'Right!':'Not quite.'} ${esc(t[1])}.</b> ${esc(t[3])}${t[4]?` <a href="${t[4]}" target="_blank" rel="noopener">Source</a>`:''}</div>${t[5]?quotes:''}<p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}
+   <p class="small muted" style="text-align:center">Question ${seen} of ${QUIRKS.length}. You won’t see one twice until you’ve seen them all.</p></div>`;
 }
 
-// ---------- who said it (presenter quotes from hearing transcripts)
-let QUOTES=null;
+// ---------- who said it (presenter quotes from hearing transcripts, plus quotes people add)
+let QUOTES=null, WSQ=null;
+function loadWSQ(){if(WSQ===null){WSQ=[];if(ME)api('wsquotes').then(j=>{WSQ=j.quotes||[];QUOTES=null;route(true)}).catch(()=>{})}return WSQ}
+// A quote is guessable when it names something: a bill, a committee, a place, a number.
+const RECOG=/\b(this bill|the bill|bill (?:does|would|will)|committee|district|county|city|utah|salt lake|provo|ogden|st\.? george|logan|school|university|police|court|water|lake|tax|code|section|division|department|[0-9]{2,})\b/i;
 function loadQuotes(){
   if(QUOTES!==null)return;QUOTES=undefined;
-  const S=INDEX.sessions.find(s=>s.txFiles>0);if(!S){QUOTES=[];return}
-  const go=async()=>{if(!BILLS[S.id])await loadSession(S.id);const k=Math.floor(Math.random()*S.txFiles);const chunk=await loadTx(S.id,k);const out=[];
+  const added=()=>loadWSQ().map(x=>({q:x.q,l:legById(x.id),ctx:x.ctx,by:x.by,mine:x.by===(ME&&ME.user),qid:x.at})).filter(x=>x.l);
+  const S=INDEX.sessions.find(s=>s.txFiles>0);if(!S){QUOTES=shuffle(added());return}
+  const go=async()=>{if(!BILLS[S.id])await loadSession(S.id);const out=[];
+    for(const k of shuffle([...Array(S.txFiles).keys()]).slice(0,2)){const chunk=await loadTx(S.id,k);
     for(const b of BILLS[S.id].filter(x=>x.txc===k))for(const t of b.tx){const n=(t.notes||[]).find(x=>/presented the bill/i.test(x[2]));if(!n)continue;
       const m=n[2].match(/^(Rep|Sen)\.\s+(.+?)\s+presented/);if(!m)continue;const last=m[2].split(/\s+/).pop().toLowerCase();
       const l=LEGS.find(x=>(x.house==='H')===(m[1]==='Rep')&&(x.full||'').toLowerCase().startsWith(last+','));if(!l)continue;
-      const lines=((chunk[b.num]||{})[t.key]||[]).filter(x=>x[0]>=n[0]-2&&x[0]<=n[0]+75);
+      const lines=((chunk[b.num]||{})[t.key]||[]).filter(x=>x[0]>=n[0]+4&&x[0]<=n[0]+120);
       let txt=lines.map(x=>x[1]).join(' ').replace(/\b(uh|um|uh,|um,)\b,?\s*/gi,'').replace(/\s+/g,' ');
-      txt=txt.replace(/^(.*?(chair|committee|members)[^.]*\.\s*)/i,'');const sents=txt.match(/[^.?!]+[.?!]/g)||[];
-      const q=sents.filter(x=>{const w=x.trim().split(/\s+/).length;return w>=8&&w<=40&&!/thank you|good to be here|mr\. chair|madam chair/i.test(x)}).slice(0,2).join(' ').trim();
-      if(q.split(/\s+/).length>=10)out.push({q,l,b,t})}
-    QUOTES=shuffle(out);route(true)};
-  go().catch(()=>{QUOTES=[];route(true)});
+      txt=txt.replace(/^(.*?(chair|committee|members)[^.]*\.\s*)/i,'');const sents=(txt.match(/[^.?!]+[.?!]/g)||[]).map(x=>x.trim());
+      const good=sents.filter(x=>{const w=x.split(/\s+/).length;return w>=8&&w<=40&&!/thank you|good to be here|mr\.? chair|madam chair|motion|favorabl|recommend|sorry|looking for|questions?\b|seeing none|any discussion|public comment|the floor|i'?m (?:here|joined)|with me today|turn (?:the time|it) over/i.test(x)});
+      // Keep only quotes that mention something recognizable, starting from that sentence.
+      const i=good.findIndex(x=>RECOG.test(x));if(i<0)continue;
+      const q=good.slice(i,i+2).join(' ');
+      if(q.split(/\s+/).length>=10)out.push({q,l,b,t,com:(t.label||'').replace(/,?\s*day \d+$/i,'')})}}
+    QUOTES=shuffle([...out,...added()]);route(true)};
+  go().catch(()=>{QUOTES=shuffle(added());route(true)});
+}
+function wsForm(){
+  if(!ME)return '';
+  const mine=(WSQ||[]).filter(x=>isAdmin()||x.by===ME.user);
+  return `<details class="small" style="margin-top:14px"><summary>Add a “Who said it?” quote</summary>
+   <form id="wsForm" class="filters" style="margin-top:8px"><div class="field"><label for="wsLeg">Who said it</label><select id="wsLeg">${LEGS.slice().sort((x,y)=>x.full.localeCompare(y.full)).map(o=>`<option value="${o.id}">${esc(legTitle(o))}</option>`).join('')}</select></div>
+   <div class="field grow"><label for="wsTxt">The quote (mention a bill, committee or place so people can work it out)</label><textarea id="wsTxt" rows="2" maxlength="400"></textarea></div>
+   <div class="field grow"><label for="wsCtx">Where it was said (optional)</label><input id="wsCtx" maxlength="120" placeholder="H.B. 12 in House Education Committee"></div><button class="btn">Add quote</button></form>
+   ${mine.length?`<div class="tiny muted" style="margin-top:8px">${isAdmin()?'Quotes people have added':'Quotes you’ve added'}:</div>${mine.map(x=>`<div class="tiny">“${esc(x.q.slice(0,90))}${x.q.length>90?'…':''}” <span class="muted">(${esc((legById(x.id)||{}).name||x.id)}, added by ${esc(x.by)})</span> <button class="linkbtn tiny" data-wsdel="${esc(x.at)}">remove</button></div>`).join('')}`:''}</details>`;
 }
 function gameQuotes(){
   loadQuotes();if(QUOTES===undefined)return '<div class="card"><p>Finding quotes in the hearing recordings…</p></div>';
-  if(!QUOTES.length)return '<div class="card"><p class="empty">No hearing transcripts are available yet.</p></div>';
-  if(!LG.q||LG.q.kind!=='quote'){const x=QUOTES[Math.floor(Math.random()*QUOTES.length)];const others=shuffle(LEGS.filter(o=>o.id!==x.l.id&&o.house===x.l.house)).slice(0,3);LG.q={kind:'quote',...x,opts:shuffle([x.l,...others])};LG.answered=null}
-  const {q,l,b,t,opts}=LG.q,a=LG.answered;
+  if(!QUOTES.length)return `<div class="card"><p class="empty">No hearing transcripts are available yet.</p>${wsForm()}</div>`;
+  if(!LG.q||LG.q.kind!=='quote'){const x=QUOTES[deckNext('quotes',QUOTES.length)];const others=shuffle(LEGS.filter(o=>o.id!==x.l.id&&o.house===x.l.house)).slice(0,3);LG.q={kind:'quote',...x,opts:shuffle([x.l,...others])};LG.answered=null}
+  const {q,l,b,t,com,ctx,by,opts}=LG.q,a=LG.answered;
+  const hint=b?`Presenting <b>${esc(shortNum(b.num))}, ${esc(b.title)}</b>${com?` in the <b>${esc(com)}</b>`:''}. Automatic captions, lightly cleaned up.`:`${ctx?esc(ctx)+'. ':''}Added by ${esc(by)}.`;
   return `<div class="card lg"><div class="lg-top"><h2>Who said it?</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.quotes||0}</b></div></div>
-   <blockquote class="lg-quote">“${esc(q)}”</blockquote><p class="small muted" style="text-align:center">Presenting a bill in committee. Automatic captions, lightly cleaned up.</p>
-   <div class="lg-faces">${opts.map(o=>`<button class="lg-face ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgquote="${esc(o.id)}" ${a?'disabled':''}><img src="${esc(legPhoto(o))}" alt="" loading="lazy"><span>${esc(legTitle(o))}</span></button>`).join('')}</div>
-   ${a?`<div class="lg-fb ${a===l.id?'ok':'no'}">${a===l.id?'Right!':'Not this time.'} ${esc(legTitle(l))} said it while presenting <a href="${billHref(b)}">${esc(shortNum(b.num))}, ${esc(b.title)}</a>${t.video?` · <a href="${esc(vAt(t,t.t0))}" target="_blank" rel="noopener">hear it</a>`:''}.</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}</div>`;
+   <blockquote class="lg-quote">“${esc(q)}”</blockquote><p class="small muted" style="text-align:center">${hint}</p>
+   <div class="lg-faces">${opts.map((o,i)=>`<button class="lg-face ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgquote="${esc(o.id)}" ${a?'disabled':''}><span class="kn">${i+1}</span><img src="${esc(legPhoto(o))}" alt="" loading="lazy"><span>${esc(legTitle(o))}</span></button>`).join('')}</div>
+   ${a?`<div class="lg-fb ${a===l.id?'ok':'no'}">${a===l.id?'Right!':'Not this time.'} ${esc(legTitle(l))} said it${b?` while presenting <a href="${billHref(b)}">${esc(shortNum(b.num))}, ${esc(b.title)}</a>${t&&t.video?` · <a href="${esc(vAt(t,t.t0))}" target="_blank" rel="noopener">hear it</a>`:''}`:''}.</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}
+   ${wsForm()}</div>`;
 }
 
 // ---------- process guide and ordering game
 function guideProcess(){
   return `<div class="card"><h2>How a bill becomes law in Utah</h2><p class="desc">Tap a step to read more. The general session runs 45 days, starting in late January and ending at midnight on sine die in early March.</p>
-   <ol class="flow">${STEPS.map((s,i)=>`<li><details ${i===0?'open':''}><summary><span class="fi">${s[2]}</span><span class="fn">${i+1}</span><b>${esc(s[0])}</b></summary><p>${esc(s[1])}</p></details></li>`).join('')}</ol>
+   <ol class="flow">${STEPS.map((s,i)=>`<li><details ${i===0?'open':''}><summary><span class="fi">${s[2]}</span><span class="fnum">${i+1}</span><b>${esc(s[0])}</b></summary><p>${esc(s[1])}</p></details></li>`).join('')}</ol>
    <div class="alertbox warnbox"><b>Where bills quietly die:</b> sitting in Rules, being held in committee, being circled and never uncircled, or running out of time before sine die.</div></div>`;
 }
 function gameOrder(){
@@ -185,16 +235,13 @@ function gameOrder(){
    ${done?`<div class="lg-fb ok">Done in ${o.time} seconds with ${plural(o.miss,'miss','misses')}: <b>${o.pts} points</b>.</div><p style="text-align:center"><button class="btn primary" id="lgNext">Play again</button></p>`:o.flash?`<div class="lg-fb no">${esc(o.flash)}</div>`:''}</div>`;
 }
 function gameTerms(){
-  if(!LG.q||LG.q.kind!=='term'){const t=TERMS[Math.floor(Math.random()*TERMS.length)];LG.q={kind:'term',t,opts:shuffle([t[1],...t[2]])};LG.answered=null}
+  if(!LG.q||LG.q.kind!=='term'){const t=TERMS[deckNext('terms',TERMS.length)];LG.q={kind:'term',t,opts:shuffle([t[1],...t[2]])};LG.answered=null}
   const {t,opts}=LG.q,a=LG.answered;
   return `<div class="card lg"><div class="lg-top"><h2>What does it mean?</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.terms||0}</b></div></div>
-   <p class="lg-name">${esc(t[0])}</p><div class="lg-opts col">${opts.map(o=>`<button class="btn lg-opt ${a?(o===t[1]?'right':o===a?'wrong':''):''}" data-lgterm="${esc(o)}" ${a?'disabled':''}>${esc(o)}</button>`).join('')}</div>
+   <p class="lg-name">${esc(t[0])}</p><div class="lg-opts col">${opts.map((o,i)=>`<button class="btn lg-opt ${a?(o===t[1]?'right':o===a?'wrong':''):''}" data-lgterm="${esc(o)}" ${a?'disabled':''}><span class="kn">${i+1}</span>${esc(o)}</button>`).join('')}</div>
    ${a?`<div class="lg-fb ${a===t[1]?'ok':'no'}">${a===t[1]?'Correct!':'Not quite.'} <b>${esc(t[0])}:</b> ${esc(t[1])}</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}</div>`;
 }
-function memberGrid(){
-  const list=LEGS.slice().sort((a,b)=>a.house.localeCompare(b.house)||(+a.district)-(+b.district));
-  return `<div class="card"><h2>Meet the members</h2><p class="desc">${LEGS.length} legislators. Tap anyone to see a profile.</p><div class="members">${list.map(l=>`<a class="mem party-${l.party==='R'||l.party==='D'?l.party:'O'}" href="#legislators-${esc(l.id)}"><img src="${esc(legPhoto(l))}" alt="" loading="lazy"><b>${esc(l.name)}</b><span>${l.house==='H'?'House':'Senate'} ${esc(l.district)} · ${esc(l.party)}</span></a>`).join('')}</div></div>`;
-}
+function memberGrid(){return legRankHTML()}
 
 function lgAnswer(ok,key){if(ok){LG.score++;LG.streak++;lgBest(key,LG.streak)}else LG.streak=0}
 function learnBind(){
@@ -204,9 +251,12 @@ function learnBind(){
   app.querySelectorAll('[data-lgparty]').forEach(b=>b.onclick=()=>{LG.answered=b.dataset.lgparty;lgAnswer(LG.answered===LG.q.l.party,'party');route(true)});
   app.querySelectorAll('[data-lgfact]').forEach(b=>b.onclick=()=>{LG.answered=b.dataset.lgfact;lgAnswer(LG.answered===LG.q.l.id,'facts');route(true)});
   on('factForm','onsubmit',async e=>{e.preventDefault();const id=$('factLeg').value,t=$('factTxt').value.trim();if(!t)return;try{const j=await api('legfacts',{id,fact:t});LEGFACTS=j.facts;toast('Fun fact added');$('factTxt').value=''}catch(err){toast(err.message)}});
-  app.querySelectorAll('[data-lgredo]').forEach(b=>b.onclick=()=>{LG.answered=b.dataset.lgredo;lgAnswer((LG.answered==='y')===(LG.q.hit.length>0),'redo');route(true)});
-  app.querySelectorAll('[data-lgredot]').forEach(b=>b.onclick=()=>{LG.answered=b.dataset.lgredot;lgAnswer(LG.answered===LG.q.t[1],'redo');route(true)});
+  app.querySelectorAll('[data-lgquirk]').forEach(b=>b.onclick=()=>{LG.answered=b.dataset.lgquirk;lgAnswer(LG.answered===LG.q.t[1],'redo');route(true)});
+  on('wsForm','onsubmit',async e=>{e.preventDefault();const id=$('wsLeg').value,q=$('wsTxt').value.trim(),ctx=$('wsCtx').value.trim();if(!q)return;try{const j=await api('wsquotes',{id,q,ctx});WSQ=j.quotes||[];QUOTES=null;toast('Thanks! Your quote is in the game.');$('wsTxt').value='';$('wsCtx').value=''}catch(err){toast(err.message)}});
+  app.querySelectorAll('[data-wsdel]').forEach(b=>b.onclick=async()=>{try{const j=await api('wsquotes',{del:b.dataset.wsdel});WSQ=j.quotes||[];QUOTES=null;route(true)}catch(err){toast(err.message)}});
+
   app.querySelectorAll('[data-lgterm]').forEach(b=>b.onclick=()=>{LG.answered=b.dataset.lgterm;lgAnswer(LG.answered===LG.q.t[1],'terms');route(true)});
   app.querySelectorAll('[data-lgorder]').forEach(b=>b.onclick=()=>{const o=LG.q,i=+b.dataset.lgorder,need=o.want[o.got.length];if(i===need){o.got.push(i);o.flash=''}else{o.miss++;o.flash=`Not yet: “${STEPS[i][0]}” comes later.`}route(true)});
   on('lgNext','onclick',()=>{LG.q=null;route(true)});
+  app.querySelectorAll('[data-lgb]').forEach(b=>b.onclick=()=>{LGBGAME=b.dataset.lgb;route(true)});
 }

@@ -285,7 +285,7 @@ function shell(active,inner,compact){
   else if(changed) sum+=` <b>${changed}</b> changed today.`;
   const fine=ME?`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}`:''}<br>Signed in as ${esc(ME.display||ME.user)}${isAdmin()?' (admin)':''}: departments, divisions, designations${canSee('priority')?', priorities':''}${canSee('note')?', notes':''} and assignments are shared with the office.`
     :`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m. You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
-  const tabs=[['updates','Updates'],['bills','Bills'],['legislators','Legislators'],['budget','Budget']];
+  const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];
   if(canFiscal()) tabs.push(['fiscal','Fiscal Hive']);
   if(ME&&wrapVisible()) tabs.push(['postsession','Session wrap-up']);
   tabs.push(['learn','Learn']);
@@ -617,9 +617,9 @@ function pageUpdates(){
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
     ${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
-    <div class="card"><div class="minitabs" role="tablist"><button type="button" data-side="sheet" class="${SIDETAB==='sheet'?'on':''}">Spreadsheet</button><button type="button" data-side="mav" class="${SIDETAB==='mav'?'on':''}">Media availability</button></div>
-     ${SIDETAB==='mav'&&typeof mavHTML==='function'?mavHTML():`<h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
-     <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p>`}</div>
+    <div><div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
+     <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
+     ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
    </div>`);
 }
 function pageEmail(token){
@@ -657,22 +657,24 @@ function hearingsCard(){
 
 /* ===================== LEGISLATORS ===================== */
 let legSort='total', legHouse='all';
-function pageLegislators(openId){
+// Who is sponsoring the most legislation: shown on Learn → Members and their bills.
+function legRankHTML(){
   const S=UI.session; const rows=allRows(S);
-  if(!LEGS) return shell('legislators',`<div class="card"><p>Loading legislators…</p></div>`);
+  if(!LEGS) return `<div class="card"><p>Loading legislators…</p></div>`;
   const stats=LEGS.map(l=>{const chief=rows.filter(b=>!b.file&&(b.spId===l.id||(!b.spId&&legMatchName(l,b.sponsor))));const floor=rows.filter(b=>!b.file&&(b.flId===l.id||(!b.flId&&legMatchName(l,b.floor))));const files=rows.filter(b=>b.file&&legMatchName(l,b.sponsor));
     return {l,chief:chief.length,floor:floor.length,files:files.length,office:ME?[...chief,...floor,...files].filter(onOffice).length:0,total:chief.length+files.length}});
   let list=stats.filter(s=>legHouse==='all'||s.l.house===legHouse);
   const sorts={total:(a,b)=>b.total-a.total||b.floor-a.floor,floor:(a,b)=>b.floor-a.floor,files:(a,b)=>b.files-a.files,office:(a,b)=>b.office-a.office||b.total-a.total,name:(a,b)=>a.l.full.localeCompare(b.l.full),district:(a,b)=>a.l.house.localeCompare(b.l.house)||(+a.l.district)-(+b.l.district)};
   list.sort(sorts[legSort]||sorts.total);
   const max=Math.max(1,...list.map(s=>s.total));
-  return shell('legislators',`<div class="card"><h2>Legislators</h2>
-   <p class="desc">Who is sponsoring the most legislation this session. <b>Chief</b> counts numbered bills they’re the chief sponsor of plus their bill files that aren’t numbered yet. <b>Floor</b> counts bills they carry in the other house. Click a name for their profile, with their bills grouped by committee.</p>
+  const ini=l=>esc((l.name||'').split(/\s+/).filter(w=>/^[A-Z]/.test(w)).map(w=>w[0]).filter((c,i,a)=>i===0||i===a.length-1).join(''));
+  return `<div class="card" id="legRank"><h2>Who is sponsoring the most legislation</h2>
+   <p class="desc">Every legislator this session. <b>Chief</b> counts numbered bills they’re the chief sponsor of plus their bill files that aren’t numbered yet. <b>Floor</b> counts bills they carry in the other house. Click a name for their profile, with their bills grouped by committee.</p>
    <div class="filters"><div class="field"><label for="legSort">Sort by</label><select id="legSort">${[['total','Most bills'],['floor','Most floor sponsorships'],['files','Most unnumbered bill files'],...(ME?[['office','Most on the office list']]:[]),['name','Name'],['district','House and district']].map(([k,l])=>`<option value="${k}" ${legSort===k?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="seg" role="group" aria-label="Chamber" style="align-self:flex-end">${[['all','Both'],['H','House'],['S','Senate']].map(([k,l])=>`<button type="button" data-leghouse="${k}" class="${legHouse===k?'on':''}">${l}</button>`).join('')}</div></div>
    <div class="leg head"><span></span><span>Legislator</span><span class="n">Chief</span><span class="n">Floor</span><span class="n hide-m">${ME?'Office list':'Bill files'}</span><span class="hide-m"></span></div>
-   ${list.map(s=>`<div class="leg party-${s.l.party==='R'||s.l.party==='D'?s.l.party:'O'}"><span class="ini" aria-hidden="true">${esc((s.l.name||'').split(/\s+/).filter(w=>/^[A-Z]/.test(w)).map(w=>w[0]).filter((c,i,a)=>i===0||i===a.length-1).join(''))}</span><div><div class="nm"><a href="#legislators-${esc(s.l.id)}">${esc(s.l.name)}</a></div><div class="sub"><span class="dot"></span> ${s.l.party==='R'?'Republican':s.l.party==='D'?'Democrat':esc(s.l.party||'')} · ${s.l.house==='H'?'House':'Senate'} District ${esc(s.l.district)}</div></div>
-    <span class="n"><b>${s.total}</b>${s.files?`<div class="sub">${s.files} not numbered</div>`:''}</span><span class="n">${s.floor}</span><span class="n hide-m">${ME?s.office:s.files}</span><span class="hide-m"><div class="bar"><i style="width:${(s.total/max*100).toFixed(1)}%"></i></div></span></div>`).join('')}</div>${openId&&typeof legProfile==='function'?legProfile(openId):''}`);
+   ${list.map(s=>`<div class="leg party-${s.l.party==='R'||s.l.party==='D'?s.l.party:'O'}"><a class="leg-ph" href="#legislators-${esc(s.l.id)}" tabindex="-1" aria-hidden="true"><img src="${esc(legPhoto(s.l))}" alt="" loading="lazy" onerror="this.outerHTML='<span class=&quot;ini&quot;>${ini(s.l)}</span>'"></a><div><div class="nm"><a href="#legislators-${esc(s.l.id)}">${esc(s.l.name)}</a></div><div class="sub"><span class="dot"></span> ${s.l.party==='R'?'Republican':s.l.party==='D'?'Democrat':esc(s.l.party||'')} · ${s.l.house==='H'?'House':'Senate'} District ${esc(s.l.district)}</div></div>
+    <span class="n"><b>${s.total}</b>${s.files?`<div class="sub">${s.files} not numbered</div>`:''}</span><span class="n">${s.floor}</span><span class="n hide-m">${ME?s.office:s.files}</span><span class="hide-m"><div class="bar"><i style="width:${(s.total/max*100).toFixed(1)}%"></i></div></span></div>`).join('')}</div>`;
 }
 
 /* ===================== BUDGET ===================== */
@@ -991,7 +993,7 @@ function route(soft){
   if(view==='updates') html=pageUpdates();
   else if(view==='bills') html=pageBills();
   else if(view==='hearings'){location.replace('#updates');return}
-  else if(view==='legislators') html=pageLegislators(parts.slice(1).join('-'));
+  else if(view==='legislators'){const id=parts.slice(1).join('-');if(!id){location.replace('#learn-members');return}html=pageLearn('members',typeof legProfile==='function'?legProfile(id):'')}
   else if(view==='budget') html=pageBudget();
   else if(view==='watchlist'){WATCHOPEN=true;location.replace('#bills');return}
   else if(view==='account') html=pageAccount();
@@ -1071,12 +1073,12 @@ function bind(){
   on('emUnsub','onclick',async()=>{if(!confirm('Stop all Deseret Docket emails to this address?'))return;await fetch('/api/sub',{method:'POST',headers:{'Content-Type':'application/json','X-Docket':'1'},body:JSON.stringify({t:EMTOKEN,action:'delete'})});EMTOKEN=null;location.hash='#email-unsubscribed'});
   // hearings, legislators, budget
   app.querySelectorAll('[data-hear]').forEach(b=>b.onclick=()=>{hearScope=b.dataset.hear;route(true)});
-  on('legSort','onchange',e=>{legSort=e.target.value;route(true)});
+  on('legSort','onchange',e=>{legSort=e.target.value;e.target.blur();route()});
   app.querySelectorAll('[data-leghouse]').forEach(b=>b.onclick=()=>{legHouse=b.dataset.leghouse;route(true)});
   app.querySelectorAll('[data-sponsor]').forEach(a=>a.onclick=()=>{FLT.sponsor=a.dataset.sponsor;FLT.show='all';PAGE=1;saveFLT()});
   on('reqMore','onclick',()=>{reqAll=true;route(true)});
   app.querySelectorAll('[data-bud]').forEach(b=>b.onclick=()=>{const [k,v]=b.dataset.bud.split('|');budView[k]=v;route(true)});
-  on('budCom','onchange',e=>{budView.com=e.target.value;reqAll=false;route(true)});
+  on('budCom','onchange',e=>{budView.com=e.target.value;reqAll=false;e.target.blur();route()});
   app.querySelectorAll('.pie-wrap').forEach(w=>{w.querySelectorAll('.li').forEach(li=>{li.onmouseenter=()=>{const p=w.querySelector(`path[data-i="${li.dataset.i}"]`);p&&p.classList.add('hl')};li.onmouseleave=()=>w.querySelectorAll('path.hl').forEach(p=>p.classList.remove('hl'))})});
   // watch list
   app.querySelectorAll('[data-toggle]').forEach(cb=>cb.onchange=()=>{const [k,i]=cb.dataset.toggle.split(':');W[k][i].on=cb.checked;saveWatch();route(true)});
@@ -1124,7 +1126,7 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     const me=await meP;
     if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{}};PEOPLE=me.people||[]}
     loadCols();
-    getJSON('data/legislators.json').then(l=>{LEGS=l;if(booted&&location.hash.startsWith('#legislators'))route(true)}).catch(()=>{LEGS=[]});
+    getJSON('data/legislators.json').then(l=>{LEGS=l;if(booted&&/^#(legislators|learn)/.test(location.hash))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);
     if(!UI.session||!ids.includes(UI.session)) UI.session=(INDEX.sessions.find(s=>s.count>0||s.files>0)||INDEX.sessions[0]).id;
     const off=ME?pullOffice(false):null;

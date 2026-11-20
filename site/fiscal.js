@@ -11,7 +11,8 @@ let fhLastAct=Date.now(), fhPingAt=0;
 
 // ---------- the assessment shown on each card: the AI's when the data update has one, otherwise automatic
 function loadAI(s){if(AIDATA[s]!==undefined)return;AIDATA[s]=null;getJSON(`data/${s}/ai.json`).then(j=>{AIDATA[s]=j||{};if(location.hash.startsWith('#fiscal'))route(true)}).catch(()=>{AIDATA[s]={}})}
-const NEED_RE=/\b(appropriat\w*|grant program|new (?:position|program|office|division|account)|full-time|staff(?:ing)?|restricted account|fund(?:ing|s)?\b|creates? (?:a|an|the) [\w\s,-]{0,40}?(?:program|office|council|commission|task force|board|registry|database)|requires? (?:the )?(?:department|division|office|attorney general)[\w\s,-]{0,40}?(?:to (?:establish|create|administer|investigate|enforce|report|study|develop|maintain|provide))|study|annual report)\b/gi;
+// Words that point to money: what the bill costs or spends, not new duties for the office.
+const NEED_RE=/\b(appropriat\w*|grant program|restricted account|special revenue fund|expendable (?:special revenue )?fund|general fund|income tax fund|ongoing (?:funding|appropriation)|one-time (?:funding|appropriation)|fee (?:increase|schedule)|new (?:position|fte)s?|full-time equivalent)\b/gi;
 function autoAssess(b){
   const ai=(AIDATA[b.session]||{})[b.num];
   if(ai&&(!ai.ver||ai.ver===b.version)) return {divs:(ai.divs||b.sug||[]).filter(divById),need:ai.need||'unsure',why:ai.why||'',sum:ai.sum||b.description||'',conf:ai.conf||70,src:'ai'};
@@ -20,11 +21,10 @@ function autoAssess(b){
   if(b.fn&&c&&(c.on>0||c.one>0)) return {divs,need:'likely',why:`The Legislature’s fiscal note shows a cost of ${money(Math.max(0,c.on)+Math.max(0,c.one))} to state funds`,sum:b.description||'',conf:85,src:'auto'};
   const text=[b.title,b.description,...((TEXT[b.session]||{})[b.num]||[]).filter(p=>p[0]==='Highlighted provisions').map(p=>p[1].replace(/[\u0001\u0002]/g,''))].join(' ');
   const hits=[...new Set((text.match(NEED_RE)||[]).map(x=>x.toLowerCase().replace(/\s+/g,' ')))];
-  const duties=(b.agd||[]).length;
-  if(hits.length>=2||duties) return {divs,need:'likely',why:`The bill text mentions ${hits.slice(0,3).map(h=>`“${h}”`).join(', ')}${duties?`${hits.length?' and ':''}gives the office ${duties} new role${duties>1?'s':''}`:''}`,sum:b.description||'',conf:Math.min(80,50+hits.length*8+duties*10),src:'auto'};
-  if(b.fn&&b.fn.none) return {divs,need:'unlikely',why:'The Legislature’s fiscal note found no direct cost to the state',sum:b.description||'',conf:65,src:'auto'};
+  if(b.fn&&b.fn.none) return {divs,need:'unlikely',why:'The Legislature’s fiscal note found no direct cost to the state',sum:b.description||'',conf:70,src:'auto'};
+  if(hits.length>=2) return {divs,need:'likely',why:`The bill text mentions ${hits.slice(0,3).map(h=>`“${h}”`).join(', ')}`,sum:b.description||'',conf:Math.min(75,50+hits.length*8),src:'auto'};
   if(hits.length===1) return {divs,need:'unsure',why:`The bill text mentions “${hits[0]}”`,sum:b.description||'',conf:45,src:'auto'};
-  return {divs,need:'unlikely',why:'Nothing in the title or summary points to new costs',sum:b.description||'',conf:40,src:'auto'};
+  return {divs,need:'unlikely',why:'Nothing in the title, summary or fiscal note points to a cost',sum:b.description||'',conf:40,src:'auto'};
 }
 const NEED_LABEL={likely:'Likely impact',unlikely:'Probably none',unsure:'Not sure'};
 const NEED_CLS={likely:'warn',unlikely:'muted',unsure:'ink'};
@@ -110,11 +110,11 @@ function fhInbox(list){
    <div class="fh-stack"><div class="fh-ghost g2"></div><div class="fh-ghost g1"></div>
    <article class="fh-card" aria-labelledby="fhT">
     <div class="fh-top"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="pill ink">${esc(verOf(b))}</span>${prev?`<span class="pill warn">New substitute: needs a fresh look</span>`:''}${onOffice(b)?'<span class="pill muted">Office list</span>':''}<span class="grow"></span><span class="small muted">${esc(b.sponsor.replace(/^(Rep|Sen)\.\s*/,''))}</span></div>
-    <h3 id="fhT">${esc(b.title)}</h3>
+    <div class="fh-body"><h3 id="fhT">${esc(b.title)}</h3>
     <p class="serif">${esc(ai.sum||b.description||'No summary yet.')}</p>
     <div class="fh-ai ${ai.need}"><div><span class="pill ${NEED_CLS[ai.need]}">${NEED_LABEL[ai.need]}</span> <b>${ai.src==='ai'?'AI assessment':'Automatic assessment'}</b> <span class="tiny muted">${ai.conf}% confident</span></div><div class="small">${esc(ai.why)}.</div></div>
     ${prev?`<div class="fh-prev small"><b>Earlier version (${esc(prev.version)}):</b> ${pr.length?pr.map(r=>`${esc(divName(r.division))}: ${fhAnswerText(r)}`).join(' · '):esc(prev.status==='cleared'?'No request was needed.':'Not answered yet.')}</div>`:''}
-    <span class="flabel" style="margin-top:14px">Send to</span>${divChips(FHSEL.divs,ai)}
+    <span class="flabel" style="margin-top:14px">Send to</span>${divChips(FHSEL.divs,ai)}</div>
     <div class="fh-actions"><button class="btn" data-fhgo="-1" ${FHI?'':'disabled'}>← Back</button><span class="grow"></span><button class="btn" data-fhgo="1">Skip →</button><button class="btn" id="fhClear">No request needed</button><button class="btn primary" id="fhQueue" ${FHSEL.divs.length?'':'disabled'}>Queue for ${plural(FHSEL.divs.length,'division')}</button></div>
    </article></div></div>`;
 }
