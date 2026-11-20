@@ -316,7 +316,7 @@ table.compact td:first-child,table.compact th:first-child{padding-left:8px}
 .hearing{padding-left:10px;padding-right:10px}
 
 /* ---------- footer: work-product notice and the sine die bar ---------- */
-.wp-note{max-width:1360px;margin:0 auto;padding:18px 16px 8px;font-size:11.5px;color:#8a929b;letter-spacing:.03em;text-align:center}
+.wp-note{max-width:1360px;margin:0 auto;padding:18px 16px 62px;font-size:11.5px;color:#8a929b;letter-spacing:.03em;text-align:center}
 .sinedie{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--navy);color:#fff;font-size:13.5px;border-top:3px solid var(--maroon)}
 .sinedie>.sd-plain{box-sizing:border-box;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%;padding:7px 16px}
 .sinedie>button:focus-visible{outline:2px solid var(--goldc);outline-offset:-3px}
@@ -713,3 +713,12 @@ div.feat span span{font-size:14px;display:block}
 .helpmenu .ic{margin-right:.5em;color:var(--steel)}
 dialog .fbform{min-width:min(520px,86vw)}
 .fbform textarea,.fbform input{width:100%}
+/* Features: link to the overview page */
+a.welcome-card{display:flex;gap:22px;align-items:center;text-decoration:none;color:var(--ink);background:linear-gradient(120deg,var(--navy),#12427a);color:#fff;border-top-color:var(--goldc)}
+a.welcome-card h2{color:#fff}a.welcome-card h2 .ic.h{color:var(--goldc)}a.welcome-card .desc{color:#d9e2ea}
+a.welcome-card .btn{background:var(--goldc);color:var(--navy);border-color:var(--goldc)}
+a.welcome-card:hover{box-shadow:0 10px 30px rgba(0,33,71,.25)}
+.wc-mini{flex:none;width:200px;background:#fff;border-radius:10px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.wc-prog{display:flex;gap:3px;margin-bottom:10px}.wc-prog i{flex:1;height:14px;background:#eef2f5;clip-path:polygon(0 0,80% 0,100% 50%,80% 100%,0 100%,20% 50%)}.wc-prog i.d{background:#cfe3ec}.wc-prog i.h{background:var(--goldc)}
+.wc-chips{display:flex;gap:6px}.wc-chips i{flex:1;height:22px;border:1px solid var(--line);border-left:3px solid var(--c);border-radius:5px}
+@media (max-width:700px){.wc-mini{display:none}}

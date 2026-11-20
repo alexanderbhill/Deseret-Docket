@@ -23,7 +23,7 @@
 import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, threshold, logFn, rand as frand, settleCard, mailReady } from "../../lib/fiscal.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
 
-const DEPTS = new Set(["criminal", "civil", "pp", "appellate"]);
+const DEPTS = new Set(["criminal", "civil", "pp", "appellate", "admin"]);
 const PRIORITIES = new Set(["high", "priority", "watching", "notrelevant"]);
 const POSITIONS = new Set(["priority-oppose", "oppose", "neutral", "support", "priority-support"]);
 const DESIGNATIONS = new Set(["CCJJ", "SENTENCING", "ULELC", "SWAP", "USAAV", "VICTIMS"]);
@@ -140,7 +140,7 @@ async function setBill(db, user, body, peopleAll) {
       next[f] = JSON.stringify(v); meta[f] = { by: user.name, at: now }; logs.push(`${f}:${v.join(",") || "none"}`);
     }
   };
-  listField("departments", (d) => DEPTS.has(d), 4);
+  listField("departments", (d) => DEPTS.has(d), 5);
   listField("divisions", (d) => DIV_RE.test(d), 12);
   listField("designations", (d) => DESIGNATIONS.has(d), 6);
   listField("assignees", (a) => NAME_RE.test(a) && peopleAll.includes(a), 10);

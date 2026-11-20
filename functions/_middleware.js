@@ -140,6 +140,8 @@ export async function onRequest(context) {
   }
 
   const user = await sessionUser(request, env);
+  // The overview page, viewable any time (Help → Features links here).
+  if (url.pathname === "/welcome" && request.method === "GET") return loginPage(env, url, "", 200, "/", false, user ? { viewer: user.display || user.name } : {});
   context.data.user = user; // null for guests; the API checks permissions
 
   // First visit: show the landing page (sign in / create account) instead of the app.

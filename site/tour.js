@@ -96,7 +96,8 @@ function pageFeatures(){
       ['file','Prep packets','A one-page brief for any bill, ready to print.','#bills',1]]],
   ];
   const ok=x=>x[4]==='fiscal'?canFiscal():x[4]?!!ME:true;
-  return shell('',`<div class="card"><h2>What Deseret Docket does</h2><p class="desc">Everything the site can do, and where to find it. ${ME?'':'Some tools need you to sign in.'} <button type="button" class="linkbtn" id="featTour">Take the tour</button> for a quick walk-through.</p></div>
+  return shell('',`<a class="card welcome-card" href="/welcome"><div class="wc-mini" aria-hidden="true"><div class="wc-prog"><i class="d"></i><i class="d"></i><i class="h"></i><i></i><i></i></div><div class="wc-chips"><i style="--c:#2f6f3a"></i><i style="--c:#9a6b00"></i><i style="--c:#78081c"></i></div></div><div><h2>${ic('home','h')}The Deseret Docket overview</h2><p class="desc">The page people see before they sign in: what the site does, with pictures of each part. Good for showing a new coworker or your boss.</p><span class="btn primary sm">Open the overview →</span></div></a>
+   <div class="card"><h2>What Deseret Docket does</h2><p class="desc">Everything the site can do, and where to find it. ${ME?'':'Some tools need you to sign in.'} <button type="button" class="linkbtn" id="featTour">Take the tour</button> for a quick walk-through.</p></div>
    ${F.map(([g,gi,list])=>`<div class="card"><h2>${ic(gi,'h')}${esc(g)}</h2><div class="feats">${list.map(x=>`<a class="feat ${ok(x)?'':'locked'}" href="${ok(x)?x[3]:'/login'}"><span class="fi">${ic(x[0])}</span><span><b>${esc(x[1])}</b><span>${esc(x[2])}</span>${ok(x)?'':'<span class="tiny muted">Sign in to use this</span>'}</span></a>`).join('')}</div></div>`).join('')}`);
 }
 document.addEventListener('click',e=>{if(e.target&&e.target.id==='featTour'&&typeof startTour==='function')startTour()});
@@ -115,7 +116,7 @@ function pageAbout(){
     ['mail','Emails never include office positions','Alert emails link to the public bill pages and leave out the office’s positions and notes.'],
     ['clock','Every change is on the record','Each edit to a bill’s office information is logged with who made it and when. Open “Office history” on any bill to see it.'],
   ];
-  return shell('',`<div class="card about-hero"><div class="ab-top">${BEE}<div><h2>About Deseret Docket</h2><p class="desc">A bill tracker for the Utah Legislature, built by <b>Alexander Hill</b>.</p></div></div>
+  return shell('',`<div class="card about-hero"><div class="ab-top">${BEE}<div><h2>About Deseret Docket</h2><p class="desc">A bill tracker for the Utah Legislature, built by Alexander Hill.</p></div></div>
     ${to?`<p>Questions or comments? Email <a href="mailto:${esc(to)}">${esc(to)}</a>.</p>`:''}
     <div class="fbbtns"><button type="button" class="dlbig" data-fb="bug">${ic('x')}<span><b>Report a bug</b><small>Something broken, wrong or confusing</small></span></button><button type="button" class="dlbig alt" data-fb="feature">${ic('spark')}<span><b>Request a feature</b><small>An idea that would make the site more useful</small></span></button></div></div>
    <div class="card"><h2>${ic('scale','h')}How the office’s information is protected</h2><div class="feats">${sec.map(x=>`<div class="feat"><span class="fi">${ic(x[0])}</span><span><b>${esc(x[1])}</b><span>${esc(x[2])}</span></span></div>`).join('')}</div></div>
