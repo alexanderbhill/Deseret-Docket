@@ -58,8 +58,45 @@ document.addEventListener('click',e=>{
   if(open&&!open.contains(e.target)){open.remove();const hb=$('helpBtn');hb&&hb.setAttribute('aria-expanded','false')}
   if(!b||open)return;
   const m=document.createElement('div');m.className='helpmenu';m.setAttribute('role','menu');
-  m.innerHTML=`<button type="button" role="menuitem" data-h="tour">Take the tour</button><a role="menuitem" href="#learn">Learn the Legislature</a>${ME?'<a role="menuitem" href="#account">Your account</a>':'<a role="menuitem" href="/login">Sign in or create an account</a>'}`;
+  m.innerHTML=`<button type="button" role="menuitem" data-h="tour">Take the tour</button><a role="menuitem" href="#features">What Deseret Docket does</a>${ME?'<a role="menuitem" href="#account">Your account</a>':'<a role="menuitem" href="/login">Sign in or create an account</a>'}`;
   document.body.appendChild(m);const r=b.getBoundingClientRect();m.style.top=(r.bottom+6)+'px';m.style.left=Math.max(8,Math.min(r.left,innerWidth-m.offsetWidth-8))+'px';b.setAttribute('aria-expanded','true');
   m.onclick=ev=>{const h=ev.target.dataset.h;m.remove();if(h==='tour')startTour();};
   m.querySelector('button,a').focus();
 });
+
+// ---------- Help → What Deseret Docket does: every feature, with a link to where it lives
+function pageFeatures(){
+  const F=[
+    ['Track','list',[
+      ['list','Every bill, one table','Numbered bills and bill files, refreshed four times each weekday. Filter, sort, rearrange columns and download to Excel.','#bills'],
+      ['flag','Positions and assignments','Set the office position, priority, departments, divisions and who owns each bill, right in the table or on the bill page.','#bills',1],
+      ['users','Association positions','Upload where outside associations stand, or set them by hand on any bill.','#bills',1],
+      ['eye','Watch list','Words and code sections you care about, highlighted in every bill that uses them.','#bills',1]]],
+    ['Stay ahead','bell',[
+      ['bell','Today’s updates','Every change to a bill today, newest first, plus new bill files.','#updates'],
+      ['calendar','Hearings','Upcoming committee agendas with your bills, soonest first.','#updates'],
+      ['mail','Email alerts','Morning calendar, day-before heads-up and end-of-day recap, on the days and times you pick.','#updates'],
+      ['clock','Sine die countdown','Always at the bottom of the page.','#updates']]],
+    ['Understand a bill','file',[
+      ['spark','Progress and at a glance','Where the bill is, its stance, priority, fiscal impact and next hearing, at the top of every bill.','#bills'],
+      ['diff','What changed','Struck and added text for every substitute, summarized, with watch-list matches first.','#bills'],
+      ['mic','Hearings and debate','Agendas, recordings and transcripts, with every mention of the Attorney General flagged.','#bills'],
+      ['repeat','Has this bill run before?','Earlier versions, how far they got, and every roll-call vote.','#bills'],
+      ['news','News','Newspaper coverage of the bill and which way it leans.','#bills'],
+      ['scale','What the AG office will have to do','The office’s notes plus every place the bill text gives the Attorney General a role.','#bills',1]]],
+    ['Money','dollar',[
+      ['chart','Budget','The state budget by appropriations committee, with each committee’s fiscal notes and requests.','#budget'],
+      ['hive','Fiscal Hive','Send new bills to the right divisions for cost estimates; answers come back by email.','#fiscal','fiscal']]],
+    ['People and learning','users',[
+      ['users','Members and their bills','Every legislator ranked by how many bills they’re sponsoring; open anyone for a full profile.','#learn-members'],
+      ['book','Learn the Legislature','Face match, Red or blue?, Who said it?, Capitol quirks, vocabulary and how a bill becomes law.','#learn'],
+      ['trophy','Leaderboard','See who in the office has the longest streak in each game.','#learn-board',1]]],
+    ['End of session','wrap',[
+      ['wrap','Session wrap-up','A scorecard for every position the office took, governor watch and an implementation tracker.','#postsession',1],
+      ['file','Prep packets','A one-page brief for any bill, ready to print.','#bills',1]]],
+  ];
+  const ok=x=>x[4]==='fiscal'?canFiscal():x[4]?!!ME:true;
+  return shell('',`<div class="card"><h2>What Deseret Docket does</h2><p class="desc">Everything the site can do, and where to find it. ${ME?'':'Some tools need you to sign in.'} <button type="button" class="linkbtn" id="featTour">Take the tour</button> for a quick walk-through.</p></div>
+   ${F.map(([g,gi,list])=>`<div class="card"><h2>${ic(gi,'h')}${esc(g)}</h2><div class="feats">${list.map(x=>`<a class="feat ${ok(x)?'':'locked'}" href="${ok(x)?x[3]:'/login'}"><span class="fi">${ic(x[0])}</span><span><b>${esc(x[1])}</b><span>${esc(x[2])}</span>${ok(x)?'':'<span class="tiny muted">Sign in to use this</span>'}</span></a>`).join('')}</div></div>`).join('')}`);
+}
+document.addEventListener('click',e=>{if(e.target&&e.target.id==='featTour'&&typeof startTour==='function')startTour()});
