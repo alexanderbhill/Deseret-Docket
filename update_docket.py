@@ -189,6 +189,7 @@ def record_of(d, upd):
     vers = versions_of(d)
     label = vers[-1]["name"] if vers else ""
     hist = [[fmt_date(a.get("actionDate")), a.get("description", ""), a.get("owner", ""), a.get("voteStr", "") or ""]
+            + ([f"{a.get('voteID')}{a.get('voteHouse')}"] if a.get("voteID") and a.get("voteHouse") in ("H", "S") else [])
             for a in d.get("actionHistoryList", [])]
     hist.sort(key=lambda h: h[0], reverse=True)
     ag = []
@@ -1005,6 +1006,93 @@ def build_history(token, out, prev, sessions):
     json.dump(cache, open(os.path.join(out, "history.json"), "w"), separators=(",", ":"))
 
 
+# ---------------------------------------------------------------- floor roll calls (for legislator alignment)
+# Each bill's public status page on le.utah.gov links to its floor roll calls, which list how every
+# member voted. These are web pages, not the Legislature API, and a closed vote never changes, so each
+# one is read once and kept.
+VOTE_FETCH_CAP = int(os.environ.get("VOTE_FETCH_CAP", "1500"))
+VOTE_LINK = re.compile(r'href="(/DynaBill/svotes\.jsp\?sessionid=([0-9A-Z]+)&(?:amp;)?voteid=(\d+)&(?:amp;)?house=([HS]))"')
+
+
+def parse_rollcall(html_text):
+    t = re.sub(r"<[^>]+>", "\n", html_text)
+    t = _html.unescape(t)
+    lines = [x.strip() for x in t.split("\n") if x.strip()]
+    out = {"y": [], "n": [], "a": []}
+    cur = None
+    head = " ".join(lines[:40])
+    m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{4})", head)
+    date = f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}" if m else ""
+    act = " ".join(x for x in lines[:40] if re.match(r"^(\d(st|nd|rd|th) Reading|Final Passage|Concur|Override|Recede|Amend(ment)? to)", x, re.I))
+    for x in lines:
+        if re.match(r"^Yeas\s*-\s*\d+", x): cur = "y"; continue
+        if re.match(r"^Nays\s*-\s*\d+", x): cur = "n"; continue
+        if re.match(r"^Absent or not voting\s*-\s*\d+", x): cur = "a"; continue
+        if cur and re.match(r"^[A-Z][A-Za-z'\-. ]+,\s*[A-Z]", x):
+            out[cur].append(x)
+        elif cur and not re.match(r"^[A-Z][A-Za-z'\-. ]+,", x) and len(x) > 40:
+            cur = None
+    return date, act, out
+
+
+def member_matcher(legs):
+    by = {}
+    for l in legs or []:
+        last = (l.get("full") or "").split(",")[0].strip().lower()
+        by.setdefault((l.get("house"), last), []).append(l)
+
+    def find(name, house):
+        last, _, rest = name.partition(",")
+        c = by.get((house, last.strip().lower()), [])
+        if len(c) <= 1:
+            return c[0]["id"] if c else None
+        rest = re.sub(r"[^A-Za-z]", "", rest)
+        for n in range(len(rest), 0, -1):
+            hit = [l for l in c if re.sub(r"[^A-Za-z]", "", (l.get("full") or "").split(",", 1)[1]).lower().startswith(rest[:n].lower())]
+            if len(hit) == 1:
+                return hit[0]["id"]
+        return None
+    return find
+
+
+def build_votes(out, prev, sessions, legs):
+    cache = json.load(open(os.path.join(prev, "votes.json"))) if prev and os.path.exists(os.path.join(prev, "votes.json")) else {}
+    find = member_matcher(legs)
+    budget = VOTE_FETCH_CAP
+    for ses in sessions:
+        path = os.path.join(out, ses, "bills.json")
+        if not os.path.exists(path):
+            continue
+        bills = json.load(open(path))
+        sc = cache.setdefault(ses, {})
+        todo = [b for b in bills if any(h[3] for h in b.get("hist", [])) and (sc.get(b["n"]) or {}).get("upd") != b.get("upd")]
+        for b in todo:
+            if budget <= 0:
+                break
+            ids = [h[4] for h in b.get("hist", []) if len(h) > 4]
+            if not ids:  # older records: read the vote numbers from the bill's public page data on le.utah.gov
+                try:
+                    d = json.loads(get(f"{LE}/data/{ses}/{b['n']}.json")); budget -= 1
+                    ids = [f"{a['voteID']}{a['voteHouse']}" for a in d.get("actionHistoryList", []) if a.get("voteID") and a.get("voteHouse") in ("H", "S")]
+                except Exception:
+                    continue
+            have = {v[0]: v for v in (sc.get(b["n"]) or {}).get("v", [])}
+            votes = []
+            for vk in dict.fromkeys(ids):
+                if vk in have:
+                    votes.append(have[vk]); continue
+                vid, house = vk[:-1], vk[-1]
+                try:
+                    d8, act, r = parse_rollcall(get(f"{LE}/DynaBill/svotes.jsp?sessionid={ses}&voteid={vid}&house={house}").decode("utf-8", "replace")); budget -= 1
+                except Exception:
+                    continue
+                mem = {k: [i for i in (find(n, house) for n in r[k]) if i] for k in r}
+                votes.append([vk, house, d8, act[:80], mem["y"], mem["n"], mem["a"]])
+            sc[b["n"]] = {"upd": b.get("upd"), "v": votes}
+        print(f"  votes {ses}: {sum(len(x['v']) for x in sc.values())} floor roll calls ({max(0, len(todo))} bills checked or waiting)")
+    json.dump({k: v for k, v in cache.items() if k in sessions}, open(os.path.join(out, "votes.json"), "w"), separators=(",", ":"))
+
+
 # ---------------------------------------------------------------- main
 def load_prev(prev, session):
     if not prev:
@@ -1256,6 +1344,12 @@ def main():
         com = json.load(open(os.path.join(a.prev, "committees.json")))
     if com:
         json.dump(com, open(os.path.join(a.out, "committees.json"), "w"), separators=(",", ":"))
+    try:
+        build_votes(a.out, a.prev, [s["id"] for s in sessions], leg)
+    except Exception as e:
+        print(f"  votes failed: {e}", file=sys.stderr)
+        if a.prev and os.path.exists(os.path.join(a.prev, "votes.json")):
+            import shutil; shutil.copy(os.path.join(a.prev, "votes.json"), os.path.join(a.out, "votes.json"))
     try:
         build_history(a.token, a.out, a.prev, [s["id"] for s in sessions])
     except Exception as e:

@@ -35,8 +35,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   stored in the Cloudflare D1 database bound to the Pages project as `DB`
 - `functions/respond/` – the no-sign-in pages division staff open from Fiscal Hive emails
 - `lib/` – shared sign-in code, the landing page, Fiscal Hive email logic and the honeybee logo
-- `intel_update.py` – AI summaries (optional), news/social mentions and sentiment; runs after each data update
-- `up_next.py` – "you're up next" committee alerts (`.github/workflows/upnext.yml`, every 5 minutes on session weekdays)
+- `intel_update.py` – AI summaries (optional), newspaper mentions and sentiment; runs after each data update
 - `media_avail.py` – transcribes and summarizes House/Senate media availabilities (`.github/workflows/media.yml`)
 - `update_docket.py` – downloads bills, bill files, fiscal notes, text changes, transcripts, COBI budget
   data and appropriations meetings
@@ -64,7 +63,6 @@ GitHub → Settings → Secrets and variables → Actions:
 | `CRON_KEY` | Secret | Same value as in Cloudflare |
 | `SITE_URL` | Variable (optional) | Only if the site moves off https://deseret-docket.pages.dev |
 | `ANTHROPIC_API_KEY` | Secret (optional) | Turns on AI summaries, fiscal-impact assessments, "what this sub does", lookalike leads and media availability summaries. Without it, the site uses automatic estimates |
-| `BSKY_HANDLE`, `BSKY_APP_PASSWORD` | Secrets (optional) | A Bluesky account and app password, so Bluesky posts can be searched for bill mentions |
 
 After changing Cloudflare settings, redeploy (Deployments → latest → Manage deployment → Retry deployment).
 
@@ -93,7 +91,6 @@ Deployments → pick an earlier deployment → **Rollback to this deployment**.
 - Email: every 15 minutes; each person's emails go out at the times and on the days they chose.
   The same job sends idle Fiscal Hive queues, 24-hour reminders and implementation-tracker reminders.
   GitHub's timer can run a few minutes late.
-- "You're up next": every 5 minutes, 7 am–6 pm on weekdays, January–March.
 - Media availabilities: every 30 minutes, 10 am–6 pm on weekdays, January–March (or run it by hand with a link).
 - Session dates and deadlines (the sine die bar) live in `site/config.json` under `sessions`; add each new
   session's dates from le.utah.gov when they're posted.

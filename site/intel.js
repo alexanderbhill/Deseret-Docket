@@ -1,6 +1,6 @@
 /* Bill intelligence: floor calendar watch, substitute alerts, bill collisions, "this bill has run
-   before", similar laws elsewhere, follow the money, media and sentiment, trending bills, media
-   availability analyses and in-app "you're up next" notifications. */
+   before", similar laws elsewhere, sponsors and public records, news coverage, trending bills, media
+   and media availability analyses. */
 'use strict';
 let MEDIA=null, HIST=null, MAV=null, BILLTAB='overview', BILLTAB_KEY='';
 function loadMedia(){if(MEDIA===null){MEDIA=undefined;getJSON('data/media.json').then(j=>{MEDIA=j;route(true)}).catch(()=>{MEDIA={bills:{},trending:{day:[],week:[]},sources:[]}})}return MEDIA||null}
@@ -78,7 +78,7 @@ function billTabsNav(b){
   if(b.file)return '';
   if(BILLTAB_KEY!==b.key){BILLTAB_KEY=b.key;BILLTAB='overview'}
   const m=(loadMedia()||{bills:{}}).bills[b.num]&&MEDIA.session===b.session?MEDIA.bills[b.num]:null;
-  const tabs=[['overview','Overview'],['media',`Media & sentiment${m?` (${m.items.length})`:''}`],['history','Run before & lookalikes'],['money','Follow the money']];
+  const tabs=[['overview','Overview'],['media',`News & sentiment${m?` (${m.items.length})`:''}`],['history','Run before & lookalikes'],['money','Sponsors & public records']];
   return `<nav class="billtabs" aria-label="Bill sections">${tabs.map(([k,l])=>`<button type="button" data-billtab="${k}" class="${BILLTAB===k?'on':''}" aria-pressed="${BILLTAB===k}">${esc(l)}</button>`).join('')}${ME?`<a class="btn sm" href="#packet-${esc(b.session)}-${esc(b.num)}" style="margin-left:auto">Prep packet</a>`:''}</nav>`;
 }
 function meterSVG(score,n){
@@ -93,10 +93,10 @@ function billTabBody(b){
   if(BILLTAB==='media'){
     const M=loadMedia();if(!M)return '<p>Loading…</p>';
     const m=M.session===b.session?M.bills[b.num]:null;
-    return `<section><h2>Media & sentiment</h2><p class="small muted">News stories and public social posts that mention ${esc(shortNum(b.num))} by number or exact title, from the last 60 days. Checked with every data update${M.fetched?`; last checked ${fmtAP(new Date(M.fetched+'Z'))}`:''}.</p>
-     ${m?`<div class="sent"><div>${meterSVG(m.score,m.n)}</div><div class="small"><p><b>What is the sentiment meter?</b> A rough read of the tone of the ${plural(m.n,'recent mention')} (${m.news} news, ${m.social} social), from the positive and negative words they use. It tells you which way the conversation is leaning, not how many people agree. Open the stories to judge for yourself.</p></div></div>
-      <div class="rows">${m.items.map(x=>`<div class="row" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="small">${x.date?fmtMD(new Date(x.date.length>10?x.date+'Z':x.date)):''}<span class="sub">${esc(x.src)}</span></span><div class="what" style="font-size:15px"><a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t||'(post)')}</a>${x.d?`<span class="sub">${esc(x.d.slice(0,200))}</span>`:''}</div><div class="r"><span class="pill ${x.kind==='news'?'ink':'muted'}">${x.kind==='news'?'News':'Social'}</span><span class="sdot" style="--c:${x.s>0.2?'var(--green)':x.s<-0.2?'var(--maroon)':'var(--line-2)'}" title="Tone ${x.s}"></span></div></div>`).join('')}</div>`
-     :`<p class="empty">No news stories or posts mention this bill yet.</p>`}
+    return `<section><h2>News & sentiment</h2><p class="small muted">News stories that mention ${esc(shortNum(b.num))} by number or exact title, from the last 60 days. Checked with every data update${M.fetched?`; last checked ${fmtAP(new Date(M.fetched+'Z'))}`:''}.</p>
+     ${m?`<div class="sent"><div>${meterSVG(m.score,m.n)}</div><div class="small"><p><b>What is the sentiment meter?</b> A rough read of the tone of the ${plural(m.n,'recent news story','recent news stories')}, from the positive and negative words they use. It tells you which way the conversation is leaning, not how many people agree. Open the stories to judge for yourself.</p></div></div>
+      <div class="rows">${m.items.map(x=>`<div class="row" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="small">${x.date?fmtMD(new Date(x.date.length>10?x.date+'Z':x.date)):''}<span class="sub">${esc(x.src)}</span></span><div class="what" style="font-size:15px"><a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t||'(post)')}</a>${x.d?`<span class="sub">${esc(x.d.slice(0,200))}</span>`:''}</div><div class="r"><span class="sdot" style="--c:${x.s>0.2?'var(--green)':x.s<-0.2?'var(--maroon)':'var(--line-2)'}" title="Tone ${x.s}"></span></div></div>`).join('')}</div>`
+     :`<p class="empty">No news stories mention this bill yet.</p>`}
      <p class="tiny muted">Sources: ${esc((M.sources||[]).filter(s=>s.ok).map(s=>s.name).join(', ')||'none reachable on the last check')}.</p></section>`;
   }
   if(BILLTAB==='history'){
@@ -108,9 +108,9 @@ function billTabBody(b){
   if(BILLTAB==='money'){
     const people=[[b.sponsor,b.spId,'Chief sponsor'],[b.floor,b.flId,'Floor sponsor'],...b.cosp.map(c=>[c,'','Cosponsor'])].filter(x=>x[0]);
     const votes=b.hist.filter(h=>h[3]&&/\d+-\d+/.test(h[3]));
-    return `<section><h2>Follow the money</h2><p class="small muted">Public records about who is carrying this bill. These links go to the state’s official disclosure sites; amounts aren’t copied here, so you always see the source.</p>
-     <div class="tablewrap"><table class="compact"><thead><tr><th>Who</th><th>Role</th><th>Campaign finance</th></tr></thead><tbody>${people.map(([n,id,r])=>{const l=legFor(id,n);const nm=l?l.name:n.replace(/^(Rep|Sen)\.\s*/,'');return `<tr><td><b>${esc(nm)}</b>${l?`<div class="sub">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${esc(l.party)}</div>`:''}</td><td class="small">${r}</td><td class="small"><a href="https://disclosures.utah.gov/search/publicsearch?type=pcc" target="_blank" rel="noopener">Campaign disclosures</a> <span class="muted">(search “${esc(nm)}”)</span></td></tr>`}).join('')}</tbody></table></div>
-     <p class="small" style="margin-top:12px"><a href="https://lobbyist.utah.gov/lobbyistbyprincipal" target="_blank" rel="noopener">Registered lobbyists by organization</a> · <a href="https://lobbyist.utah.gov/" target="_blank" rel="noopener">Lobbyist expenditure reports</a></p>
+    return `<section><h2>Sponsors & public records</h2><p class="small muted">Who is carrying this bill, how the votes went, and where to find the public filings every legislator and lobbyist makes with the Lieutenant Governor’s office.</p>
+     <div class="tablewrap"><table class="compact"><thead><tr><th>Who</th><th>Role</th><th>Public filings</th></tr></thead><tbody>${people.map(([n,id,r])=>{const l=legFor(id,n);const nm=l?l.name:n.replace(/^(Rep|Sen)\.\s*/,'');return `<tr><td><b>${esc(nm)}</b>${l?`<div class="sub">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${esc(l.party)}</div>`:''}</td><td class="small">${r}</td><td class="small"><a href="https://disclosures.utah.gov/search/publicsearch?type=pcc" target="_blank" rel="noopener">Financial disclosures</a> <span class="muted">(search “${esc(nm)}”)</span></td></tr>`}).join('')}</tbody></table></div>
+     <p class="small" style="margin-top:12px"><a href="https://lobbyist.utah.gov/lobbyistbyprincipal" target="_blank" rel="noopener">Lobbyist directory by organization</a> · <a href="https://lobbyist.utah.gov/" target="_blank" rel="noopener">Lobbyist reports</a></p>
      <h3 style="font-family:var(--sans);font-size:17px;margin-top:18px">Floor and committee votes</h3>${votes.length?`<table class="compact"><tbody>${votes.map(h=>`<tr><td>${fmtMDY(pd(h[0]))}</td><td>${esc(h[1])}</td><td><b>${esc(h[3])}</b> <span class="tiny muted">yes–no–absent</span></td></tr>`).join('')}</tbody></table><p class="tiny muted">How each member voted is on the bill’s page at <a href="https://le.utah.gov/~${esc(b.session.slice(0,4))}/bills/static/${esc(b.num)}.html" target="_blank" rel="noopener">le.utah.gov</a>.</p>`:'<p class="small muted">No recorded votes yet.</p>'}</section>`;
   }
   return '';
@@ -126,7 +126,7 @@ function updatesExtras(){
     if(subs.length)h+=`<div class="card"><h2>Substitutes that touch your code sections</h2><p class="desc">New versions from the last week that change Utah Code on the watch list.</p><div class="rows">${subs.map(b=>{const ss=subSummary(b);return `<div class="row"><a class="k" href="${billHref(b)}">${esc(shortNum(b.num))}</a><div class="what">${esc(b.vd.to)}: Section ${esc(subWatchHits(b).join(', '))}<span class="sub">${ss?(ss.html?ss.txt:esc(ss.txt)):esc(b.title)}</span></div><div class="r"><span class="pill warn">Watch list</span></div></div>`}).join('')}</div></div>`}
   const M=loadMedia();
   if(M&&M.trending&&(M.trending.week||[]).length&&M.session===S){const row=(l,lbl)=>`<div><h3 style="font-family:var(--sans);font-size:16px">${lbl}</h3>${l.length?`<ol class="trend">${l.slice(0,8).map(([n,c])=>{const b=BYKEY[`${S}/${n}`];return `<li><a class="billnum" href="${b?billHref(b):'#'}">${esc(shortNum(n))}</a> <span class="serif">${esc(b?b.title:'')}</span><span class="v">${plural(c,'mention')}</span></li>`}).join('')}</ol>`:'<p class="small muted">Nothing yet.</p>'}</div>`;
-    h+=`<div class="card"><h2>Most talked-about bills</h2><p class="desc">Bills mentioned most in the news and on social media.</p><div class="grid2">${row(M.trending.day||[],'Last 24 hours')}${row(M.trending.week||[],'Last 7 days')}</div></div>`}
+    h+=`<div class="card"><h2>Most talked-about bills</h2><p class="desc">Bills mentioned most in Utah news coverage.</p><div class="grid2">${row(M.trending.day||[],'Last 24 hours')}${row(M.trending.week||[],'Last 7 days')}</div></div>`}
   const V=loadMAV();
   h+=`<div class="card"><h2>Media availabilities</h2><p class="desc">House and Senate leaders’ media availabilities, streamed live on Facebook, transcribed and summarized after they finish: topics, bills mentioned, and who said what.</p>
    ${isAdmin()?`<form class="filters" id="mavForm"><div class="field grow"><label for="mavUrl">Analyze a Facebook video</label><input id="mavUrl" placeholder="https://www.facebook.com/…/videos/…"></div><button class="btn">Add</button></form><p class="tiny muted" style="margin-top:-8px">New videos on the House and Senate pages are picked up automatically when Facebook allows it. If one is missed, paste its link here.${MQ&&MQ.length?' Waiting: '+MQ.filter(q=>q.status==='waiting').length+'. '+MQ.filter(q=>q.status==='failed').map(q=>`Couldn’t fetch ${esc(q.label||q.url)}: ${esc(q.note||'')}`).join(' '):''}</p>`:''}
@@ -138,19 +138,8 @@ function updatesExtras(){
 }
 let MQ=null;
 
-// ---------- in-app notices ("you're up next") with browser notifications
-let noticeAsked=false;
-async function pollNotices(){
-  if(!ME)return;try{const j=await api('notices');const list=j.notices||[];if(!list.length)return;
-    for(const n of list){toast(n.title);if('Notification' in window&&Notification.permission==='granted'){const no=new Notification(n.title,{body:n.body});no.onclick=()=>{window.open(n.url,'_blank')}}}
-    await api('notices',{upTo:list[list.length-1].id})}catch(e){}
-}
-function askNotify(){if(noticeAsked||!('Notification' in window)||Notification.permission!=='default')return;noticeAsked=true;Notification.requestPermission().catch(()=>{})}
-setInterval(pollNotices,60e3);setTimeout(pollNotices,5000);
-
 function billExtraBind(){
   app.querySelectorAll('[data-billtab]').forEach(b=>b.onclick=()=>{BILLTAB=b.dataset.billtab;route(true)});
   on('mavForm','onsubmit',async e=>{e.preventDefault();try{const j=await api('media/queue',{url:$('mavUrl').value.trim()});MQ=j.queue;toast('Added. It’s analyzed on the next run (within about 30 minutes on session weekdays), or run “Media availability analysis” from GitHub Actions.');route(true)}catch(err){toast(err.message)}});
   if(isAdmin()&&MQ===null&&location.hash.slice(1).split('-')[0]==='updates'){MQ=[];api('media/queue').then(j=>{MQ=j.queue||[];if(MQ.length)route(true)}).catch(()=>{})}
-  if(ME&&mineAssigned&&location.hash.startsWith('#hearings'))askNotify();
 }

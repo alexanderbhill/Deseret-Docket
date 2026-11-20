@@ -4,8 +4,8 @@
   data/<SESSION>/ai.json     plain-English summaries, fiscal-impact assessments, suggested divisions,
                              "what this substitute does" and leads on similar laws elsewhere.
                              Only built when ANTHROPIC_API_KEY is set; cached per bill version.
-  data/media.json            news (RSS feeds in site/config.json), Reddit and Bluesky posts that
-                             mention a bill, a simple sentiment score per bill, and what's trending.
+  data/media.json            news stories (RSS feeds in site/config.json) that mention a bill, a simple
+                             sentiment score per bill, and what's trending in the news.
 
 Usage:  python3 -I intel_update.py OUT_DIR [--prev PREV_DIR]
 Every outside source is optional: if one fails, the rest still run and the old data is kept.
@@ -166,40 +166,6 @@ def parse_feed(raw, name):
     return items
 
 
-def social_items():
-    out, status = [], []
-    for sub in ("Utah", "SaltLakeCity", "utahpolitics"):
-        try:  # the RSS version is less often blocked than the JSON API
-            got = parse_feed(get(f"https://www.reddit.com/r/{sub}/new/.rss?limit=100"), f"r/{sub}")
-            for x in got:
-                x["kind"] = "social"
-            out += got
-            status.append({"name": f"Reddit r/{sub}", "ok": True, "n": len(got)})
-        except Exception as e:
-            status.append({"name": f"Reddit r/{sub}", "ok": False, "err": str(e)[:120]})
-    # Bluesky search needs a signed-in account: set BSKY_HANDLE and BSKY_APP_PASSWORD (an app password) as secrets.
-    auth = {}
-    if os.environ.get("BSKY_HANDLE") and os.environ.get("BSKY_APP_PASSWORD"):
-        try:
-            sess = json.loads(get("https://bsky.social/xrpc/com.atproto.server.createSession", data=json.dumps({"identifier": os.environ["BSKY_HANDLE"], "password": os.environ["BSKY_APP_PASSWORD"]}).encode(), headers={"Content-Type": "application/json"}))
-            auth = {"Authorization": "Bearer " + sess["accessJwt"]}
-        except Exception as e:
-            status.append({"name": "Bluesky sign-in", "ok": False, "err": str(e)[:120]})
-    for q in ("#utleg", "utah legislature", "#utpol"):
-        try:
-            host = "https://bsky.social" if auth else "https://public.api.bsky.app"
-            d = json.loads(get(host + "/xrpc/app.bsky.feed.searchPosts?" + urllib.parse.urlencode({"q": q, "limit": 100, "sort": "latest"}), headers=auth))
-            n = 0
-            for p in d.get("posts", []):
-                rec = p.get("record", {}); h = p.get("author", {}).get("handle", "")
-                rk = p.get("uri", "").split("/")[-1]
-                out.append({"t": rec.get("text", "")[:300], "d": "", "u": f"https://bsky.app/profile/{h}/post/{rk}", "date": (rec.get("createdAt") or "")[:16], "src": "Bluesky", "kind": "social"}); n += 1
-            status.append({"name": f"Bluesky “{q}”", "ok": True, "n": n})
-        except Exception as e:
-            status.append({"name": f"Bluesky “{q}”", "ok": False, "err": str(e)[:120]})
-    return out, status
-
-
 def bill_matchers(bills):
     out = []
     for b in bills:
@@ -234,7 +200,6 @@ def build_media(out, prev):
             items += got; status.append({"name": f["name"], "ok": True, "n": len(got)})
         except Exception as e:
             status.append({"name": f["name"], "ok": False, "err": str(e)[:120]})
-    soc, st2 = social_items(); items += soc; status += st2
     cutoff = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()[:16]
     matchers = bill_matchers(bills)
     per = {num: list(v.get("items", [])) for num, v in (old.get("bills") or {}).items()} if old.get("session") == session else {}
@@ -254,7 +219,7 @@ def build_media(out, prev):
             continue
         recent = [x for x in lst if (x.get("date") or "") >= (now - timedelta(days=14)).isoformat()[:16]] or lst[:10]
         score = round(sum(x["s"] for x in recent) / len(recent), 2)
-        bills_out[num] = {"items": lst, "score": score, "n": len(recent), "news": sum(x["kind"] == "news" for x in recent), "social": sum(x["kind"] == "social" for x in recent)}
+        bills_out[num] = {"items": lst, "score": score, "n": len(recent), "news": sum(x["kind"] == "news" for x in recent), "social": 0}
         day[num] = sum((x.get("date") or "") >= (now - timedelta(days=1)).isoformat()[:16] for x in lst)
         week[num] = sum((x.get("date") or "") >= (now - timedelta(days=7)).isoformat()[:16] for x in lst)
     top = lambda m: [[k, v] for k, v in sorted(m.items(), key=lambda kv: -kv[1]) if v][:15]

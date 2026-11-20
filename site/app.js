@@ -342,15 +342,12 @@ function sessionCfg(){const ss=CONFIG.sessions||{};if(ss[UI.session])return [UI.
   return list.find(([,x])=>pd(x.sineDie)>=now)||list[list.length-1]||[null,null]}
 function countdownParts(target){let ms=Math.max(0,target-Date.now());const d=Math.floor(ms/864e5);ms-=d*864e5;const h=Math.floor(ms/36e5);ms-=h*36e5;const m=Math.floor(ms/6e4);return {d,h,m}}
 function sineDieText(){
-  const [id,c]=sessionCfg(); if(!c) return '';
-  const start=pd(c.start), end=pd(c.sineDie), now=new Date();
-  let lbl,target;
-  if(now<start){lbl=`until the ${esc(sessName(id))} begins`;target=start}
-  else if(now<=end){lbl='until sine die';target=end}
-  else{const nxt=Object.entries(CONFIG.sessions||{}).map(([k,x])=>[k,pd(x.start)]).filter(([,d])=>d>now).sort((a,b)=>a[1]-b[1])[0];
-    if(nxt){lbl=`until the ${esc(sessName(nxt[0]))} begins`;target=nxt[1]}else return `<span class="lbl">The ${esc(sessName(id))} adjourned sine die on ${fmtLong(end)}.</span>`}
-  const p=countdownParts(target);
-  return `<span class="cd"><b>${p.d}</b>d <b>${p.h}</b>h <b>${p.m}</b>m</span><span class="lbl">${lbl}</span>`;
+  // Always counts down to the next sine die (the last night of the general session, 11:59 p.m.).
+  const now=new Date();const list=Object.entries(CONFIG.sessions||{}).map(([k,x])=>[k,pd(x.sineDie)]).filter(([,d])=>d).sort((a,b)=>a[1]-b[1]);
+  const nxt=list.find(([,d])=>d>now);
+  if(!nxt){const last=list[list.length-1];return last?`<span class="lbl">The ${esc(sessName(last[0]))} adjourned sine die on ${fmtLong(last[1])}.</span>`:''}
+  const p=countdownParts(nxt[1]);
+  return `<span class="cd"><b>${p.d}</b>d <b>${p.h}</b>h <b>${p.m}</b>m</span><span class="lbl">until sine die · ${MONTHS[nxt[1].getMonth()]} ${nxt[1].getDate()} at ${fmtTime(nxt[1])}</span>`;
 }
 function deadlineList(){
   const [id,c]=sessionCfg(); if(!c||!(c.deadlines||[]).length) return '';
