@@ -633,6 +633,20 @@ export async function onRequest(context) {
       await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('wsquotes', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(quotes), user.name, new Date().toISOString()).run();
       return json({ ok: true, quotes });
     }
+    // ---------------- Learn: flagged game questions (two people flagging one hides it)
+    if (route === "lgflags") {
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'lgflags'").first();
+      const flags = f ? obj(f.v) : {};
+      if (method === "POST") {
+        const qid = String(body.qid || "").slice(0, 80);
+        if (!/^[a-z]{3,8}:[A-Za-z0-9:]+$/.test(qid)) return bad("That question can't be flagged.");
+        const who = new Set(flags[qid] || []);
+        if (body.undo) who.delete(user.name); else who.add(user.name);
+        if (who.size) flags[qid] = [...who]; else delete flags[qid];
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('lgflags', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(flags), user.name, new Date().toISOString()).run();
+      }
+      return json({ flags });
+    }
     // ---------------- Learn: game leaderboard (each person's best streak per game)
     if (route === "lgboard") {
       const f = await db.prepare("SELECT v FROM settings WHERE k = 'lgboard'").first();

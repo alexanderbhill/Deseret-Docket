@@ -621,3 +621,4 @@ table.lgb td:first-child{width:40px}
 .bs,section[id^="bs-"]{scroll-margin-top:16px}
 .flash{animation:bsflash 1.6s ease-out}
 @keyframes bsflash{0%{box-shadow:0 0 0 3px var(--goldc)}100%{box-shadow:0 0 0 3px transparent}}
+.lg-flag{text-align:center;margin:10px 0 0}
