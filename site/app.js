@@ -1079,6 +1079,8 @@ function bind(){
       return v==='none'?`cleared ${lab}`:`set ${lab} to ${val}`};
     try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':x.by)} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
     catch(e){$('teamLogBody').textContent='History didn’t load.';delete tl.dataset.done}});
+  // page modules in their own files
+  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
 }
 const curKey=()=>{const p=decodeURIComponent(location.hash.slice(1)).split('-');return p[1]+'/'+p.slice(2).join('-')};
 let lastPull=0;

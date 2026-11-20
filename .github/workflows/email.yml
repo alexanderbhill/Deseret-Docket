@@ -25,3 +25,10 @@ jobs:
         run: |
           if [ -z "$CRON_KEY" ]; then echo "CRON_KEY isn't set yet; skipping."; exit 0; fi
           python3 -I send_alerts.py
+      - name: Fiscal Hive (send idle queues and 24-hour reminders)
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://deseret-docket.pages.dev' }}
+          CRON_KEY: ${{ secrets.CRON_KEY || secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_KEY" ]; then echo "CRON_KEY isn't set yet; skipping."; exit 0; fi
+          curl -sS --fail-with-body -X POST -H "X-Cron-Key: $CRON_KEY" -H "Content-Type: application/json" -d '{}' "$SITE_URL/api/cron/fn-tick" || echo "Fiscal Hive tick failed (the site may not be deployed yet)."

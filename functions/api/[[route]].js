@@ -20,6 +20,7 @@
 // The email job (GitHub Actions, header X-Cron-Key):
 //   GET  /api/cron/subs          confirmed subscriptions and the bills each one covers
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
+import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, threshold, logFn, rand as frand, settleCard, mailReady } from "../../lib/fiscal.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
 
 const DEPTS = new Set(["criminal", "civil", "pp", "appellate"]);
@@ -254,7 +255,9 @@ export async function onRequest(context) {
   // Everything else that changes something must be a same-site JSON request.
   let body = {};
   if (method === "POST") {
-    if (!(request.headers.get("Content-Type") || "").includes("application/json") || (request.headers.get("X-Docket") !== "1" && !route.startsWith("cron/"))) return bad("Bad request");
+    // navigator.sendBeacon can't add headers, so the "send my queue" call on leaving the page checks the Origin instead.
+    const beacon = route === "fn/flush" && request.headers.get("Origin") === url.origin;
+    if (!(request.headers.get("Content-Type") || "").includes("application/json") || (request.headers.get("X-Docket") !== "1" && !route.startsWith("cron/") && !beacon)) return bad("Bad request");
     try { body = await request.json(); } catch { return bad("Send JSON"); }
   }
 
@@ -283,6 +286,9 @@ export async function onRequest(context) {
           out.push(rec);
         }
         return json({ subs: out });
+      }
+      if (route === "cron/fn-tick" && method === "POST") {
+        return json(await fiscalTick(env, db, url.origin));
       }
       if (route === "cron/send" && method === "POST") {
         const emails = (Array.isArray(body.emails) ? body.emails : []).slice(0, 100);
@@ -397,6 +403,125 @@ export async function onRequest(context) {
       if (pw.length < 10) return bad("Use at least 10 characters.");
       await db.prepare("UPDATE users SET pass = ?, ver = ver + 1 WHERE username = ?").bind(await hashPassword(pw), user.name).run();
       return json({ ok: true, signedOut: true });
+    }
+
+    // ---------------- Fiscal Hive (accounts the admin has given access)
+    if (route.startsWith("fn/")) {
+      if (user.role !== "admin" && !user.perms.fiscal) return bad("Your account can't open the Fiscal Hive. Ask an admin.", 403);
+      await ensureFiscal(db);
+      const t = new Date().toISOString();
+      const touch = () => db.prepare("INSERT INTO fn_activity (username, at) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET at=excluded.at").bind(user.name, t);
+      const ID_RE = /^\d{4}[A-Z0-9]{2,4}\/[A-Z]{2,4}\d{4}\/[A-Za-z0-9 .\-]{1,40}$/;
+      const cleanAi = (a) => {
+        a = a && typeof a === "object" ? a : {};
+        return { divs: (Array.isArray(a.divs) ? a.divs : []).filter((d) => DIV_RE.test(d)).slice(0, 6), need: ["likely", "unlikely", "unsure"].includes(a.need) ? a.need : "unsure",
+          why: String(a.why || "").slice(0, 600), sum: String(a.sum || "").slice(0, 1200), conf: Math.max(0, Math.min(100, Math.round(+a.conf || 0))), src: a.src === "ai" ? "ai" : "auto" };
+      };
+      if (route === "fn/state" && method === "GET") {
+        const session = String(url.searchParams.get("session") || "");
+        const cards = (await db.prepare("SELECT * FROM fn_cards WHERE session = ?").bind(session).all()).results || [];
+        const reqs = cards.length ? ((await db.prepare("SELECT r.* FROM fn_requests r JOIN fn_cards c ON c.id = r.card_id WHERE c.session = ?").bind(session).all()).results || []) : [];
+        const allReqs = (await db.prepare("SELECT division, status, sent_at, answered_at FROM fn_requests WHERE sent_at IS NOT NULL").all()).results || [];
+        const crow = (await db.prepare("SELECT division, emails FROM fn_contacts").all()).results || [];
+        const users = (await db.prepare("SELECT email, section FROM users WHERE disabled = 0 AND email <> '' AND section <> ''").all()).results || [];
+        await touch().run();
+        return json({
+          cards: cards.map((c) => ({ ...c, ai: obj(c.ai), divisions: arr(c.divisions) })),
+          requests: reqs.map((r) => ({ ...r, emails: arr(r.emails), answer: obj(r.answer), token: undefined })),
+          stats: allReqs, contacts: Object.fromEntries(crow.map((r) => [r.division, arr(r.emails)])),
+          sectionEmails: users.reduce((m, u) => { (m[u.section] = m[u.section] || []).push(u.email); return m; }, {}),
+          threshold: await threshold(db), mailReady: mailReady(env), me: user.name,
+        });
+      }
+      if (route === "fn/ping" && method === "POST") { await touch().run(); return json({ ok: true }); }
+      if (route === "fn/route" && method === "POST") {
+        const id = String(body.id || "");
+        if (!ID_RE.test(id)) return bad("Bad card");
+        const divs = [...new Set((Array.isArray(body.divisions) ? body.divisions : []).filter((d) => DIV_RE.test(d)))].slice(0, 8);
+        if (!divs.length) return bad("Pick at least one division.");
+        const ai = cleanAi(body.ai);
+        const kept = ai.divs.length && ai.divs.length === divs.length && ai.divs.every((d) => divs.includes(d)) ? 1 : 0;
+        const [session, num, version] = id.split("/");
+        const cur = await db.prepare("SELECT * FROM fn_cards WHERE id = ?").bind(id).first();
+        if (cur && !["new", "cleared", "queued"].includes(cur.status)) return bad("That bill was already sent. Use Reroute or the bell to follow up.");
+        const stmts = [
+          db.prepare(`INSERT INTO fn_cards (id, session, num, version, title, status, ai, divisions, kept_ai, poc, routed_at, prev, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET status='queued', ai=excluded.ai, divisions=excluded.divisions, kept_ai=excluded.kept_ai, poc=excluded.poc, routed_at=excluded.routed_at, updated_at=excluded.updated_at`)
+            .bind(id, session, num, version, String(body.title || "").slice(0, 300), JSON.stringify(ai), JSON.stringify(divs), kept, user.name, t, String(body.prev || "").slice(0, 80) || null, t, t),
+          db.prepare("DELETE FROM fn_requests WHERE card_id = ? AND status = 'queued'").bind(id),
+        ];
+        for (const d of divs) stmts.push(db.prepare("INSERT INTO fn_requests (id, card_id, division, token, status, queued_at, poc) VALUES (?, ?, ?, ?, 'queued', ?, ?)").bind(frand(8), id, d, frand(20), t, user.name));
+        stmts.push(logFn(db, id, user.name, `routed to ${divs.join(", ")}${kept ? " (kept the suggestion)" : ai.divs.length ? " (changed the suggestion " + ai.divs.join(", ") + ")" : ""}`), touch());
+        await db.batch(stmts);
+        return json({ ok: true });
+      }
+      if (route === "fn/clear" && method === "POST") {
+        const id = String(body.id || "");
+        if (!ID_RE.test(id)) return bad("Bad card");
+        const [session, num, version] = id.split("/");
+        const undo = !!body.undo;
+        const cur = await db.prepare("SELECT status FROM fn_cards WHERE id = ?").bind(id).first();
+        if (cur && !["new", "cleared", "queued"].includes(cur.status)) return bad("That bill was already sent.");
+        if (undo) await db.batch([db.prepare("DELETE FROM fn_requests WHERE card_id = ? AND status = 'queued'").bind(id), db.prepare("DELETE FROM fn_cards WHERE id = ?").bind(id), logFn(db, id, user.name, "put back in the inbox"), touch()]);
+        else await db.batch([
+          db.prepare(`INSERT INTO fn_cards (id, session, num, version, title, status, ai, divisions, poc, routed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'cleared', ?, '[]', ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET status='cleared', poc=excluded.poc, updated_at=excluded.updated_at`).bind(id, session, num, version, String(body.title || "").slice(0, 300), JSON.stringify(cleanAi(body.ai)), user.name, t, t, t),
+          db.prepare("DELETE FROM fn_requests WHERE card_id = ? AND status = 'queued'").bind(id),
+          logFn(db, id, user.name, "no fiscal note request needed"), touch()]);
+        return json({ ok: true });
+      }
+      if (route === "fn/flush" && method === "POST") return json(await flushQueue(env, db, url.origin, user.name));
+      if (route === "fn/reroute" && method === "POST") {
+        const id = String(body.id || ""), div = String(body.division || "");
+        if (!ID_RE.test(id) || !DIV_RE.test(div)) return bad("Pick a division.");
+        const wrongs = (await db.prepare("SELECT id FROM fn_requests WHERE card_id = ? AND status IN ('wrong','nocontact')").bind(id).all()).results || [];
+        const from = String(body.from || "");
+        const stmts = [];
+        for (const w of wrongs) if (!from || w.id === from) stmts.push(db.prepare("UPDATE fn_requests SET status = 'rerouted' WHERE id = ?").bind(w.id));
+        stmts.push(db.prepare("INSERT INTO fn_requests (id, card_id, division, token, status, queued_at, poc, reroute_of) VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)").bind(frand(8), id, div, frand(20), t, user.name, from || null));
+        stmts.push(db.prepare("UPDATE fn_cards SET status = 'queued', updated_at = ? WHERE id = ?").bind(t, id));
+        stmts.push(logFn(db, id, user.name, `rerouted to ${div}`), touch());
+        await db.batch(stmts);
+        return json({ ok: true });
+      }
+      if (route === "fn/remind" && method === "POST") {
+        const id = String(body.id || "");
+        if (!ID_RE.test(id)) return bad("Bad card");
+        const r = await sendReminders(env, db, url.origin, { cardId: id, by: user.name });
+        return json({ ok: true, ...r });
+      }
+      if (route === "fn/contacts" && method === "POST") {
+        const EMAIL_ONE = /^[^\s@<>()",;:]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}$/;
+        const stmts = [];
+        for (const [div, list] of Object.entries(body.contacts || {}).slice(0, 200)) {
+          if (!DIV_RE.test(div)) continue;
+          const emails = [...new Set((Array.isArray(list) ? list : String(list).split(/[,;\s]+/)).map((e) => String(e).trim().toLowerCase()).filter((e) => EMAIL_ONE.test(e)))].slice(0, 10);
+          stmts.push(db.prepare("INSERT INTO fn_contacts (division, emails, by, at) VALUES (?, ?, ?, ?) ON CONFLICT(division) DO UPDATE SET emails=excluded.emails, by=excluded.by, at=excluded.at").bind(div, JSON.stringify(emails), user.name, t));
+        }
+        if (stmts.length) await db.batch(stmts);
+        return json({ ok: true });
+      }
+      if (route === "fn/threshold" && method === "POST") {
+        const v = Math.round(+body.amount);
+        if (!Number.isFinite(v) || v < 0 || v > 1e10) return bad("Enter a dollar amount.");
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('fn_threshold', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(String(v), user.name, t).run();
+        return json({ ok: true, threshold: v });
+      }
+      if (route === "fn/log" && method === "GET") {
+        const id = url.searchParams.get("id") || "";
+        const rows = (await db.prepare("SELECT at, by, what FROM fn_log WHERE card_id = ? ORDER BY id DESC LIMIT 100").bind(id).all()).results || [];
+        return json({ log: rows });
+      }
+      if (route === "fn/outbox" && method === "GET") {
+        const rows = (await db.prepare("SELECT id, at, to_addr, subject, kind, sent, error FROM outbox ORDER BY id DESC LIMIT 100").all()).results || [];
+        return json({ outbox: rows, mailReady: mailReady(env) });
+      }
+      if (route === "fn/outbox-one" && method === "GET") {
+        const r = await db.prepare("SELECT * FROM outbox WHERE id = ?").bind(+url.searchParams.get("id") || 0).first();
+        if (!r) return bad("Not found", 404);
+        return json({ mail: r });
+      }
+      return bad("Not found", 404);
     }
 
     // ---------------- admins: account requests from the landing page

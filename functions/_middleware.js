@@ -11,6 +11,7 @@
 //   RESEND_API_KEY, MAIL_FROM, CRON_KEY   for email alerts (see README)
 import { COOKIE, USER_COOKIE, findUser, checkPassword, makeSession, sessionUser, ITER, pbkdf2 } from "../lib/auth.js";
 import { landingPage } from "../lib/landing.js";
+import { flushQueue } from "../lib/fiscal.js";
 import { ensureUsersTable, hashPassword, parseEnvAdmins } from "../lib/auth.js";
 
 
@@ -41,6 +42,8 @@ export async function onRequest(context) {
   const url = new URL(request.url);
 
   if (url.pathname === "/logout") {
+    // Signing out sends anything this person queued in the Fiscal Hive.
+    try { const u = await sessionUser(request, env); if (u && env.DB) await flushQueue(env, env.DB, url.origin, u.name); } catch { /* never block sign-out */ }
     const h = new Headers({ Location: "/" });
     clearCookies(h);
     return new Response(null, { status: 302, headers: h });
