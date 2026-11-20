@@ -10,19 +10,19 @@ const TOUR=[
   {hash:'bills',sel:'table.bills thead',title:'Arrange the table your way',text:'Click a heading to sort. Drag a heading to move the column, or use Columns to hide and reorder. Your layout is saved to your account.'},
   {hash:'bills',sel:'td.c-sponsor .spn',title:'Sponsor cards',text:'Hover a sponsor’s name for their photo and district, plus a button that starts an email to them with the bill number and title already in the subject line.'},
   {hash:'bills',sel:'td.c-position, td.c-departments',need:'me',title:'The office’s columns',text:'Set the office position, department, division, committee positions and assignments right in the table. Everyone signed in sees the same information.'},
-  {hash:'hearings',sel:'main .card',title:'Hearings',text:'Upcoming committee agendas with your bills, soonest first. When two important bills are heard at the same time in different rooms, you’ll see a warning.'},
-  {hash:'legislators',sel:'main .card',title:'Legislators',text:'Every legislator’s bills, grouped by committee. Open a profile for their photo, committees and how their bills line up with the positions you track.'},
-  {hash:'budget',sel:'.pie-wrap',title:'Budget',text:'Where the state budget goes, what fiscal notes would cost, and what was requested compared with what’s being funded.'},
-  {hash:'watchlist',sel:'main .card',need:'me',title:'Watch list',text:'Words and Utah Code chapters the office cares about. Every bill’s full text is checked against them, and substitutes that touch them raise an alert.'},
+  {hash:'updates',sel:'#hearingsCard',title:'Hearings',text:'Upcoming committee agendas with your bills, soonest first. When two important bills are heard at the same time in different rooms, you’ll see a warning.'},
+  {hash:'legislators',sel:'main .card',title:'Legislators',text:'Every legislator’s bills, grouped by committee. Open a profile for a photo, committees and how each member’s votes line up with the positions you track.'},
+  {hash:'budget',sel:'#budCom',title:'Budget',text:'Pick any appropriations committee to see its agencies’ budgets and the fiscal notes on bills in its area, plus what the office requested compared with what’s being funded.'},
+  {hash:'bills',sel:'#watchToggle',need:'me',title:'Watch list',text:'Open the watch list from the Bills page: words and Utah Code chapters the office cares about. Every bill’s full text is checked against them, and substitutes that touch them raise an alert.'},
   {hash:'fiscal',sel:'main .card',need:'fiscal',title:'Fiscal Hive',text:'Route new bills and substitutes to the right division in a few clicks. Divisions answer by email, and their estimates come back here.'},
-  {hash:'postsession',sel:'main .card',need:'me',title:'Session wrap-up',text:'The end-of-session scorecard, governor watch, implementation tracker and your personal season recap.'},
+  {hash:'postsession',sel:'main .card',need:'wrap',title:'Session wrap-up',text:'The end-of-session scorecard, governor watch, implementation tracker and your personal season recap.'},
   {hash:'learn',sel:'main .card',title:'Learn the Legislature',text:'Games and visual guides for new staff and interns: match faces to names, guess who said it, and walk through how a bill becomes law.'},
   {hash:'admin',sel:'main .card',need:'admin',title:'Admin',text:'Approve account requests, choose what each person can see and change, and upload committee positions and budget documents.'},
   {hash:'updates',sel:'#sineDie',title:'Sine die countdown',text:'Always at the bottom of the page. Click it for the session’s key deadlines, with the next one highlighted.'},
   {hash:'updates',sel:'#helpBtn',title:'That’s the tour',text:'Help is here whenever you need it, including this tour. Enjoy the session!'},
 ];
 let TS=null;
-function tourSteps(){return TOUR.filter(s=>!s.need||(s.need==='me'&&ME)||(s.need==='admin'&&isAdmin())||(s.need==='fiscal'&&canFiscal()))}
+function tourSteps(){return TOUR.filter(s=>!s.need||(s.need==='me'&&ME)||(s.need==='admin'&&isAdmin())||(s.need==='fiscal'&&canFiscal())||(s.need==='wrap'&&ME&&wrapVisible()))}
 function startTour(){endTour(true);TS={i:0,steps:tourSteps()};const spot=document.createElement('div');spot.className='tour-spot';const pop=document.createElement('div');pop.className='tour-pop';pop.setAttribute('role','dialog');pop.setAttribute('aria-modal','true');pop.setAttribute('aria-labelledby','tourTitle');document.body.append(spot,pop);TS.spot=spot;TS.pop=pop;TS.timer=setInterval(placeTour,400);tourStep()}
 function endTour(silent){if(!TS)return;clearInterval(TS.timer);TS.spot.remove();TS.pop.remove();TS=null;if(!silent){lsSet('docket-tour-done',1);if(ME)api('prefs',{tourDone:true}).catch(()=>{})}}
 function tourTarget(){const s=TS.steps[TS.i];return s&&document.querySelector(s.sel)}

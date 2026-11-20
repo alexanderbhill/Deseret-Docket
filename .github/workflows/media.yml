@@ -35,7 +35,6 @@ jobs:
         env:
           SITE_URL: ${{ vars.SITE_URL || 'https://deseret-docket.pages.dev' }}
           CRON_KEY: ${{ secrets.CRON_KEY || secrets.CRON_SECRET }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           INPUT_URL: ${{ github.event.inputs.url }}
         run: |
           if [ -n "$INPUT_URL" ]; then python3 media_avail.py --url "$INPUT_URL"; else python3 media_avail.py; fi

@@ -4,10 +4,9 @@
 Picks up (1) any Facebook video links an admin pasted on the Daily Updates page and (2) new videos on
 the Facebook pages in site/config.json ("mediaPages"). For each new recording it downloads the audio
 (yt-dlp), transcribes it (faster-whisper, on the GitHub runner), then writes a summary with topics,
-bills mentioned and notable quotes with who said them (Claude, when ANTHROPIC_API_KEY is set; otherwise
-a plain extract). Results go to site/data/media-avail.json, which the Daily Updates page shows.
+bills mentioned and notable quotes with who said them (a plain extract; the site has a button to summarize it in Claude). Results go to site/data/media-avail.json, which the Daily Updates page shows.
 
-Usage: python3 media_avail.py [--url FACEBOOK_URL]   (env: SITE_URL, CRON_KEY, ANTHROPIC_API_KEY)
+Usage: python3 media_avail.py [--url FACEBOOK_URL]   (env: SITE_URL, CRON_KEY)
 Facebook sometimes blocks automated downloads; when that happens the job says so on the site and an
 admin can paste the link to try again.
 """
@@ -71,7 +70,7 @@ def transcribe(url):
 
 def summarize(lines, label):
     text = "\n".join(f"[{t//60}:{t%60:02d}] {x}" for t, x in lines)
-    key = os.environ.get("ANTHROPIC_API_KEY")
+    key = None  # summaries are made on the site with the "Summarize in Claude" button
     if key:
         prompt = f"""This is an automatic transcript of a Utah Legislature media availability ({label}). Reporters ask legislative leaders questions.
 Return JSON only: {{"summary": "3-5 sentences", "topics": ["short topic", ...], "bills": ["HB 12", ...],
@@ -86,7 +85,7 @@ Only attribute a quote to someone if the transcript makes it clear who is talkin
         if m:
             j = json.loads(m.group(0)); j["src"] = "ai"; return j
     bills = sorted(set(re.sub(r"\s+", " ", b.upper()) for b in re.findall(r"\b[HS]\.?\s?[BJ]\.?\s?R?\.?\s?\d{1,4}\b", text)))
-    return {"summary": "Automatic transcript. Connect ANTHROPIC_API_KEY for a written summary and speaker attribution.", "topics": [], "bills": bills,
+    return {"summary": "Automatic transcript. Use “Summarize in Claude” on the site for a written summary with who said what.", "topics": [], "bills": bills,
             "speakers": [], "quotes": [{"t": t, "who": "Unclear", "text": x[:200]} for t, x in lines[:: max(1, len(lines) // 6)][:6]], "src": "auto"}
 
 

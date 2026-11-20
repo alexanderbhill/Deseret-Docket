@@ -62,6 +62,8 @@ const legById=id=>(LEGS||[]).find(l=>l.id===id);
 // ME: null for guests. Guests see public bill information only, and nothing they change is saved.
 let ME=null; const OFFICE={}; let WATCHMETA=null, PEOPLE=[], officeSig='';
 const isAdmin=()=>ME&&ME.role==='admin';
+// Session wrap-up shows from the last week of a session (and for a few months after), or when an admin turns it on.
+function wrapVisible(){if(ME&&ME.flags&&ME.flags.wrap)return true;const now=Date.now();return Object.values((CONFIG&&CONFIG.sessions)||{}).some(x=>{const d=pd(x.sineDie);return d&&now>=d-7*864e5&&now<=d+120*864e5})}
 const canFiscal=()=>!!ME&&(isAdmin()||!!(ME.perms&&ME.perms.fiscal));
 let ADMIN_PENDING=0;
 const P=()=>ME?ME.perms:{edit:false,fields:[],seePriority:false,seeNotes:false,watch:false,scope:'all'};
@@ -170,7 +172,7 @@ const sessName=id=>{const m=String(id||'').match(/^(\d{4})(GS|S(\d))$/);if(!m)re
 
 /* ===================== COLUMNS ===================== */
 const COLDEFS={
-  position:{label:'Position',office:true}, num:{label:'Bill #'}, priority:{label:'Office priority',need:'priority'}, title:{label:'Bill / topic title'}, summary:{label:'Summary'},
+  position:{label:'Position',office:true}, num:{label:'Bill #'}, priority:{label:'Office priority',need:'priority'}, title:{label:'Title'}, summary:{label:'Summary'},
   departments:{label:'Department',office:true}, committee:{label:'Committee'}, house:{label:'House'}, senate:{label:'Senate'},
   action:{label:'Last action and location'}, fiscal:{label:'Fiscal impact'}, hearing:{label:'Next hearing'},
   designations:{label:'Committee positions',office:true}, assignees:{label:'Assigned to',office:true}, notes:{label:'Notes',need:'note'},
@@ -283,10 +285,9 @@ function shell(active,inner,compact){
   else if(changed) sum+=` <b>${changed}</b> changed today.`;
   const fine=ME?`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}`:''}<br>Signed in as ${esc(ME.display||ME.user)}${isAdmin()?' (admin)':''}: departments, divisions, designations${canSee('priority')?', priorities':''}${canSee('note')?', notes':''} and assignments are shared with the office.`
     :`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m. You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
-  const tabs=[['updates','Updates'],['bills','Bills'],['hearings','Hearings'],['legislators','Legislators'],['budget','Budget']];
-  if(ME) tabs.push(['watchlist','Watch list']);
+  const tabs=[['updates','Updates'],['bills','Bills'],['legislators','Legislators'],['budget','Budget']];
   if(canFiscal()) tabs.push(['fiscal','Fiscal Hive']);
-  if(ME) tabs.push(['postsession','Session wrap-up']);
+  if(ME&&wrapVisible()) tabs.push(['postsession','Session wrap-up']);
   tabs.push(['learn','Learn']);
   if(isAdmin()) tabs.push(['admin',`Admin${ADMIN_PENDING?` <span class="badge">${ADMIN_PENDING}</span>`:''}`]);
   return `<header class="mast gut"><div class="wrap">
@@ -304,6 +305,8 @@ function shell(active,inner,compact){
 /* ===================== SPONSOR CARD ===================== */
 // Hover (or tap) a sponsor's name: photo, district, and a button that starts an email to them with the
 // bill number and title as the subject.
+const SHE=new Set('Angela Ann Ariel Ashlee Candice Carol Cheryl Christine Emily Heidi Jen Jennifer Jill Karen Karianne Kathleen Katy Kristen Leah Lisa Luz Melissa Nicholeen Rosalba Sahara Sandra Stephanie Tiara Verona Jackie Tracy Hoang Susan Kirsten Marsha Kim Deidre Evelyn Wendy Celeste Suzanne Rebecca Elizabeth Mary Julie Amy Sarah Anna Laura Rachel Natalie Michelle Kelly Jessica Ashley Brittany Megan Lauren'.split(' '));
+const pron=l=>{const o=(CONFIG.pronouns||{})[l&&l.id];const f=o||(l&&SHE.has((l.name||'').split(/\s+/)[0])?'she':'he');return f==='she'?{s:'she',o:'her',p:'her',S:'She',P:'Her'}:{s:'he',o:'him',p:'his',S:'He',P:'His'}};
 const legPhoto=l=>l&&(l.image||(l.id?`https://le.utah.gov/images/legislator/${encodeURIComponent(l.id)}.jpg`:''));
 const legEmail=l=>(l&&l.email)||'';
 function sponsorCardHTML(l,name,b){
@@ -316,7 +319,7 @@ function sponsorCardHTML(l,name,b){
    <div><div class="nm">${esc(ttl)}</div>${l?`<div class="small muted">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${l.party==='R'?'Republican':l.party==='D'?'Democrat':esc(l.party||'')}</div>${l.counties?`<div class="tiny muted">${esc(l.counties)}</div>`:''}`:''}</div></div>
    <a class="btn primary" href="${esc(mail)}">Email ${l&&l.house==='S'?'senator':l?'representative':'sponsor'} about ${esc(b.file?'this bill file':shortNum(b.num))}</a>
    ${l&&!legEmail(l)?'<div class="tiny muted" style="margin-top:6px">Their address will fill in after the next data update; for now, add it in your email app.</div>':''}
-   ${l?`<a class="btn sm" href="#legislators-${esc(l.id)}" style="margin-top:6px">See their bills and profile</a>`:''}`;
+   ${l?`<a class="btn sm" href="#legislators-${esc(l.id)}" style="margin-top:6px">See ${pron(l).p} bills and profile</a>`:''}`;
 }
 let spTimer=null, spEl=null;
 function closeSp(){clearTimeout(spTimer);if(spEl){spEl.remove();spEl=null}}
@@ -411,7 +414,7 @@ const CELL={
   position:posCell,
   num:b=>b.file?`<a class="billnum" href="${billHref(b)}" style="font-size:14px">${esc(fileStatus(b))}</a><span class="filelabel">No number yet</span>`:`<a class="billnum" href="${billHref(b)}">${esc(billLabel(b))}</a>`,
   priority:priCell,
-  title:b=>{const o=outcome(b);return `<div class="btitle">${esc(b.title)}${o?` <span class="pill ${o.k}">${esc(o.l)}</span>`:''}</div>${tagsFor(b)}`},
+  title:b=>{const o=outcome(b);return `<div class="btitle"><a href="${billHref(b)}" class="tlink">${esc(b.title)}</a>${o?` <span class="pill ${o.k}">${esc(o.l)}</span>`:''}</div>${tagsFor(b)}`},
   summary:b=>b.file?'<span class="sub">The Legislature publishes only the title until a bill is numbered.</span>':`<div class="clamp">${esc(b.description||'—')}</div>`,
   departments:b=>msHTML('departments',b.key,deptsOf(b),canEdit('departments')),
   committee:b=>esc(committeeOf(b))||'<span class="muted">—</span>',
@@ -511,7 +514,7 @@ function pageBills(){
   const slice=rows.slice((PAGE-1)*per,PAGE*per);
   const opts=showOptions();
   const sp=FLT.sponsor&&legById(FLT.sponsor);
-  return shell('bills',`<div class="card">
+  return shell('bills',`${WATCHOPEN&&ME?watchCard():''}<div class="card">
    <h2>Bills</h2><p class="desc">${ME?`Set a bill’s department, division and designations right in the table${canEdit('priority')?', along with its office priority':''}. Drag a column heading to move it, or use <b>Columns</b> to hide and reorder; your layout is saved to your account.`:`Every numbered bill and bill file in the ${esc(sessName(S))}. Drag a column heading to move it, or use <b>Columns</b> to hide and reorder.`} Bold sponsors are the chief sponsor; the other house’s name is the floor sponsor.</p>
    <form class="filters" id="billForm" onsubmit="return false">
     <div class="field"><label for="fShow">Show</label><select id="fShow">${opts.map(([k,l,f])=>`<option value="${k}" ${k===FLT.show?'selected':''}>${esc(l)} (${allRows(S).filter(f).length.toLocaleString()})</option>`).join('')}</select></div>
@@ -523,6 +526,7 @@ function pageBills(){
     <div class="field grow"><label for="fFind">Find</label><input type="search" id="fFind" value="${esc(FLT.find)}" placeholder="HB 101, title, sponsor, committee, note…"></div>
     ${colMenu()}
     <button type="button" class="btn" id="csvBtn" title="Download the bills shown as a spreadsheet">Download .csv</button>
+    ${ME?`<button type="button" class="btn ${WATCHOPEN?'primary':''}" id="watchToggle" aria-expanded="${WATCHOPEN}">Watch list${W.terms.length+W.codes.length?` (${W.terms.filter(x=>x.on).length+W.codes.filter(x=>x.on).length})`:''}</button>`:''}
    </form>
    ${sp?`<p class="small">Showing bills sponsored by <b>${esc(sp.name)}</b> (${sp.house==='H'?'House':'Senate'} District ${esc(sp.district)}). <button class="linkbtn" id="clearSp">Show all sponsors</button></p>`:''}
    <p class="small muted" style="margin:0 0 10px">${rows.length?`${((PAGE-1)*per+1).toLocaleString()}–${Math.min(PAGE*per,rows.length).toLocaleString()} of ${plural(rows.length,'bill')}`:''}${textReady(S)?'':` · Loading bill text (${TEXTSTATE[S].loaded} of ${TEXTSTATE[S].total})…`}</p>
@@ -552,7 +556,7 @@ function downloadCSV(rows,name){
 }
 
 /* ===================== UPDATES ===================== */
-let updScope=null;
+let updScope=null, SIDETAB='sheet', WATCHOPEN=false;
 const EM_DEFAULT=()=>({email:'',daily:true,time:'07:00',days:[1,2,3,4,5],scope:ME?'office':'all',words:'',bills:'',eve:true,eveTime:'16:00',wrap:true,wrapTime:'18:00',files:true,fiscal:true});
 let EM=null, EMTOKEN=null, EMLOADED=null;
 function emailForm(manage){
@@ -606,14 +610,16 @@ function pageUpdates(){
    <div class="card"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Today’s updates</h2>
     <p class="desc">${items.length?`${plural(items.length,'change')} today, newest first. This list starts fresh at midnight; every bill’s page keeps its full history.`:`Nothing ${updScope==='all'?'':'on this list '}has changed yet today. This list starts fresh at midnight; every bill’s page keeps its full history.`}</p></div>${seg}</div>
     ${items.length?updateRows(items.slice(0,300)):''}${items.length>300?`<p class="small muted">Showing the newest 300.</p>`:''}</div>
+   ${hearingsCard()}
    ${typeof updatesExtras==='function'?updatesExtras():''}
    ${newFiles.length?`<div class="card"><h2>New bill files</h2><p class="desc">Bill requests opened in the last 7 days. Until a bill is numbered, the Legislature publishes only its title and sponsor.</p>
     <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
     ${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
-    <div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
-     <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
+    <div class="card"><div class="minitabs" role="tablist"><button type="button" data-side="sheet" class="${SIDETAB==='sheet'?'on':''}">Spreadsheet</button><button type="button" data-side="mav" class="${SIDETAB==='mav'?'on':''}">Media availability</button></div>
+     ${SIDETAB==='mav'&&typeof mavHTML==='function'?mavHTML():`<h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
+     <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p>`}</div>
    </div>`);
 }
 function pageEmail(token){
@@ -627,7 +633,7 @@ function pageEmail(token){
 
 /* ===================== HEARINGS ===================== */
 let hearScope=null;
-function pageHearings(){
+function hearingsCard(){
   const S=UI.session; if(!hearScope) hearScope=ME?'office':'all';
   const filt=b=>hearScope==='office'?onOffice(b)&&priOf(b)!=='notrelevant':hearScope==='mine'?mineAssigned(b):hearScope==='watch'?matchesFor(b).length>0:true;
   const hs=meetings(S,filt).filter(h=>h.d&&h.d>=TODAY).sort((a,b)=>a.d-b.d);
@@ -643,10 +649,10 @@ function pageHearings(){
     return head+`<div class="hearing"><div class="when"><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span></div><div><h4>${esc(h.committee)}</h4>
      ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(a)}</span>`).join('')}${b.agm?'<span class="pill solid">AG mentioned</span>':''}</div>`).join('')}
      ${h.url?`<a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a>`:''}</div></div>`}).join('');
-  return shell('hearings',`<div class="card"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Hearings</h2>
+  return `<div class="card" id="hearingsCard"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Hearings</h2>
    <p class="desc">Committee agendas with these bills, soonest first. Meetings within three days are marked on the Bills tab.</p></div>${seg}</div>
    ${conflicts.length?conflicts.map(([a,b])=>`<div class="conflict"><b>Two at once:</b> ${a.bills.filter(onOffice).map(x=>esc(shortNum(x.num))).join(', ')} in ${esc(a.committee)} (${fmtTime(a.d)}) and ${b.bills.filter(onOffice).map(x=>esc(shortNum(x.num))).join(', ')} in ${esc(b.committee)} (${fmtTime(b.d)}) on ${WD[a.d.getDay()]}, ${fmtLong(a.d)}. ${[...new Set([...a.bills,...b.bills].flatMap(assignOf))].length?'Assigned: '+esc([...new Set([...a.bills,...b.bills].flatMap(assignOf))].join(', '))+'.':'Nobody is assigned yet.'}</div>`).join(''):''}
-   ${hs.length?body:`<p class="empty">No upcoming committee meetings for these bills.</p>`}</div>`);
+   ${hs.length?body:`<p class="empty">No upcoming committee meetings for these bills.</p>`}</div>`;
 }
 
 /* ===================== LEGISLATORS ===================== */
@@ -695,7 +701,9 @@ function subOf(b){const hay=[...((b.fn&&b.fn.ag)||[]),b.title].join(' ');for(con
 function cjAgencyOf(b,cjRows){const hay=[...((b.fn&&b.fn.ag)||[])].join(' ')+' '+b.title;
   const keys=[[/correction/i,'Corrections'],[/court|judicial/i,'Courts'],[/public safety|highway patrol|bureau of criminal|peace officer/i,'Public Safety'],[/attorney general/i,'Attorney General'],[/pardon|parole/i,'Board of Pardons'],[/juvenile/i,'Juvenile'],[/indigent/i,'Indigent'],[/commission on criminal|ccjj|governor/i,"Governor's Office"]];
   for(const [re,k] of keys)if(re.test(hay)){const row=cjRows.find(r=>r.t.includes(k));if(row)return row.t}return 'Other or not named'}
-let budView={gen:'base',cj:'base',req:'all',mtg:'cj'}, reqAll=false;
+let budView={gen:'base',cj:'base',req:'sel',mtg:'sel',com:null}, reqAll=false;
+// The fiscal-note agency that best matches one of the committee's agencies.
+function agencyIn(b,rows){const hay=((b.fn&&b.fn.ag)||[]).join(' ').toLowerCase();if(!hay)return 'Agency not named';const words=t=>t.toLowerCase().replace(/department of|office of|the |utah |state /g,'').split(/[^a-z]+/).filter(w=>w.length>3);let best=null,score=0;for(const r of rows){const ws=words(r.t);const h=ws.filter(w=>hay.includes(w)).length/Math.max(1,ws.length);if(h>score){score=h;best=r.t}}return score>=0.5?best:'Other agencies'}
 function budgetSession(){const ss=INDEX.sessions.filter(s=>s.count>0);const want=`${BUDGET&&BUDGET.fy||''}GS`;return (ss.find(s=>s.id===want)||ss[0]||{}).id}
 function pageBudget(){
   if(!BUDGET){getJSON('data/budget.json').then(b=>{BUDGET=b;route(true)}).catch(()=>{BUDGET={error:true};route(true)});return shell('budget',`<div class="card"><p>Loading the budget…</p></div>`)}
@@ -710,42 +718,47 @@ function pageBudget(){
   const total=B.subs.reduce((s,r)=>s+(r.v[col]||0),0);
   const fnTotal=costly.reduce((s,b)=>s+costOf(b),0);
   const genItems=budView.gen==='base'?B.subs.map(r=>({l:r.t,v:r.v[col]})):Object.entries(costly.reduce((m,b)=>{const k=subOf(b);m[k]=(m[k]||0)+costOf(b);return m},{})).map(([l,v])=>({l,v,n:`${costly.filter(b=>subOf(b)===l).length} bills`}));
-  const cjBase=B.cj.map(r=>({l:r.t,v:r.v[col]}));
-  const cjBills=(BILLS[S]||[]).filter(b=>b.cj&&b.fn);
+  // the committee budget being looked at (Criminal Justice to start)
+  if(budView.com==null||!B.subs.some(r=>String(r.id)===String(budView.com))) budView.com=String(B.cjId||(B.subs[0]||{}).id);
+  const selSub=B.subs.find(r=>String(r.id)===String(budView.com))||{t:'Criminal Justice'}, selName=selSub.t;
+  const selRows=((B.agencies||{})[budView.com])||(String(budView.com)===String(B.cjId)?B.cj:[]);
+  const cjBase=selRows.map(r=>({l:r.t,v:r.v[col]}));
+  const cjBills=(BILLS[S]||[]).filter(b=>b.fn&&subOf(b)===selName);
   const cjCostly=cjBills.filter(b=>!b.fn.none&&fnCost(b)&&costOf(b)>0);
-  const cjItems=budView.cj==='base'?cjBase:Object.entries(cjCostly.reduce((m,b)=>{const k=cjAgencyOf(b,B.cj);m[k]=(m[k]||0)+costOf(b);return m},{})).map(([l,v])=>({l,v}));
-  const cjTotal=B.cj.reduce((s,r)=>s+(r.v[col]||0),0);
+  const cjItems=budView.cj==='base'?cjBase:Object.entries(cjCostly.reduce((m,b)=>{const k=agencyIn(b,selRows);m[k]=(m[k]||0)+costOf(b);return m},{})).map(([l,v])=>({l,v}));
+  const cjTotal=selSub.v?selSub.v[col]||0:selRows.reduce((s,r)=>s+(r.v[col]||0),0);
+  const comSel=`<select id="budCom" aria-label="Committee budget">${B.subs.map(r=>`<option value="${r.id}" ${String(r.id)===String(budView.com)?'selected':''}>${esc(r.t)}</option>`).join('')}</select>`;
   let reqs=(B.requests||[]).filter(r=>r.by), reqLabel=`${B.fy} General Session`;
   if(!reqs.length&&B.requestsPrev&&B.requestsPrev.length){reqs=B.requestsPrev;reqLabel=`${B.prevFy} General Session (this session’s requests aren’t posted yet)`}
-  if(budView.req==='cj') reqs=reqs.filter(r=>r.sub==='Criminal Justice');
+  if(budView.req==='sel') reqs=reqs.filter(r=>r.sub===selName);
   const reqAmt=r=>Math.abs(r.req[0]||0)+Math.abs(r.req[1]||0);
   reqs=reqs.slice().sort((a,b)=>reqAmt(b)-reqAmt(a));
   const byLeg=Object.entries(reqs.reduce((m,r)=>{m[r.by]=m[r.by]||{n:0,v:0};m[r.by].n++;m[r.by].v+=reqAmt(r);return m},{})).sort((a,b)=>b[1].v-a[1].v);
-  const mtgs=(B.meetings||[]).filter(m=>m.status==='ok'&&(budView.mtg!=='cj'||m.com==='APPCRI'||/criminal/i.test(m.name))).slice(0,12);
+  const mtgs=(B.meetings||[]).filter(m=>m.status==='ok'&&(budView.mtg!=='sel'||m.name.toLowerCase().includes(selName.toLowerCase().split(/[ ,]/)[0]))).slice(0,12);
   const vAtM=(m,vi,s)=>m.videos&&m.videos[vi]?`${m.videos[vi]}#t=${Math.max(0,Math.floor(s))}s`:m.page;
   const seg=(k,opts)=>`<div class="seg" role="group">${opts.map(([v,l])=>`<button type="button" data-bud="${k}|${v}" class="${budView[k]===v?'on':''}" aria-pressed="${budView[k]===v}">${l}</button>`).join('')}</div>`;
   return shell('budget',`
    <div class="card"><h2>How the budget is shaping up</h2>
     <p class="desc">The state budget from the Legislature’s Compendium of Budget Information (COBI), the costs in this session’s fiscal notes, the requests legislators have made, and what’s being said about money in appropriations meetings.</p>
-    <div class="stat3"><div><span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div><span>Criminal justice share</span><b>${money(cjTotal,true)}</b></div><div><span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div><span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
+    <div class="stat3"><div><span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div><span>${esc(selName)} share</span><b>${money(cjTotal,true)}</b></div><div><span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div><span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
     <p class="small muted" style="margin:0">Budget figures are COBI’s operating and capital budgets plus expendable funds. Fiscal-note costs are General, Income Tax and Uniform School Fund amounts (ongoing plus one-time) from each bill’s latest fiscal note; a fiscal note isn’t an appropriation.</p></div>
    ${typeof budgetReqHTML==='function'?budgetReqHTML():''}
    <div class="grid2">
     <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>General budget</h2><p class="desc">${budView.gen==='base'?`By appropriations subcommittee, ${esc(hdrNice)}.`:`Fiscal-note costs by the subcommittee the agency belongs to.`}</p></div>${seg('gen',[['base','Budget'],['fn','Fiscal notes']])}</div>
      ${pieBlock('pieGen',genItems,'General budget',budView.gen==='fn'?'Matched to a subcommittee by the agency named in each fiscal note.':'')}</div>
-    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Law enforcement and criminal justice</h2><p class="desc">${budView.cj==='base'?`Criminal Justice subcommittee agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on criminal justice bills, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
-     ${pieBlock('pieCj',cjItems,'Criminal justice budget')}</div>
+    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Committee budget</h2><div class="field" style="margin:4px 0 6px">${comSel}</div><p class="desc">${budView.cj==='base'?`${esc(selName)} agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on bills in this committee’s area, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
+     ${pieBlock('pieCj',cjItems,selName+' budget')}</div>
    </div>
-   <div class="card"><h2>Criminal justice fiscal notes</h2><p class="desc">Every criminal justice bill in the ${esc(sessName(S))} with a fiscal note (${cjBills.length}), largest cost first.</p>
+   <div class="card"><h2>${esc(selName)} fiscal notes</h2><p class="desc">Every ${esc(sessName(S))} bill with a fiscal note that falls under the ${esc(selName)} committee (${cjBills.length}), largest cost first. Bills are matched by the agency named in the fiscal note.</p>
     ${cjBills.length?`<div class="tablewrap"><table class="compact" style="min-width:760px"><thead><tr><th style="padding-left:12px">Bill</th><th>Title</th><th style="text-align:right">Ongoing</th><th style="text-align:right">One-time</th><th>Agency</th><th>Where it is</th></tr></thead><tbody>
-     ${cjBills.slice().sort((a,b)=>(fnCost(b)?costOf(b):-1)-(fnCost(a)?costOf(a):-1)).map(b=>{const c=fnCost(b);return `<tr><td style="padding-left:12px"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a></td><td class="serif">${esc(b.title)}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.on))}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.one))}</td><td class="small">${esc((b.fn.ag||[])[0]||'')}</td><td class="small">${esc(b.act)}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="empty">No criminal justice fiscal notes yet.</p>`}</div>
-   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, largest first, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['all','All'],['cj','Criminal Justice']])}</div>
+     ${cjBills.slice().sort((a,b)=>(fnCost(b)?costOf(b):-1)-(fnCost(a)?costOf(a):-1)).map(b=>{const c=fnCost(b);return `<tr><td style="padding-left:12px"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a></td><td class="serif">${esc(b.title)}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.on))}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.one))}</td><td class="small">${esc((b.fn.ag||[])[0]||'')}</td><td class="small">${esc(b.act)}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="empty">No fiscal notes for this committee yet.</p>`}</div>
+   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, largest first, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['sel',selName],['all','All']])}</div>
     ${byLeg.length?`<div class="small" style="margin-bottom:12px"><b>Most requested:</b> ${byLeg.slice(0,6).map(([n,x])=>`${esc(n)} (${x.n}, ${money(x.v,true)})`).join(' · ')}</div>`:''}
     ${reqs.length?`<div class="tablewrap"><table class="compact" style="min-width:900px"><thead><tr><th style="padding-left:12px">Requested by</th><th>Request</th><th>Agency</th><th style="text-align:right">Requested</th><th style="text-align:right">Prioritized</th><th style="text-align:right">Appropriated</th></tr></thead><tbody>
      ${reqs.slice(0,reqAll?400:25).map(r=>`<tr><td style="padding-left:12px;white-space:nowrap">${esc(r.by)}</td><td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub">${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td><td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>
       <td style="text-align:right">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td><td style="text-align:right">${money(Math.abs(r.pri[0]||0)+Math.abs(r.pri[1]||0))}</td><td style="text-align:right">${money(Math.abs(r.app[0]||0)+Math.abs(r.app[1]||0))}</td></tr>`).join('')}</tbody></table></div>${reqs.length>25&&!reqAll?`<p><button class="btn sm" id="reqMore">Show all ${reqs.length}</button></p>`:''}`:`<p class="empty">No legislator requests posted yet.</p>`}</div>
    ${talkChart(B)}
-   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>What’s being said in appropriations meetings</h2><p class="desc">From the meeting recordings: the official timeline notes about requests, and each moment someone mentions a dollar amount. Captions are automatic and can be wrong; follow the time link to hear it.</p></div>${seg('mtg',[['cj','Criminal Justice'],['all','All subcommittees']])}</div>
+   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>What’s being said in appropriations meetings</h2><p class="desc">From the meeting recordings: the official timeline notes about requests, and each moment someone mentions a dollar amount. Captions are automatic and can be wrong; follow the time link to hear it.</p></div>${seg('mtg',[['sel',selName],['all','All subcommittees']])}</div>
     ${mtgs.length?mtgs.map((m,i)=>{const d=pd(m.date);return `<details class="disc" ${i===0?'open':''}><summary style="list-style:none;cursor:pointer"><div class="kicker">${d?fmtLong(d):''}</div><h4>${esc(m.name)}</h4><span class="small muted">${m.rfa.length?plural(m.rfa.length,'request')+' presented · ':''}${plural(m.money.length,'money mention')}</span></summary>
       <div class="links"><a href="${esc(m.page)}" target="_blank" rel="noopener">Meeting page</a>${m.agenda?`<a href="${esc(m.agenda)}" target="_blank" rel="noopener">Agenda</a>`:''}</div>
       ${m.rfa.length?`<div class="agbox" style="margin-bottom:10px"><b>Requests for appropriation</b><ul>${m.rfa.map(x=>`<li><a class="ts" href="${esc(vAtM(m,x[2],x[0]))}" target="_blank" rel="noopener">${clock(x[0])}</a><span>${esc(x[1])}</span></li>`).join('')}</ul></div>`:''}
@@ -767,12 +780,12 @@ function talkChart(B){
 }
 
 /* ===================== WATCH LIST ===================== */
-function pageWatch(){
-  if(!ME) return shell('',`<div class="card" style="max-width:640px"><h2>Watch list</h2><p class="desc">The office’s watch list is for signed-in accounts. <a href="/login">Sign in</a> to see it.</p></div>`);
+function watchCard(){
+  if(!ME) return '';
   const S=UI.session; const canW=ME&&(isAdmin()||P().watch);
   const row=(x,i,kind)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><input type="checkbox" id="wl-${kind}-${i}" ${x.on?'checked':''} data-toggle="${kind}:${i}"><label class="serif" style="flex:1;font-size:17px;${x.on?'':'color:var(--muted);text-decoration:line-through'}" for="wl-${kind}-${i}">${esc(x.t)}</label><button class="linkbtn small" data-remove="${kind}:${i}">Remove</button></div>`;
   const count=allRows(S).filter(b=>matchesFor(b).length).length;
-  return shell('watchlist',`<div class="card"><h2>Watch list</h2><p class="desc">Every bill’s full text is checked against the words and Utah Code chapters below, and matches are flagged on the Bills tab. ${ME?(canW?`The office shares one watch list${WATCHMETA&&WATCHMETA.by?` (last changed by ${esc(WATCHMETA.by)})`:''}.`:'Your account can see the office’s watch list but not change it.'):'As a guest, your changes last until you leave the page and aren’t saved.'}</p>
+  return `<div class="card" id="watchCard"><h2>Watch list</h2><p class="desc">Every bill’s full text is checked against the words and Utah Code chapters below, and matches are flagged on the Bills tab. ${ME?(canW?`The office shares one watch list${WATCHMETA&&WATCHMETA.by?` (last changed by ${esc(WATCHMETA.by)})`:''}.`:'Your account can see the office’s watch list but not change it.'):'As a guest, your changes last until you leave the page and aren’t saved.'}</p>
    ${textReady(S)?'':`<p class="small muted">Still loading bill text (${TEXTSTATE[S].loaded} of ${TEXTSTATE[S].total}). Until then, matches use titles and summaries.</p>`}
    <div class="grid2"><div><h3>Words and phrases</h3><p class="small muted">Matches whole words in any capitalization, even across line breaks.</p>${W.terms.map((x,i)=>row(x,i,'terms')).join('')||'<p class="small muted">Nothing yet.</p>'}
     <form class="filters" id="addTerm" style="margin-top:12px"><div class="field grow"><input id="termIn" placeholder="e.g. deceptive trade practice" aria-label="Add a word or phrase"></div><button class="btn">Add</button></form></div>
@@ -781,7 +794,7 @@ function pageWatch(){
    <hr><form id="optsForm"><label class="check"><input type="checkbox" name="struck" ${W.opts.struck?'checked':''}><span>Count language a bill strikes out of existing code</span></label>
     <label class="check"><input type="checkbox" name="defsOnly" ${W.opts.defsOnly?'checked':''}><span>Only count matches inside definitions</span></label>
     <label class="check"><input type="checkbox" name="titlesOnly" ${W.opts.titlesOnly?'checked':''}><span>Search titles and summaries only</span></label><button class="btn" style="margin-top:8px">Save options</button></form>
-   <p class="small muted" style="margin-top:16px">Matching <b>${count}</b> bills in the ${esc(sessName(S))}.</p></div>`);
+   <p class="small muted" style="margin-top:16px">Matching <b>${count}</b> bills in the ${esc(sessName(S))}.</p></div>`;
 }
 function saveWatch(){if(ME&&(isAdmin()||P().watch))api('watch',{terms:W.terms,codes:W.codes,opts:W.opts}).then(r=>{WATCHMETA={by:r.watch.by,at:r.watch.at}}).catch(e=>toast('Couldn’t save the watch list: '+e.message))}
 
@@ -939,7 +952,6 @@ function officePanel(b){
    ${canSee('priority')?`<div class="sidegroup"><span class="flabel">Office priority</span>${[['','No priority','var(--line-2)'],...CONFIG.priorities.map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(p||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pri" value="${v}" ${(p||'')===v?'checked':''} ${canEdit('priority')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('priority')}</div>`:''}
    <div class="sidegroup"><span class="flabel">Assigned to</span>${msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…')}${by('assignees')}</div>
    ${canSee('note')?`<div class="sidegroup"><label class="flabel" for="noteIn">Notes</label><textarea id="noteIn" ${canEdit('note')?'':'readonly'}>${esc(noteOf(b))}</textarea>${by('note')}${canEdit('note')?'<button class="btn primary" id="saveNote" style="margin-top:8px">Save note</button>':''}</div>`:''}
-   ${b.file?'':(()=>{const pv=((ME.prefs||{}).pred||{})[b.key];return `<div class="sidegroup"><span class="flabel">Your prediction</span><div class="seg" role="group" aria-label="Your prediction"><button type="button" data-pred="pass" class="${pv==='pass'?'on':''}">Will pass</button><button type="button" data-pred="fail" class="${pv==='fail'?'on':''}">Won’t pass</button>${pv?'<button type="button" data-pred="">Clear</button>':''}</div><div class="tiny muted" style="margin-top:3px">Private to you. Counts toward your season recap.</div></div>`})()}
    <details class="sidegroup" id="teamLog" data-key="${esc(OFFICE[b.key]||!b.tid?b.key:`${b.session}/F-${b.tid}`)}"><summary class="small" style="cursor:pointer;color:var(--link)">Office history</summary><div class="small muted" id="teamLogBody">Loading…</div></details></aside>`;
 }
 function pageBill(session,num){
@@ -978,10 +990,10 @@ function route(soft){
   const y=scrollY; let html;
   if(view==='updates') html=pageUpdates();
   else if(view==='bills') html=pageBills();
-  else if(view==='hearings') html=pageHearings();
+  else if(view==='hearings'){location.replace('#updates');return}
   else if(view==='legislators') html=pageLegislators(parts.slice(1).join('-'));
   else if(view==='budget') html=pageBudget();
-  else if(view==='watchlist') html=pageWatch();
+  else if(view==='watchlist'){WATCHOPEN=true;location.replace('#bills');return}
   else if(view==='account') html=pageAccount();
   else if(view==='admin') html=pageAdmin();
   else if(view==='email') html=pageEmail(parts.slice(1).join('-'));
@@ -1049,6 +1061,8 @@ function bind(){
   app.querySelectorAll('[data-goshow]').forEach(a=>a.onclick=()=>{FLT.show=a.dataset.goshow;saveFLT()});
   // updates and email
   app.querySelectorAll('[data-upd]').forEach(b=>b.onclick=()=>{updScope=b.dataset.upd;route(true)});
+  app.querySelectorAll('[data-side]').forEach(b=>b.onclick=()=>{SIDETAB=b.dataset.side;route(true)});
+  on('watchToggle','onclick',()=>{WATCHOPEN=!WATCHOPEN;route(true)});
   app.querySelectorAll('input[name=emScope]').forEach(r=>r.onchange=()=>{$('emListRow').style.display=r.value==='list'&&r.checked?'flex':'none'});
   on('emForm','onsubmit',async e=>{e.preventDefault();EM=readEM();const btn=e.target.querySelector('button.primary');btn.disabled=true;
     try{if(EMTOKEN&&location.hash.startsWith('#email-')){const r=await fetch('/api/sub',{method:'POST',headers:{'Content-Type':'application/json','X-Docket':'1'},body:JSON.stringify({t:EMTOKEN,opts:emToApi(EM)})});const j=await r.json();if(!r.ok)throw new Error(j.error);toast('Email settings saved')}
@@ -1062,6 +1076,7 @@ function bind(){
   app.querySelectorAll('[data-sponsor]').forEach(a=>a.onclick=()=>{FLT.sponsor=a.dataset.sponsor;FLT.show='all';PAGE=1;saveFLT()});
   on('reqMore','onclick',()=>{reqAll=true;route(true)});
   app.querySelectorAll('[data-bud]').forEach(b=>b.onclick=()=>{const [k,v]=b.dataset.bud.split('|');budView[k]=v;route(true)});
+  on('budCom','onchange',e=>{budView.com=e.target.value;reqAll=false;route(true)});
   app.querySelectorAll('.pie-wrap').forEach(w=>{w.querySelectorAll('.li').forEach(li=>{li.onmouseenter=()=>{const p=w.querySelector(`path[data-i="${li.dataset.i}"]`);p&&p.classList.add('hl')};li.onmouseleave=()=>w.querySelectorAll('path.hl').forEach(p=>p.classList.remove('hl'))})});
   // watch list
   app.querySelectorAll('[data-toggle]').forEach(cb=>cb.onchange=()=>{const [k,i]=cb.dataset.toggle.split(':');W[k][i].on=cb.checked;saveWatch();route(true)});
@@ -1107,7 +1122,7 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     const meP=fetch('/api/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():{user:null}).catch(()=>({user:null}));
     [INDEX,CONFIG]=await Promise.all([getJSON('data/index.json'),getJSON('config.json')]);
     const me=await meP;
-    if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{}};PEOPLE=me.people||[]}
+    if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{}};PEOPLE=me.people||[]}
     loadCols();
     getJSON('data/legislators.json').then(l=>{LEGS=l;if(booted&&location.hash.startsWith('#legislators'))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);

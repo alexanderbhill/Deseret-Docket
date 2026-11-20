@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """Deseret Docket extras, run after update_docket.py on each data update.
 
-  data/<SESSION>/ai.json     plain-English summaries, fiscal-impact assessments, suggested divisions,
-                             "what this substitute does" and leads on similar laws elsewhere.
-                             Only built when ANTHROPIC_API_KEY is set; cached per bill version.
   data/media.json            news stories (RSS feeds in site/config.json) that mention a bill, a simple
                              sentiment score per bill, and what's trending in the news.
 
@@ -29,103 +26,6 @@ def load(path, default):
         return json.load(open(path))
     except Exception:
         return default
-
-
-# ---------------------------------------------------------------- AI (optional)
-AI_MODEL = os.environ.get("AI_MODEL", "claude-haiku-5-5")
-AI_MAX = int(os.environ.get("AI_MAX_PER_RUN", "120"))
-
-
-def claude(prompt, max_tokens=900):
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    body = json.dumps({"model": AI_MODEL, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]}).encode()
-    raw = get("https://api.anthropic.com/v1/messages", data=body, headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}, timeout=120)
-    d = json.loads(raw)
-    return "".join(b.get("text", "") for b in d.get("content", []) if b.get("type") == "text")
-
-
-def bill_text(passages, limit=9000):
-    t = []
-    for p in passages or []:
-        txt = re.sub(r"\u0001[^\u0002]*\u0002", "", p[1])  # leave struck language out
-        t.append(f"[{p[0]}] {txt}")
-        if sum(len(x) for x in t) > limit:
-            break
-    return "\n".join(t)[:limit]
-
-
-DIV_LIST = "\n".join(f"{d['id']}: {d['name']}" for d in CONFIG.get("divisions", []))
-
-
-def ai_for(b, passages):
-    vd = b.get("vd") or {}
-    changes = ""
-    if vd.get("items"):
-        clean = lambda x: re.sub("[\u0001\u0002]", "", x or "")
-        changes = "\n".join(f"- {i[0]} ({i[1]}): OLD: {clean(i[2])[:300]} NEW: {clean(i[3])[:300]}" for i in vd["items"][:12])
-    subsum_hint = '"one or two plain-English sentences on what changed in this version"' if changes else '""'
-    change_block = f"Changes from {vd.get('from', '')} to {vd.get('to', '')}:\n{changes}" if changes else ""
-    prompt = f"""You help a government legal office triage Utah legislation. Read the bill and answer in JSON only.
-
-Bill {b['n']} ({b.get('ver','')}): {b.get('t','')}
-Sponsor: {b.get('sp','')}
-General description: {b.get('gd','')}
-Text excerpt:
-{bill_text(passages)}
-{change_block}
-
-Divisions (id: name):
-{DIV_LIST}
-
-Return exactly this JSON object:
-{{"sum": "2-3 plain-English sentences on what the bill does, for a busy reader",
- "need": "likely" | "unlikely" | "unsure"  (would it create costs for state agencies or the office: new duties, staff, programs, enforcement, reports?),
- "why": "one sentence explaining that judgment, citing the bill",
- "conf": 0-100,
- "divs": ["up to 3 division ids from the list whose work this bill most affects"],
- "subsum": {subsum_hint},
- "elsewhere": [{{"state": "...", "law": "name or citation", "note": "what happened: passed, struck down, challenged, cost"}}]  (only laws you are confident are real and closely similar; [] if unsure)
-}}"""
-    out = claude(prompt)
-    m = re.search(r"\{[\s\S]*\}", out)
-    if not m:
-        raise ValueError("no JSON in reply")
-    j = json.loads(m.group(0))
-    ids = {d["id"] for d in CONFIG.get("divisions", [])}
-    return {"ver": b.get("ver", ""), "sum": str(j.get("sum", ""))[:1200], "need": j.get("need") if j.get("need") in ("likely", "unlikely", "unsure") else "unsure",
-            "why": str(j.get("why", ""))[:600], "conf": max(0, min(100, int(j.get("conf") or 0))), "divs": [x for x in j.get("divs", []) if x in ids][:3],
-            "subsum": str(j.get("subsum", ""))[:800], "elsewhere": [{k: str(e.get(k, ""))[:300] for k in ("state", "law", "note")} for e in (j.get("elsewhere") or [])[:4] if isinstance(e, dict)],
-            "at": datetime.now(timezone.utc).isoformat()[:16]}
-
-
-def build_ai(out, prev, session):
-    path_prev = os.path.join(prev, session, "ai.json") if prev else None
-    cache = load(path_prev, {}) if path_prev else {}
-    bills_path = os.path.join(out, session, "bills.json")
-    if not os.path.exists(bills_path):
-        return
-    bills = load(bills_path, [])
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        if cache:
-            json.dump(cache, open(os.path.join(out, session, "ai.json"), "w"), separators=(",", ":"))
-        return
-    text = {}
-    for f in sorted(glob.glob(os.path.join(out, session, "text-*.json"))):
-        text.update(load(f, {}))
-    todo = [b for b in bills if (cache.get(b["n"]) or {}).get("ver") != b.get("ver")]
-    todo.sort(key=lambda b: b.get("upd", ""), reverse=True)
-    done = 0
-    for b in todo[:AI_MAX]:
-        try:
-            cache[b["n"]] = ai_for(b, text.get(b["n"]))
-            done += 1
-        except Exception as e:
-            print(f"  ai {b['n']}: {e}", file=sys.stderr)
-            if "401" in str(e) or "403" in str(e):
-                break
-        time.sleep(0.3)
-    print(f"  AI: {done} bills summarized in {session} ({max(0, len(todo) - done)} still to do)")
-    json.dump(cache, open(os.path.join(out, session, "ai.json"), "w"), separators=(",", ":"))
 
 
 # ---------------------------------------------------------------- media
@@ -233,11 +133,6 @@ def main():
     ap.add_argument("out"); ap.add_argument("--prev")
     a = ap.parse_args()
     idx = load(os.path.join(a.out, "index.json"), {})
-    for s in idx.get("sessions", []):
-        try:
-            build_ai(a.out, a.prev, s["id"])
-        except Exception as e:
-            print(f"  ai {s['id']} failed: {e}", file=sys.stderr)
     try:
         build_media(a.out, a.prev)
     except Exception as e:

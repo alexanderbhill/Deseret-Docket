@@ -68,19 +68,17 @@ function wrapMe(S){
   const touched=allRows(S).filter(b=>keys.has(b.key)||mineAssigned(b));
   const hearings=mine.reduce((n,b)=>n+b.ag.filter(a=>pd(a.date)&&pd(a.date)<new Date()).length,0);
   const notes=MYSTATS.log.filter(r=>r[0].startsWith(S+'/')&&(r[1]==='note'||r[1]==='agAction')).length;
-  const pred=MYSTATS.prefs.pred||{};const pk=Object.entries(pred).filter(([k])=>k.startsWith(S+'/'));const pdec=pk.filter(([k])=>BYKEY[k]&&outcome(BYKEY[k]));
-  const pright=pdec.filter(([k,v])=>(outcome(BYKEY[k]).k==='pass')===(v==='pass')).length;
   const counts={};for(const r of MYSTATS.log)if(r[0].startsWith(S+'/'))counts[r[0]]=(counts[r[0]]||0)+1;
   const favKey=MYSTATS.prefs.fav&&BYKEY[MYSTATS.prefs.fav]?MYSTATS.prefs.fav:(Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]||[])[0];
   const fav=favKey&&BYKEY[favKey];
-  const st={tracked:touched.length,hearings,notes,pred:pdec.length?Math.round(pright/pdec.length*100):null,npred:pdec.length,fav};
+  const st={tracked:touched.length,hearings,notes,fav};
   WRAPSTATS=st;
   return `<div class="card"><h2>My season</h2><p class="desc">Your ${esc(sessName(S))} in numbers. Share it, or keep it for your résumé.</p>
    <div class="season" id="seasonCard"><div class="season-hd">${BEE}<div><div class="season-k">Season recap</div><div class="season-n">${esc(ME.display||ME.user)}</div><div class="season-s">${esc(sessName(S))}</div></div></div>
-    <div class="season-grid"><div><b>${st.tracked}</b><span>bills tracked</span></div><div><b>${st.hearings}</b><span>hearings covered</span></div><div><b>${st.notes}</b><span>notes written</span></div><div><b>${st.pred==null?'—':st.pred+'%'}</b><span>prediction accuracy${st.npred?` (${st.npred})`:''}</span></div></div>
+    <div class="season-grid"><div><b>${st.tracked}</b><span>bills tracked</span></div><div><b>${st.hearings}</b><span>hearings covered</span></div><div><b>${st.notes}</b><span>notes written</span></div></div>
     <div class="season-fav"><span>Favorite bill</span><b>${fav?`${esc(shortNum(fav.num))} · ${esc(fav.title)}`:'Pick one below'}</b></div></div>
    <div class="filters" style="margin-top:14px"><div class="field grow"><label for="favSel">Favorite bill</label><select id="favSel"><option value="">Choose…</option>${touched.sort(SORTS.num).map(b=>`<option value="${esc(b.key)}" ${favKey===b.key?'selected':''}>${esc(shortNum(b.num))} ${esc(b.title)}</option>`).join('')}</select></div><button class="btn primary" id="seasonPng">Download as image</button><button class="btn" id="seasonCopy">Copy as text</button></div>
-   <p class="small muted">Predictions: on any bill page, choose “I think it will pass” or “won’t pass” in the office panel. Accuracy counts bills that have been decided.</p></div>`;
+</div>`;
 }
 let WRAPSTATS=null;
 function seasonPNG(){
@@ -88,8 +86,8 @@ function seasonPNG(){
   x.fillStyle='#002147';x.fillRect(0,0,1200,630);x.fillStyle='#e9d8a6';x.fillRect(0,600,1200,30);
   x.fillStyle='#e9d8a6';x.font='600 28px system-ui,sans-serif';x.fillText('DESERET DOCKET · SEASON RECAP',60,80);
   x.fillStyle='#fff';x.font='600 64px Georgia,serif';x.fillText(ME.display||ME.user,60,160);x.font='28px system-ui,sans-serif';x.fillStyle='#c9d5e1';x.fillText(sessName(UI.session),60,205);
-  const items=[[st.tracked,'bills tracked'],[st.hearings,'hearings covered'],[st.notes,'notes written'],[st.pred==null?'—':st.pred+'%','prediction accuracy']];
-  items.forEach(([v,l],i)=>{const X=60+i*275;x.fillStyle='rgba(255,255,255,.08)';x.fillRect(X,250,250,170);x.fillStyle='#fff';x.font='700 64px system-ui,sans-serif';x.fillText(String(v),X+24,340);x.fillStyle='#c9d5e1';x.font='24px system-ui,sans-serif';x.fillText(l,X+24,385)});
+  const items=[[st.tracked,'bills tracked'],[st.hearings,'hearings covered'],[st.notes,'notes written']];
+  items.forEach(([v,l],i)=>{const X=60+i*370;x.fillStyle='rgba(255,255,255,.08)';x.fillRect(X,250,340,170);x.fillStyle='#fff';x.font='700 64px system-ui,sans-serif';x.fillText(String(v),X+24,340);x.fillStyle='#c9d5e1';x.font='24px system-ui,sans-serif';x.fillText(l,X+24,385)});
   x.fillStyle='#e9d8a6';x.font='24px system-ui,sans-serif';x.fillText('FAVORITE BILL',60,480);x.fillStyle='#fff';x.font='600 34px Georgia,serif';
   const fav=st.fav?`${shortNum(st.fav.num)} · ${st.fav.title}`:'—';x.fillText(fav.length>60?fav.slice(0,58)+'…':fav,60,525);
   const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=`season-recap-${UI.session}.png`;document.body.appendChild(a);a.click();a.remove();
@@ -115,7 +113,6 @@ function pagePacket(session,num){
     <section><h2>What it does</h2><p>${esc((ai&&ai.sum)||b.description||'No summary yet.')}</p>${ss?`<p><b>Latest version:</b> ${ss.html?ss.txt:esc(ss.txt)}</p>`:''}</section>
     <section><h2>Money</h2><p><b>Fiscal note:</b> ${!b.fn?'Not posted yet':b.fn.none?'No direct cost to the state':c?`${money(Math.abs(c.on))} ongoing, ${money(Math.abs(c.one))} one-time`:'No General Fund impact'}</p>${fnr.length?`<p><b>Division estimates:</b> ${fnr.map(r=>`${esc(divName(r.division))}: ${r.status==='impact'?money(+r.answer.amount)+' '+esc(r.answer.kind||''):esc(r.status.replace('_',' '))}`).join('; ')}</p>`:''}</section>
     ${(b.agd||[]).length||agActOf(b)?`<section><h2>What the office would have to do</h2>${agActOf(b)?`<p>${esc(agActOf(b))}</p>`:''}${b.agd.length?`<ul>${b.agd.slice(0,5).map(x=>`<li>${esc(x[1])}</li>`).join('')}</ul>`:''}</section>`:''}
-    ${ai&&ai.elsewhere&&ai.elsewhere.length?`<section><h2>Elsewhere (AI leads, verify)</h2><ul>${ai.elsewhere.map(e=>`<li>${esc(e.state)}: ${esc(e.law)}${e.note?' · '+esc(e.note):''}</li>`).join('')}</ul></section>`:''}
     ${col.length?`<section><h2>Collisions</h2><ul>${col.slice(0,4).map(x=>`<li>${esc(shortNum(x.other.num))} also amends ${esc(x.sec)} (different wording in ${esc(x.diff.join(', '))})</li>`).join('')}</ul></section>`:''}
     ${canSee('note')&&noteOf(b)?`<section><h2>Team notes</h2><p class="pre">${esc(noteOf(b))}</p></section>`:''}
     <footer>Attorney Work Product / Attorney-Client Communication · Prepared ${fmtLong(new Date())} from Deseret Docket</footer>
@@ -134,6 +131,5 @@ function wrapBind(){
   app.querySelectorAll('[data-impldel]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this item?'))return;try{await api('impl',{action:'delete',id:b.dataset.impldel});IMPL=null;route(true)}catch(e){toast(e.message)}});
   on('favSel','onchange',async e=>{try{await api('prefs',{fav:e.target.value});MYSTATS=null;route(true)}catch(err){toast(err.message)}});
   on('seasonPng','onclick',seasonPNG);
-  on('seasonCopy','onclick',()=>{const s=WRAPSTATS;const t=`My ${sessName(UI.session)}: ${s.tracked} bills tracked, ${s.hearings} hearings covered, ${s.notes} notes written${s.pred!=null?`, ${s.pred}% prediction accuracy`:''}.${s.fav?` Favorite bill: ${shortNum(s.fav.num)}, ${s.fav.title}.`:''}`;navigator.clipboard.writeText(t).then(()=>toast('Copied'))});
-  app.querySelectorAll('[data-pred]').forEach(b=>b.onclick=async()=>{const k=curKey();try{await api('prefs',{pred:{key:k,v:b.dataset.pred}});ME.prefs.pred={...(ME.prefs.pred||{}),[k]:b.dataset.pred};if(!b.dataset.pred)delete ME.prefs.pred[k];MYSTATS=null;toast(b.dataset.pred?'Prediction saved':'Prediction cleared');route(true)}catch(e){toast(e.message)}});
+  on('seasonCopy','onclick',()=>{const s=WRAPSTATS;const t=`My ${sessName(UI.session)}: ${s.tracked} bills tracked, ${s.hearings} hearings covered, ${s.notes} notes written.${s.fav?` Favorite bill: ${shortNum(s.fav.num)}, ${s.fav.title}.`:''}`;navigator.clipboard.writeText(t).then(()=>toast('Copied'))});
 }

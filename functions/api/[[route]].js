@@ -381,7 +381,8 @@ export async function onRequest(context) {
     if (route === "me" && method === "GET") {
       if (!user) return json({ user: null });
       const pr = await db.prepare("SELECT v FROM prefs WHERE username = ?").bind(user.name).first();
-      return json({ user: user.name, display: user.display || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
+      const fw = await db.prepare("SELECT v FROM settings WHERE k = 'wrap_on'").first();
+      return json({ flags: { wrap: !!(fw && fw.v === "1") }, user: user.name, display: user.display || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
     }
     if (!user) return bad("Sign in required", 401);
 
@@ -602,6 +603,22 @@ export async function onRequest(context) {
       return bad("Not found", 404);
     }
 
+    if (route === "legfacts") {
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'legfacts'").first();
+      const facts = f ? obj(f.v) : {};
+      if (method === "GET") return json({ facts });
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      const id = String(body.id || ""), fact = String(body.fact || "").trim().slice(0, 200);
+      if (!/^[A-Z]{3,10}$/.test(id) || !fact) return bad("Pick a legislator and write a fact.");
+      facts[id] = [...(facts[id] || []), fact].slice(-10);
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('legfacts', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(facts), user.name, new Date().toISOString()).run();
+      return json({ ok: true, facts });
+    }
+    if (route === "flags" && method === "POST") {
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('wrap_on', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(body.wrap ? "1" : "0", user.name, new Date().toISOString()).run();
+      return json({ ok: true });
+    }
     // ---------------- admins: outside committees' positions from a spreadsheet
     if (route === "cpos/import" && method === "POST") {
       if (user.role !== "admin") return bad("Only an admin can do that.", 403);

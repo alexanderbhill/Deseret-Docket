@@ -699,6 +699,13 @@ def build_cobi(prev_budget):
     cj_id = next((r["id"] for r in subs if r["t"] == "Criminal Justice"), 4527)
     cj = cobi(f"tab/financials/hierarchyChart/{fy}/funding/GEN-ERF/{cj_id}.json")
     out = {"fy": fy, "header": root.get("header", []), "subs": subs, "cj": _cobi_rows(cj), "cjId": cj_id}
+    # each appropriations subcommittee's agencies, so the Budget page can show any committee's budget
+    out["agencies"] = {}
+    for r in subs:
+        try:
+            out["agencies"][str(r["id"])] = out["cj"] if r["id"] == cj_id else _cobi_rows(cobi(f"tab/financials/hierarchyChart/{fy}/funding/GEN-ERF/{r['id']}.json"))
+        except Exception as e:
+            print(f"  cobi {r['t']}: {e}", file=sys.stderr)
     # every agency's issues (budget items), keeping the legislator requests
     out["requests"] = cobi_requests(fy, {r["k"]: r for r in (prev_budget or {}).get("requests", []) if (prev_budget or {}).get("fy") == fy})
     # last session's items too, for comparison until this session's requests are posted

@@ -1097,5 +1097,21 @@
   "_about": "Facebook pages the media availability job checks for new videos.",
   "house": "https://www.facebook.com/UtahHouseofRepresentatives/videos",
   "senate": "https://www.facebook.com/utahsenate/videos"
+ },
+ "_pronouns_about": "Pronouns used on legislator cards, by legislator id. Anyone not listed is guessed from their first name; add a line here to correct one.",
+ "pronouns": {
+  "MILLET": "she",
+  "LARSOJ": "she",
+  "NGUYEH": "she",
+  "HAYESS": "she",
+  "DEFAYA": "she",
+  "MALOYC": "he",
+  "CHRISKJ": "he",
+  "WILSOCH": "he",
+  "SNIDEC": "he",
+  "WALTER": "he",
+  "ADAMSJS": "he",
+  "TEUSCJ": "he",
+  "MONSOL": "he"
  }
 }

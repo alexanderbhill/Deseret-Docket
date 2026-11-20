@@ -89,10 +89,10 @@ function pageFiscal(){
 }
 function fhAccuracy(){
   const routed=(FH.cards||[]).filter(c=>c.status!=='cleared'&&c.status!=='new'&&c.ai&&(c.ai.divs||[]).length);
-  if(!routed.length) return `<div class="acc"><div class="acc-l">AI routing accuracy</div><div class="small muted">Shows up once bills have been routed.</div></div>`;
+  if(!routed.length) return `<div class="acc"><div class="acc-l">Suggestion accuracy</div><div class="small muted">Shows up once bills have been routed.</div></div>`;
   const miss=c=>!c.kept_ai||reqsOf(c.id).some(r=>r.status==='wrong'||r.status==='rerouted');
   const hits=routed.filter(c=>!miss(c)).length, pct=Math.round(hits/routed.length*100);
-  return `<div class="acc" title="A bill counts as a miss if the POC changed the suggested divisions before sending, or a division answered “wrong section.”"><div class="acc-l">AI routing accuracy</div><div class="acc-n">${pct}%</div><div class="bar acc-bar" style="--c:${pct>=80?'var(--green)':pct>=60?'var(--steel)':'var(--maroon)'}"><i style="width:${pct}%"></i></div><div class="small muted">${hits} of ${routed.length} sent to the right place the first time · <button class="linkbtn small" data-fhmiss>see misses</button></div></div>`;
+  return `<div class="acc" title="A bill counts as a miss if the POC changed the suggested divisions before sending, or a division answered “wrong section.”"><div class="acc-l">Suggestion accuracy</div><div class="acc-n">${pct}%</div><div class="bar acc-bar" style="--c:${pct>=80?'var(--green)':pct>=60?'var(--steel)':'var(--maroon)'}"><i style="width:${pct}%"></i></div><div class="small muted">${hits} of ${routed.length} sent to the right place the first time · <button class="linkbtn small" data-fhmiss>see misses</button></div></div>`;
 }
 function divChips(sel,ai){
   const opts=CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id&&!sel.includes(x.id)).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('');

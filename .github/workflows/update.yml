@@ -34,9 +34,7 @@ jobs:
           python3 -I update_docket.py "$LEG_TOKEN" new-data --prev site/data
           rm -f new-data/CHANGED.txt
 
-      - name: Summaries, media mentions and sentiment (optional extras)
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: News mentions and sentiment
         run: |
           python3 -I intel_update.py new-data --prev site/data || echo "Extras failed; the bill data still publishes."
 

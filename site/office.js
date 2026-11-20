@@ -32,7 +32,9 @@ function normBill(t,session){const m=String(t||'').toUpperCase().replace(/\./g,'
 let CPI=null; // {rows, head, mode, billCol, comCol, posCol, source}
 function adminExtraHTML(){
   const pending=CPI&&CPI.rows.length?cpiPreview():'';
-  return `<div class="card" id="cpiCard"><h2>Committee positions</h2><p class="desc">Upload the positions outside committees (${esc((CONFIG.designations||[]).map(d=>d.name).join(', '))}) have taken. They show up in the Committee positions column. You can also set them by hand on any bill.</p>
+  return `<div class="card"><h2>Session wrap-up page</h2><p class="desc">The Session wrap-up tab (scorecard, governor watch, implementation tracker, season recaps) turns on by itself in the last week of the session. Switch it on early here.</p>
+   <label class="switch"><input type="checkbox" id="wrapFlag" ${ME.flags&&ME.flags.wrap?'checked':''}><span class="slider" aria-hidden="true"></span><span>Show Session wrap-up to everyone now</span></label></div>
+   <div class="card" id="cpiCard"><h2>Committee positions</h2><p class="desc">Upload the positions outside committees (${esc((CONFIG.designations||[]).map(d=>d.name).join(', '))}) have taken. They show up in the Committee positions column. You can also set them by hand on any bill.</p>
    <div class="filters"><div class="field"><label for="cpiFile">Excel or CSV file</label><input type="file" id="cpiFile" accept=".xlsx,.xls,.csv,.txt"></div>
     <div class="field grow"><label for="cpiUrl">Or a Google Sheet link</label><input id="cpiUrl" placeholder="https://docs.google.com/spreadsheets/d/…"></div><button class="btn" id="cpiFetch">Read sheet</button></div>
    <p class="small muted">Two layouts work: one row per bill with a column for each committee (headings like ULELC, SWAP), or one row per position with columns for bill, committee and position. Positions can be written the usual way (“Priority oppose”, “Support”, “Neutral”…). An X just tags the bill.</p>
@@ -106,6 +108,7 @@ function budgetReqHTML(){
 
 function adminExtraBind(){
   if(!location.hash.startsWith('#admin'))return;
+  on('wrapFlag','onchange',async e=>{try{await api('flags',{wrap:e.target.checked});ME.flags={...(ME.flags||{}),wrap:e.target.checked};toast(e.target.checked?'Session wrap-up is on':'Session wrap-up is off until the last week of session');route(true)}catch(err){toast(err.message)}});
   on('cpiFile','onchange',async e=>{const f=e.target.files[0];if(!f)return;try{cpiStart(await readSheetFile(f),f.name)}catch(err){toast(err.message)}});
   on('cpiFetch','onclick',async()=>{const u=$('cpiUrl').value.trim();if(!u)return;try{const j=await api('cpos/sheet',{url:u});cpiStart(parseCSV(j.csv),'Google Sheet')}catch(err){toast(err.message)}});
   ['cpiMode','cpiBill','cpiCom','cpiPos','cpiSess'].forEach(id=>on(id,'onchange',e=>{const k={cpiMode:'mode',cpiBill:'billCol',cpiCom:'comCol',cpiPos:'posCol',cpiSess:'session'}[id];CPI[k]=k==='mode'||k==='session'?e.target.value:+e.target.value;route(true)}));

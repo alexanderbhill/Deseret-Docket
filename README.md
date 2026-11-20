@@ -35,7 +35,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   stored in the Cloudflare D1 database bound to the Pages project as `DB`
 - `functions/respond/` – the no-sign-in pages division staff open from Fiscal Hive emails
 - `lib/` – shared sign-in code, the landing page, Fiscal Hive email logic and the honeybee logo
-- `intel_update.py` – AI summaries (optional), newspaper mentions and sentiment; runs after each data update
+- `intel_update.py` – newspaper mentions and sentiment; runs after each data update
 - `media_avail.py` – transcribes and summarizes House/Senate media availabilities (`.github/workflows/media.yml`)
 - `update_docket.py` – downloads bills, bill files, fiscal notes, text changes, transcripts, COBI budget
   data and appropriations meetings
@@ -62,9 +62,17 @@ GitHub → Settings → Secrets and variables → Actions:
 | `LEG_TOKEN` | Secret | Your Utah Legislature API token |
 | `CRON_KEY` | Secret | Same value as in Cloudflare |
 | `SITE_URL` | Variable (optional) | Only if the site moves off https://deseret-docket.pages.dev |
-| `ANTHROPIC_API_KEY` | Secret (optional) | Turns on AI summaries, fiscal-impact assessments, "what this sub does", lookalike leads and media availability summaries. Without it, the site uses automatic estimates |
 
 After changing Cloudflare settings, redeploy (Deployments → latest → Manage deployment → Retry deployment).
+
+## Other settings in `site/config.json`
+
+- `sessions`: start and sine die (11:59 p.m. on the last night) for the countdown bar, plus key deadlines.
+- `pronouns`: she/he for legislator cards, by legislator id. Anyone not listed is guessed from their first name.
+- `newsFeeds`: the newspaper RSS feeds used for each bill's News tab.
+
+The Session wrap-up tab turns on by itself in the last week of a session; an admin can switch it on early
+on the Admin page.
 
 ## Fiscal Hive in short
 
