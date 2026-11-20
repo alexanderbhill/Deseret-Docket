@@ -830,3 +830,18 @@ a.welcome-card:hover{box-shadow:0 10px 30px rgba(0,33,71,.25)}
 .calmenu a,.calmenu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 10px;border:0;background:none;border-radius:7px;font:inherit;font-size:14.5px;color:var(--ink);text-decoration:none;cursor:pointer}
 .calmenu a:hover,.calmenu button:hover{background:var(--row-alt)}
 .calmenu .ic{color:var(--steel);margin:0}
+/* phones: the Jump to menu (and committee picker) sit full width above the section tabs */
+@media (max-width:700px){
+  .billtabs{flex-wrap:wrap;overflow:visible;margin-left:0;margin-right:0;padding:0;row-gap:0}
+  .billtabs .billjump{order:-2;flex:1 1 100%;max-width:none;margin:0 0 6px}
+  .billtabs .budcom-l{order:-1;flex:0 0 auto;align-self:center}
+  .billtabs #budCom{order:-1;flex:1 1 0;max-width:none;margin:0 0 6px}
+  .billtabs .btn{order:-2;margin:0 0 6px auto}
+  .billtabs button{padding:8px 9px;font-size:13.5px}
+}
+@media (max-width:700px){
+  .billtabs .billjump{flex:1 1 0;min-width:55%}
+  .billtabs .btn{margin:0 0 6px 8px}
+  .budtabs .billjump{flex:1 1 100%}
+  .budtabs .budcom-l{margin:0 8px 6px 0}
+}

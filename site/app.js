@@ -740,29 +740,31 @@ function pageBudget(){
   const vAtM=(m,vi,s)=>m.videos&&m.videos[vi]?`${m.videos[vi]}#t=${Math.max(0,Math.floor(s))}s`:m.page;
   const seg=(k,opts)=>`<div class="seg" role="group">${opts.map(([v,l])=>`<button type="button" data-bud="${k}|${v}" class="${budView[k]===v?'on':''}" aria-pressed="${budView[k]===v}">${l}</button>`).join('')}</div>`;
   const T=BUDTAB, tabs=[['overview','Overview','chart'],['committee','Committee budget','layers'],['requests','Requests','user'],['meetings','Appropriations meetings','mic']];
-  const nav=`<nav class="billtabs budtabs" aria-label="Budget sections">${tabs.map(([k,l,i])=>`<button type="button" data-budtab="${k}" class="${T===k?'on':''}" aria-pressed="${T===k}">${ic(i)}${l}</button>`).join('')}<span class="grow"></span>${T!=='overview'?`<label class="budcom-l" for="budCom">Committee</label>${comSel}`:''}</nav>`;
+  const nav=`<nav class="billtabs budtabs" aria-label="Budget sections">${tabs.map(([k,l,i])=>`<button type="button" data-budtab="${k}" class="${T===k?'on':''}" aria-pressed="${T===k}">${ic(i)}${l}</button>`).join('')}<span class="grow"></span>${budJump(offReq_has(),talk_has(B))}${T!=='overview'?`<label class="budcom-l" for="budCom">Committee</label>${comSel}`:''}</nav>`;
   const P={};
   P.overview=`
-   <div class="card"><h2>How the budget is shaping up</h2>
+   <div class="card bs" id="bs-bud-overview"><h2>How the budget is shaping up</h2>
     <p class="desc">The state budget from the Legislature’s Compendium of Budget Information (COBI), the costs in this session’s fiscal notes, the requests legislators have made, and what’s being said about money in appropriations meetings.</p>
     <div class="stat3 icstat"><div>${ic('chart')}<span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div>${ic('layers')}<span>${esc(selName)} share</span><b>${money(cjTotal,true)}</b></div><div>${ic('file')}<span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div>${ic('dollar')}<span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
     <p class="small muted" style="margin:0">Budget figures are COBI’s operating and capital budgets plus expendable funds. Fiscal-note costs are General, Income Tax and Uniform School Fund amounts (ongoing plus one-time) from each bill’s latest fiscal note; a fiscal note isn’t an appropriation.</p></div>
-   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>General budget</h2><p class="desc">${budView.gen==='base'?`By appropriations subcommittee, ${esc(hdrNice)}.`:`Fiscal-note costs by the subcommittee the agency belongs to.`}</p></div>${seg('gen',[['base','Budget'],['fn','Fiscal notes']])}</div>
+   <div class="card bs" id="bs-bud-general"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>General budget</h2><p class="desc">${budView.gen==='base'?`By appropriations subcommittee, ${esc(hdrNice)}.`:`Fiscal-note costs by the subcommittee the agency belongs to.`}</p></div>${seg('gen',[['base','Budget'],['fn','Fiscal notes']])}</div>
      ${pieBlock('pieGen',genItems,'General budget',budView.gen==='fn'?'Matched to a subcommittee by the agency named in each fiscal note.':'')}</div>`;
   P.committee=`
-    <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Committee budget</h2><p class="desc">${budView.cj==='base'?`${esc(selName)} agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on bills in this committee’s area, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
+    <div class="card bs" id="bs-bud-committee"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Committee budget</h2><p class="desc">${budView.cj==='base'?`${esc(selName)} agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on bills in this committee’s area, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
      ${pieBlock('pieCj',cjItems,selName+' budget')}</div>
-   <div class="card"><h2>${esc(selName)} fiscal notes</h2><p class="desc">Every ${esc(sessName(S))} bill with a fiscal note that falls under the ${esc(selName)} committee (${cjBills.length}), largest cost first. Bills are matched by the agency named in the fiscal note.</p>
+   <div class="card bs" id="bs-bud-fn"><h2>${esc(selName)} fiscal notes</h2><p class="desc">Every ${esc(sessName(S))} bill with a fiscal note that falls under the ${esc(selName)} committee (${cjBills.length}), largest cost first. Bills are matched by the agency named in the fiscal note.</p>
     ${cjBills.length?`<div class="tablewrap"><table class="compact" style="min-width:760px"><thead><tr><th style="padding-left:12px">Bill</th><th>Title</th><th style="text-align:right">Ongoing</th><th style="text-align:right">One-time</th><th>Agency</th><th>Where it is</th></tr></thead><tbody>
      ${cjBills.slice().sort((a,b)=>(fnCost(b)?costOf(b):-1)-(fnCost(a)?costOf(a):-1)).map(b=>{const c=fnCost(b);return `<tr><td style="padding-left:12px"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a></td><td class="serif">${esc(b.title)}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.on))}</td><td style="text-align:right">${b.fn.none||!c?'—':money(Math.abs(c.one))}</td><td class="small">${esc((b.fn.ag||[])[0]||'')}</td><td class="small">${esc(b.act)}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="empty">No fiscal notes for this committee yet.</p>`}</div>`;
-  P.requests=`${typeof budgetReqHTML==='function'?budgetReqHTML():''}
-   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, largest first, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['sel',selName],['all','All']])}</div>
+  const offReq=typeof budgetReqHTML==='function'?budgetReqHTML():'';
+  P.requests=`${offReq?`<div class="bs" id="bs-bud-office">${offReq}</div>`:''}
+   <div class="card bs" id="bs-bud-requests"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Legislator requests</h2><p class="desc">Requests for appropriation from the ${esc(reqLabel)}, largest first, with what the subcommittee prioritized and what was appropriated.</p></div>${seg('req',[['sel',selName],['all','All']])}</div>
     ${byLeg.length?`<div class="small" style="margin-bottom:12px"><b>Most requested:</b> ${byLeg.slice(0,6).map(([n,x])=>`${esc(n)} (${x.n}, ${money(x.v,true)})`).join(' · ')}</div>`:''}
     ${reqs.length?`<div class="tablewrap"><table class="compact" style="min-width:900px"><thead><tr><th style="padding-left:12px">Requested by</th><th>Request</th><th>Agency</th><th style="text-align:right">Requested</th><th style="text-align:right">Prioritized</th><th style="text-align:right">Appropriated</th></tr></thead><tbody>
      ${reqs.slice(0,reqAll?400:25).map(r=>`<tr><td style="padding-left:12px;white-space:nowrap">${esc(r.by)}</td><td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub${r.txt.length>180?' hasfull" tabindex="0" data-full="'+esc(r.txt)+'"':'"'}>${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td><td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>
       <td style="text-align:right">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td><td style="text-align:right">${money(Math.abs(r.pri[0]||0)+Math.abs(r.pri[1]||0))}</td><td style="text-align:right">${money(Math.abs(r.app[0]||0)+Math.abs(r.app[1]||0))}</td></tr>`).join('')}</tbody></table></div>${reqs.length>25&&!reqAll?`<p><button class="btn sm" id="reqMore">Show all ${reqs.length}</button></p>`:''}`:`<p class="empty">No legislator requests posted yet.</p>`}</div>`;
-  P.meetings=`${talkChart(B)}
-   <div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>What’s being said in appropriations meetings</h2><p class="desc">From the meeting recordings: the official timeline notes about requests, and each moment someone mentions a dollar amount. Captions are automatic and can be wrong; follow the time link to hear it.</p></div>${seg('mtg',[['sel',selName],['all','All subcommittees']])}</div>
+  const tc=talkChart(B);
+  P.meetings=`${tc?`<div class="bs" id="bs-bud-talk">${tc}</div>`:''}
+   <div class="card bs" id="bs-bud-said"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>What’s being said in appropriations meetings</h2><p class="desc">From the meeting recordings: the official timeline notes about requests, and each moment someone mentions a dollar amount. Captions are automatic and can be wrong; follow the time link to hear it.</p></div>${seg('mtg',[['sel',selName],['all','All subcommittees']])}</div>
     ${mtgs.length?mtgs.map((m,i)=>{const d=pd(m.date);return `<details class="disc" ${i===0?'open':''}><summary style="list-style:none;cursor:pointer"><div class="kicker">${d?fmtLong(d):''}</div><h4>${esc(m.name)}</h4><span class="small muted">${m.rfa.length?plural(m.rfa.length,'request')+' presented · ':''}${plural(m.money.length,'money mention')}</span></summary>
       <div class="links"><a href="${esc(m.page)}" target="_blank" rel="noopener">Meeting page</a>${m.agenda?`<a href="${esc(m.agenda)}" target="_blank" rel="noopener">Agenda</a>`:''}</div>
       ${m.rfa.length?`<div class="agbox" style="margin-bottom:10px"><b>Requests for appropriation</b><ul>${m.rfa.map(x=>`<li><a class="ts" href="${esc(vAtM(m,x[2],x[0]))}" target="_blank" rel="noopener">${clock(x[0])}</a><span>${esc(x[1])}</span></li>`).join('')}</ul></div>`:''}
@@ -770,6 +772,16 @@ function pageBudget(){
   return shell('budget',nav+(P[T]||P.overview));
 }
 let BUDTAB='overview';
+const offReq_has=()=>typeof budgetReqHTML==='function'&&!!budgetReqHTML();
+const talk_has=B=>!!talkChart(B);
+// "Jump to…" for the Budget page: every section, grouped by tab.
+function budJump(hasOff,hasTalk){
+  const S=[['overview','Overview',[['bud-overview','How the budget is shaping up'],['bud-general','General budget']]],
+    ['committee','Committee budget',[['bud-committee','Committee budget'],['bud-fn','Committee fiscal notes']]],
+    ['requests','Requests',[...(hasOff?[['bud-office','Office budget request']]:[]),['bud-requests','Legislator requests']]],
+    ['meetings','Appropriations meetings',[...(hasTalk?[['bud-talk','Where the money talk is']]:[]),['bud-said','What’s being said in meetings']]]];
+  return `<label class="sr" for="budJump">Jump to a section</label><select id="budJump" class="billjump"><option value="">Jump to…</option>${S.map(([t,l,xs])=>`<optgroup label="${esc(l)}">${xs.map(([id,n])=>`<option value="${t}|${id}">${esc(n)}</option>`).join('')}</optgroup>`).join('')}</select>`;
+}
 
 
 // How much money talk each subcommittee's meetings have had lately, from the recordings.
@@ -1118,6 +1130,9 @@ function bind(){
   app.querySelectorAll('[data-sponsor]').forEach(a=>a.onclick=()=>{FLT.sponsor=a.dataset.sponsor;FLT.show='all';PAGE=1;saveFLT()});
   on('reqMore','onclick',()=>{reqAll=true;route(true)});
   app.querySelectorAll('[data-budtab]').forEach(b=>b.onclick=()=>{BUDTAB=b.dataset.budtab;route(true);scrollTo(0,0)});
+  on('budJump','onchange',e=>{const [t,id]=e.target.value.split('|');if(!t)return;e.target.blur();BUDTAB=t;route();
+    const go=f=>{const el=document.getElementById('bs-'+id);if(!el)return;const r=el.getBoundingClientRect();if(Math.abs(r.top-12)>30)scrollTo(0,scrollY+r.top-12);if(f){el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1600)}};
+    setTimeout(()=>go(true),60);setTimeout(()=>go(),600)});
   app.querySelectorAll('[data-bud]').forEach(b=>b.onclick=()=>{const [k,v]=b.dataset.bud.split('|');budView[k]=v;route(true)});
   on('budCom','onchange',e=>{budView.com=e.target.value;reqAll=false;e.target.blur();route()});
   app.querySelectorAll('.pie-wrap').forEach(w=>{w.querySelectorAll('.li').forEach(li=>{li.onmouseenter=()=>{const p=w.querySelector(`path[data-i="${li.dataset.i}"]`);p&&p.classList.add('hl')};li.onmouseleave=()=>w.querySelectorAll('path.hl').forEach(p=>p.classList.remove('hl'))})});
