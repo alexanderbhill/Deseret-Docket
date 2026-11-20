@@ -36,6 +36,7 @@ const ICONS={
   repeat:'M4 12a8 8 0 0 1 14-5l2 2M20 4v5h-5M20 12a8 8 0 0 1-14 5l-2-2M4 20v-5h5',
   trophy:'M8 4h8v5a4 4 0 0 1-8 0zM8 6H4a3 3 0 0 0 4 4M16 6h4a3 3 0 0 1-4 4M12 13v4M8 21h8M10 17h4v4',
   wrap:'M5 3h14v18l-7-4-7 4z',
+  external:'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
 };
 const ic=(n,cls='')=>ICONS[n]?`<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICONS[n]}"/></svg>`:'';
 
@@ -45,7 +46,14 @@ const H2ICON={'Today’s updates':'bell','Hearings':'calendar','New bill files':
   'Fiscal Hive':'hive','Learn the Legislature':'book','Who is sponsoring the most legislation':'users','Summary':'file','In plain English':'spark',
   'What the AG office will have to do':'scale','Fiscal note':'dollar','What has changed':'clock','Committee hearings':'calendar','Floor calendar':'list',
   'What was discussed':'mic','Where the watch list appears':'eye','Bill collisions':'merge','Documents':'file','Status and actions':'clock',
-  'Has this bill run before?':'repeat','Votes':'ballot','News & sentiment':'news','Accounts':'users','Association positions':'users','Session wrap-up':'wrap'};
+  'Has this bill run before?':'repeat','Votes':'ballot','News & sentiment':'news','Accounts':'users','Association positions':'users','Session wrap-up':'wrap',
+  'How the budget is shaping up':'chart','General budget':'chart','Committee budget':'layers','Legislator requests':'user','What’s being said in appropriations meetings':'mic','Where the money talk is':'dollar',
+  'Office budget request':'dollar','What we asked for vs. what we’re getting':'chart','Session wrap-up page':'wrap','Your account':'user','Change your password':'gear',
+  'Appropriations threshold':'dollar','By department':'building','Fastest responders':'trophy','Outbox':'mail','Where the suggestion missed':'search','Who gets requests':'users','History':'clock',
+  'Governor watch':'scale','Implementation tracker':'list','My season':'trophy','Collisions':'merge','Money':'dollar','Office':'building','Sponsor':'user','Team notes':'pencil','What it does':'file','What the office would have to do':'scale',
+  'People for “Assigned to”':'users','Media availabilities':'mic','Legislature in the news':'news'};
+// Icons for the kinds of change on the Updates page.
+function changeIcon(k){k=k||'';return /hearing|agenda|meeting/i.test(k)?'calendar':/sub|text|version|amend/i.test(k)?'diff':/fiscal/i.test(k)?'dollar':/AG/.test(k)?'scale':/vote|pass|read|floor|circl|rules|calendar/i.test(k)?'ballot':/sponsor/i.test(k)?'user':/governor|sign|veto|law/i.test(k)?'check':/new bill|numbered/i.test(k)?'file':/discuss|transcript|video/i.test(k)?'mic':'bell'}
 function iconHeads(html){
   return html.replace(/<h2( [^>]*)?>([^<]+?)(<|$)/g,(m,attr,txt,end)=>{const k=txt.trim().replace(/^What this (substitute|version) does$/,'x');const n=H2ICON[k]||(k==='x'?'diff':'');return n?`<h2${attr||''}>${ic(n,'h')}${txt}${end}`:m});
 }

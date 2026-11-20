@@ -517,13 +517,13 @@ function pageBills(){
   return shell('bills',`${WATCHOPEN&&ME?watchCard():''}<div class="card">
    <h2>Bills</h2><p class="desc">${ME?`Set a bill’s department, division and designations right in the table${canEdit('priority')?', along with its office priority':''}. Drag a column heading to move it, or use <b>Columns</b> to hide and reorder; your layout is saved to your account.`:`Every numbered bill and bill file in the ${esc(sessName(S))}. Drag a column heading to move it, or use <b>Columns</b> to hide and reorder.`} Bold sponsors are the chief sponsor; the other house’s name is the floor sponsor.</p>
    <form class="filters" id="billForm" onsubmit="return false">
-    <div class="field"><label for="fShow">Show</label><select id="fShow">${opts.map(([k,l,f])=>`<option value="${k}" ${k===FLT.show?'selected':''}>${esc(l)} (${allRows(S).filter(f).length.toLocaleString()})</option>`).join('')}</select></div>
-    ${ME?`<div class="field"><label for="fPos">Position</label><select id="fPos"><option value="">Any</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${FLT.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="none" ${FLT.pos==='none'?'selected':''}>No position</option></select></div>`:''}
-    ${ME?`<div class="field"><span class="flabel">Department</span>${msHTML('departments','flt:dept',FLT.dept,true,'Any')}</div>
-    <div class="field"><span class="flabel">Division</span>${msHTML('divisions','flt:div',FLT.div,true,'Any')}</div>
-    <div class="field"><span class="flabel">Designation</span>${msHTML('designations','flt:desig',FLT.desig,true,'Any')}</div>`:''}
-    ${canSee('priority')?`<div class="field"><label for="fPri">Priority</label><select id="fPri"><option value="">Any</option>${CONFIG.priorities.map(p=>`<option value="${p.id}" ${FLT.pri[0]===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="none" ${FLT.pri[0]==='none'?'selected':''}>No priority</option></select></div>`:''}
-    <div class="field grow"><label for="fFind">Find</label><input type="search" id="fFind" value="${esc(FLT.find)}" placeholder="HB 101, title, sponsor, committee, note…"></div>
+    <div class="field"><label for="fShow">${ic('list')}Show</label><select id="fShow">${opts.map(([k,l,f])=>`<option value="${k}" ${k===FLT.show?'selected':''}>${esc(l)} (${allRows(S).filter(f).length.toLocaleString()})</option>`).join('')}</select></div>
+    ${ME?`<div class="field"><label for="fPos">${ic('flag')}Position</label><select id="fPos"><option value="">Any</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${FLT.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="none" ${FLT.pos==='none'?'selected':''}>No position</option></select></div>`:''}
+    ${ME?`<div class="field"><span class="flabel">${ic('building')}Department</span>${msHTML('departments','flt:dept',FLT.dept,true,'Any')}</div>
+    <div class="field"><span class="flabel">${ic('layers')}Division</span>${msHTML('divisions','flt:div',FLT.div,true,'Any')}</div>
+    <div class="field"><span class="flabel">${ic('users')}Association</span>${msHTML('designations','flt:desig',FLT.desig,true,'Any')}</div>`:''}
+    ${canSee('priority')?`<div class="field"><label for="fPri">${ic('priority')}Priority</label><select id="fPri"><option value="">Any</option>${CONFIG.priorities.map(p=>`<option value="${p.id}" ${FLT.pri[0]===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="none" ${FLT.pri[0]==='none'?'selected':''}>No priority</option></select></div>`:''}
+    <div class="field grow"><label for="fFind">${ic('search')}Find</label><input type="search" id="fFind" value="${esc(FLT.find)}" placeholder="HB 101, title, sponsor, committee, note…"></div>
     ${colMenu()}
     <button type="button" class="btn" id="csvBtn" title="Download the bills shown as a spreadsheet">Download .csv</button>
     ${ME?`<button type="button" class="btn ${WATCHOPEN?'primary':''}" id="watchToggle" aria-expanded="${WATCHOPEN}">Watch list${W.terms.length+W.codes.length?` (${W.terms.filter(x=>x.on).length+W.codes.filter(x=>x.on).length})`:''}</button>`:''}
@@ -595,7 +595,7 @@ const emFromApi=o=>({...EM_DEFAULT(),...o,bills:(o.bills||[]).map(shortNum).join
 function updateRows(items){
   return `<div class="rows">${items.map(({b,c})=>`<div class="row"><a class="k" href="${billHref(b)}">${esc(billLabel(b))}</a>
    <div class="what">${esc(c[2])}<span class="sub">${esc(b.title)}${b.file?'':' · '+esc(b.sponsor)}</span></div>
-   <div class="r">${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}<span class="pill ${c[1]==='AG mentioned'?'solid':c[1]==='New bill file'?'muted':'new'}">${esc(c[1])}</span><span class="small muted">${fmtTime(pd(c[0]))}</span></div></div>`).join('')}</div>`;
+   <div class="r">${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}<span class="pill ${c[1]==='AG mentioned'?'solid':c[1]==='New bill file'?'muted':'new'}">${ic(changeIcon(c[1]))}${esc(c[1])}</span><span class="small muted">${fmtTime(pd(c[0]))}</span></div></div>`).join('')}</div>`;
 }
 function pageUpdates(){
   const S=UI.session; if(!updScope) updScope=ME?'office':'all';
@@ -613,13 +613,13 @@ function pageUpdates(){
    ${hearingsCard()}
    ${typeof updatesExtras==='function'?updatesExtras():''}
    ${newFiles.length?`<div class="card"><h2>New bill files</h2><p class="desc">Bill requests opened in the last 7 days. Until a bill is numbered, the Legislature publishes only its title and sponsor.</p>
-    <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
+    <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">${ic('file')}Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
     ${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
     <div><div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
      <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
-     ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
+     ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}${typeof legNewsHTML==='function'?legNewsHTML():''}</div>
    </div>`);
 }
 function pageEmail(token){
@@ -742,7 +742,7 @@ function pageBudget(){
   return shell('budget',`
    <div class="card"><h2>How the budget is shaping up</h2>
     <p class="desc">The state budget from the Legislature’s Compendium of Budget Information (COBI), the costs in this session’s fiscal notes, the requests legislators have made, and what’s being said about money in appropriations meetings.</p>
-    <div class="stat3"><div><span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div><span>${esc(selName)} share</span><b>${money(cjTotal,true)}</b></div><div><span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div><span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
+    <div class="stat3 icstat"><div>${ic('chart')}<span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div>${ic('layers')}<span>${esc(selName)} share</span><b>${money(cjTotal,true)}</b></div><div>${ic('file')}<span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div>${ic('dollar')}<span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
     <p class="small muted" style="margin:0">Budget figures are COBI’s operating and capital budgets plus expendable funds. Fiscal-note costs are General, Income Tax and Uniform School Fund amounts (ongoing plus one-time) from each bill’s latest fiscal note; a fiscal note isn’t an appropriation.</p></div>
    ${typeof budgetReqHTML==='function'?budgetReqHTML():''}
    <div class="grid2">

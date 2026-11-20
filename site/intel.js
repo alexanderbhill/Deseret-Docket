@@ -151,3 +151,18 @@ function billExtraBind(){
   on('mavForm','onsubmit',async e=>{e.preventDefault();try{const j=await api('media/queue',{url:$('mavUrl').value.trim()});MQ=j.queue;toast('Added. It’s analyzed on the next run (within about 30 minutes on session weekdays), or run “Media availability analysis” from GitHub Actions.');route(true)}catch(err){toast(err.message)}});
   if(isAdmin()&&MQ===null&&location.hash.slice(1).split('-')[0]==='updates'){MQ=[];api('media/queue').then(j=>{MQ=j.queue||[];if(MQ.length)route(true)}).catch(()=>{})}
 }
+
+// ---------- Legislature in the news: recent stories about the Legislature from Utah newsrooms
+let LEGNEWS_ALL=false;
+function agoText(iso){if(!iso)return '';const d=new Date(iso.length>10?iso+'Z':iso);const m=Math.round((Date.now()-d)/6e4);if(m<60)return `${Math.max(1,m)} min ago`;const h=Math.round(m/60);if(h<24)return `${h} hr ago`;const dd=Math.round(h/24);return dd===1?'Yesterday':dd<7?`${dd} days ago`:fmtMD(d)}
+function legNewsHTML(){
+  const M=loadMedia();if(!M)return '';
+  const L=M.leg||[];const show=LEGNEWS_ALL?L:L.slice(0,6);
+  const ini=s=>esc((s||'').split(/\s+/).filter(w=>/^[A-Z0-9]/.test(w)).map(w=>w[0]).join('').slice(0,3));
+  return `<div class="card" id="legNews"><h2>${ic('news','h')}Legislature in the news</h2><p class="desc">The latest stories about the Legislature from Utah newsrooms. Click a story to read it on the news site.</p>
+   ${L.length?`<div class="lnews">${show.map(x=>`<a class="ln" href="${esc(x.u)}" target="_blank" rel="noopener">${x.img?`<img src="${esc(x.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=&quot;ln-ph&quot;>${ini(x.src)}</span>'">`:`<span class="ln-ph">${ini(x.src)}</span>`}<span class="ln-b"><b>${esc(x.t)}</b><span class="ln-m">${esc(x.src)} · ${esc(agoText(x.date))} ${ic('external')}</span></span></a>`).join('')}</div>
+    ${L.length>6?`<button type="button" class="linkbtn small" id="legNewsMore" style="margin-top:8px">${LEGNEWS_ALL?'Show fewer':`Show all ${L.length} stories`}</button>`:''}`
+   :'<p class="empty">No stories yet. They appear after the next data update.</p>'}
+   ${M.fetched?`<p class="tiny muted" style="margin-top:8px">Checked ${esc(agoText(M.fetched))} · ${esc((M.sources||[]).filter(s=>s.ok).map(s=>s.name).join(', '))}</p>`:''}</div>`;
+}
+document.addEventListener('click',e=>{if(e.target&&e.target.id==='legNewsMore'){LEGNEWS_ALL=!LEGNEWS_ALL;route(true)}});

@@ -62,7 +62,10 @@ def parse_feed(raw, name):
             d = email.utils.parsedate_to_datetime(date).astimezone(timezone.utc).isoformat()[:16]
         except Exception:
             d = date[:16]
-        items.append({"t": tag("title")[:300], "d": re.sub(r"\s+", " ", tag("description") or tag("summary") or tag("content"))[:600], "u": link, "date": d, "src": name, "kind": "news"})
+        # A picture for the story, if the feed has one (media:content, media:thumbnail, an enclosure, or the first <img>).
+        im = re.search(r'<media:(?:content|thumbnail)[^>]*url="([^"]+)"', blk) or re.search(r'<enclosure[^>]*url="([^"]+\.(?:jpe?g|png|webp)[^"]*)"', blk, re.I) or re.search(r'<img[^>]*src=["\']([^"\']+)', html.unescape(blk))
+        img = html.unescape(im.group(1)) if im else ""
+        items.append({"t": tag("title")[:300], "d": re.sub(r"\s+", " ", tag("description") or tag("summary") or tag("content"))[:600], "u": link, "date": d, "src": name, "kind": "news", **({"img": img} if img.startswith("https://") else {})})
     return items
 
 
@@ -83,16 +86,40 @@ def bill_matchers(bills):
     return out
 
 
+# Stories about the Legislature or what it's doing, for the "Legislature in the news" feed.
+LEG_STRONG = re.compile(r"\b(legislat\w*|lawmakers?|state (?:house|senate)|utah (?:house|senate)|interim committee|special session|general session|sine die|senate president|house speaker|speaker (?:mike )?schultz|president (?:stuart )?adams|state capitol|veto(?:ed|es)?|override)\b", re.I)
+LEG_WEAK = re.compile(r"\b(bill|h\.?\s?b\.?\s?\d+|s\.?\s?b\.?\s?\d+|sponsor(?:ed|s)?|rep\.|sen\.|state law|new law|governor cox|cox signs?)\b", re.I)
+NOT_LEG = re.compile(r"\b(congress(?:ional)?|u\.s\. (?:house|senate)|washington|white house|supreme court of the united states)\b", re.I)
+# Utah's members of Congress, so their federal bills don't land in the state feed.
+FEDERAL = re.compile(r"\b(john curtis|curtis,|sen\.? curtis|mike lee|sen\.? lee|celeste maloy|maloy|burgess owens|blake moore|mike kennedy|cortez masto|rosen)\b", re.I)
+
+
+def legislature_news(items, old, now):
+    cutoff = (now - timedelta(days=10)).isoformat()[:16]
+    seen, out = set(), []
+    for it in sorted(items + old, key=lambda x: x.get("date") or "", reverse=True):
+        t, d = it.get("t", ""), it.get("d", "")
+        key = re.sub(r"[^a-z0-9]+", "", t.lower())[:60]
+        if not t or not it.get("u") or (it.get("date") or "") < cutoff or it["u"] in seen or key in seen:
+            continue
+        score = 3 * bool(LEG_STRONG.search(t)) + bool(LEG_STRONG.search(d)) + bool(LEG_WEAK.search(t)) + 0.5 * bool(LEG_WEAK.search(d))
+        if NOT_LEG.search(t) and not re.search(r"\butah\b", t, re.I):
+            score -= 2
+        if FEDERAL.search(t):
+            score -= 4
+        if score < 2:
+            continue
+        seen.update([it["u"], key])
+        out.append({k: it[k] for k in ("t", "d", "u", "date", "src", "img") if it.get(k)} | {"d": d[:240]})
+    return out[:30]
+
+
 def build_media(out, prev):
     old = load(os.path.join(prev, "media.json"), {}) if prev else {}
     idx = load(os.path.join(out, "index.json"), {})
     live = [s["id"] for s in idx.get("sessions", []) if s.get("count")]
-    if not live:
-        if old:
-            json.dump(old, open(os.path.join(out, "media.json"), "w"), separators=(",", ":"))
-        return
-    session = live[0]
-    bills = load(os.path.join(out, session, "bills.json"), [])
+    session = live[0] if live else old.get("session") or ""
+    bills = load(os.path.join(out, session, "bills.json"), []) if live else []
     items, status = [], []
     for f in CONFIG.get("newsFeeds", []):
         try:
@@ -123,9 +150,10 @@ def build_media(out, prev):
         day[num] = sum((x.get("date") or "") >= (now - timedelta(days=1)).isoformat()[:16] for x in lst)
         week[num] = sum((x.get("date") or "") >= (now - timedelta(days=7)).isoformat()[:16] for x in lst)
     top = lambda m: [[k, v] for k, v in sorted(m.items(), key=lambda kv: -kv[1]) if v][:15]
-    json.dump({"session": session, "fetched": now.isoformat()[:16], "sources": status, "bills": bills_out, "trending": {"day": top(day), "week": top(week)}},
+    leg = legislature_news(items, old.get("leg") or [], now)
+    json.dump({"session": session, "fetched": now.isoformat()[:16], "sources": status, "bills": bills_out, "trending": {"day": top(day), "week": top(week)}, "leg": leg},
               open(os.path.join(out, "media.json"), "w"), separators=(",", ":"))
-    print(f"  media: {len(items)} items read, {len(bills_out)} bills mentioned")
+    print(f"  media: {len(items)} items read, {len(bills_out)} bills mentioned, {len(leg)} legislature stories")
 
 
 def main():
