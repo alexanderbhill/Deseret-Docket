@@ -638,8 +638,25 @@ def legislators(token):
         return None
     out = []
     for x in d.get("legislators", []):
-        out.append({"id": x.get("id"), "name": x.get("formatName"), "full": x.get("fullName"), "house": x.get("house"),
-                    "party": x.get("party"), "district": x.get("district"), "counties": x.get("counties", "")})
+        lid = x.get("id") or ""
+        out.append({"id": lid, "name": x.get("formatName"), "full": x.get("fullName"), "house": x.get("house"),
+                    "party": x.get("party"), "district": x.get("district"), "counties": x.get("counties", ""),
+                    "email": x.get("email", ""), "image": x.get("image") or (f"{LE}/images/legislator/{lid}.jpg" if lid else ""),
+                    "profession": x.get("profession", ""), "since": x.get("serviceStart", "")})
+    return out
+
+
+def committees(token):
+    """Standing and other committees with their members, for grouping a legislator's bills by committee."""
+    try:
+        d = json.loads(get(f"{API}/committees/{token}"))
+    except Exception as e:
+        print(f"  committees failed: {e}", file=sys.stderr)
+        return None
+    out = []
+    for c in d.get("committees", []):
+        out.append({"id": c.get("id"), "name": c.get("description") or c.get("name"),
+                    "members": [{"id": m.get("id"), "pos": m.get("position", "")} for m in c.get("members", [])]})
     return out
 
 
@@ -1139,6 +1156,11 @@ def main():
         leg = json.load(open(os.path.join(a.prev, "legislators.json")))
     if leg:
         json.dump(leg, open(os.path.join(a.out, "legislators.json"), "w"), separators=(",", ":"))
+    com = committees(a.token)
+    if com is None and a.prev and os.path.exists(os.path.join(a.prev, "committees.json")):
+        com = json.load(open(os.path.join(a.prev, "committees.json")))
+    if com:
+        json.dump(com, open(os.path.join(a.out, "committees.json"), "w"), separators=(",", ":"))
     if not a.no_budget:
         build_budget(a.token, a.out, a.prev)
     elif a.prev and os.path.exists(os.path.join(a.prev, "budget.json")):

@@ -379,7 +379,8 @@ export async function onRequest(context) {
     if (route === "prefs" && method === "POST") {
       const cols = (Array.isArray(body.cols) ? body.cols : []).filter((c) => typeof c === "string" && /^[a-zA-Z0-9]{1,20}$/.test(c)).slice(0, 40);
       const hidden = (Array.isArray(body.hidden) ? body.hidden : []).filter((c) => typeof c === "string" && /^[a-zA-Z0-9]{1,20}$/.test(c)).slice(0, 40);
-      await db.prepare("INSERT INTO prefs (username, v) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET v=excluded.v").bind(user.name, JSON.stringify({ cols, hidden })).run();
+      const v = Number.isInteger(body.v) ? body.v : 1;
+      await db.prepare("INSERT INTO prefs (username, v) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET v=excluded.v").bind(user.name, JSON.stringify({ cols, hidden, v })).run();
       return json({ ok: true });
     }
     if (route === "password" && method === "POST") {

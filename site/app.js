@@ -90,7 +90,7 @@ async function pullOffice(soft){
     if(sig!==officeSig){officeSig=sig;for(const k of Object.keys(OFFICE))delete OFFICE[k];Object.assign(OFFICE,st.bills||{});
       if(st.watch){W.terms=st.watch.terms;W.codes=st.watch.codes;W.opts=st.watch.opts;WATCHMETA={by:st.watch.by,at:st.watch.at}}
       matchCache.clear();if(soft)route(true)}
-    if(st.prefs&&st.prefs.cols&&!prefsLoaded){prefsLoaded=true;COLS.order=mergeCols(st.prefs.cols);COLS.hidden=st.prefs.hidden||[];lsSet(colKey(),COLS);if(soft)route(true)}
+    if(st.prefs&&st.prefs.cols&&!prefsLoaded){prefsLoaded=true;if(st.prefs.v===LAYOUT_VER){COLS={v:LAYOUT_VER,order:mergeCols(st.prefs.cols),hidden:st.prefs.hidden||[]};lsSet(colKey(),COLS);if(soft)route(true)}}
   }catch(e){if(soft)toast('Couldn’t refresh the office list: '+e.message)}
 }
 let prefsLoaded=false;
@@ -164,15 +164,19 @@ const COLDEFS={
   position:{label:'Position',office:true}, num:{label:'Bill #'}, priority:{label:'Office priority',need:'priority'}, title:{label:'Bill / topic title'}, summary:{label:'Summary'},
   departments:{label:'Department',office:true}, committee:{label:'Committee'}, house:{label:'House'}, senate:{label:'Senate'},
   action:{label:'Last action and location'}, fiscal:{label:'Fiscal impact'}, hearing:{label:'Next hearing'},
-  designations:{label:'Designations',office:true}, assignees:{label:'Assigned to',office:true}, notes:{label:'Notes',need:'note'},
-  divisions:{label:'Division',office:true}, agAction:{label:'AG office action'},
+  designations:{label:'Committee positions',office:true}, assignees:{label:'Assigned to',office:true}, notes:{label:'Notes',need:'note'},
+  divisions:{label:'Division',office:true}, agAction:{label:'AG office action'}, sponsor:{label:'Sponsor'},
 };
-const DEFAULT_ORDER=['position','num','priority','title','summary','departments','committee','house','senate','action','fiscal','hearing','designations','assignees','notes','divisions','agAction'];
-const colKey=()=>'docket-cols-v1:'+(ME?ME.user:'guest');
+// Bill number, then who's carrying it, then what it is and where it stands, then the office's columns
+// (department next to its divisions), then money, timing and people.
+const DEFAULT_ORDER=['num','sponsor','title','summary','action','position','priority','departments','divisions','designations','fiscal','hearing','committee','assignees','notes','agAction','house','senate'];
+const DEFAULT_HIDDEN=['house','senate'];
+const LAYOUT_VER=2; // bump to move everyone onto a new default column order once
+const colKey=()=>'docket-cols-v2:'+(ME?ME.user:'guest');
 const mergeCols=o=>{o=(o||[]).filter(c=>COLDEFS[c]);for(const c of DEFAULT_ORDER)if(!o.includes(c)){const i=DEFAULT_ORDER.indexOf(c);o.splice(Math.min(i,o.length),0,c)}return o};
-let COLS={order:DEFAULT_ORDER.slice(),hidden:[]};
-function loadCols(){const c=lsGet(colKey(),null);COLS=c?{order:mergeCols(c.order),hidden:c.hidden||[]}:{order:DEFAULT_ORDER.slice(),hidden:[]}}
-function saveCols(){lsSet(colKey(),COLS);if(ME)api('prefs',{cols:COLS.order,hidden:COLS.hidden}).catch(()=>{})}
+let COLS={order:DEFAULT_ORDER.slice(),hidden:DEFAULT_HIDDEN.slice()};
+function loadCols(){const c=lsGet(colKey(),null);COLS=c&&c.v===LAYOUT_VER?{v:LAYOUT_VER,order:mergeCols(c.order),hidden:c.hidden||[]}:{v:LAYOUT_VER,order:DEFAULT_ORDER.slice(),hidden:DEFAULT_HIDDEN.slice()}}
+function saveCols(){COLS.v=LAYOUT_VER;lsSet(colKey(),COLS);if(ME)api('prefs',{cols:COLS.order,hidden:COLS.hidden,v:LAYOUT_VER}).catch(()=>{})}
 const colAllowed=c=>{const d=COLDEFS[c];if(d.office&&!ME)return false;if(d.need&&!canSee(d.need))return false;return true};
 const visibleCols=()=>COLS.order.filter(c=>colAllowed(c)&&!COLS.hidden.includes(c));
 
@@ -280,16 +284,87 @@ function shell(active,inner,compact){
    ${compact?'':`<p class="summary">${sum}</p>
    <p class="fine">${fine}</p>`}
    <nav class="tabs" aria-label="Sections">${tabs.map(([h,l])=>`<a href="#${h}" class="${active===h?'on':''}" ${active===h?'aria-current="page"':''}>${l}</a>`).join('')}</nav>
-  </div></header><main class="gut"><div class="wrap">${inner}</div></main>`;
+  </div></header><main class="gut"><div class="wrap">${inner}</div></main>${footerHTML()}`;
 }
+
+/* ===================== SPONSOR CARD ===================== */
+// Hover (or tap) a sponsor's name: photo, district, and a button that starts an email to them with the
+// bill number and title as the subject.
+const legPhoto=l=>l&&(l.image||(l.id?`https://le.utah.gov/images/legislator/${encodeURIComponent(l.id)}.jpg`:''));
+const legEmail=l=>(l&&l.email)||'';
+function sponsorCardHTML(l,name,b){
+  const nm=l?l.name:name.replace(/^(Rep|Sen)\.\s*/,'');
+  const ttl=l?`${l.house==='H'?'Rep.':'Sen.'} ${nm}`:name;
+  const subj=`${b.file?'Bill file':shortNum(b.num)} – ${b.title}`;
+  const mail=`mailto:${encodeURIComponent(legEmail(l))}?subject=${encodeURIComponent(subj)}`;
+  const ini=nm.split(/\s+/).filter(w=>/^[A-Z]/.test(w)).map(w=>w[0]).filter((c,i,a)=>i===0||i===a.length-1).join('');
+  return `<div class="hd">${l&&legPhoto(l)?`<img src="${esc(legPhoto(l))}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ph0',textContent:'${esc(ini)}'}))">`:`<span class="ph0">${esc(ini)}</span>`}
+   <div><div class="nm">${esc(ttl)}</div>${l?`<div class="small muted">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${l.party==='R'?'Republican':l.party==='D'?'Democrat':esc(l.party||'')}</div>${l.counties?`<div class="tiny muted">${esc(l.counties)}</div>`:''}`:''}</div></div>
+   <a class="btn primary" href="${esc(mail)}">Email ${l&&l.house==='S'?'senator':l?'representative':'sponsor'} about ${esc(b.file?'this bill file':shortNum(b.num))}</a>
+   ${l&&!legEmail(l)?'<div class="tiny muted" style="margin-top:6px">Their address will fill in after the next data update; for now, add it in your email app.</div>':''}
+   ${l?`<a class="btn sm" href="#legislators-${esc(l.id)}" style="margin-top:6px">See their bills and profile</a>`:''}`;
+}
+let spTimer=null, spEl=null;
+function closeSp(){clearTimeout(spTimer);if(spEl){spEl.remove();spEl=null}}
+function openSp(t){
+  closeSp();const b=BYKEY[t.dataset.spbill];if(!b)return;
+  const l=legFor(t.dataset.sp,t.dataset.spname);
+  spEl=document.createElement('div');spEl.className='spcard';spEl.setAttribute('role','dialog');spEl.setAttribute('aria-label','Sponsor');
+  spEl.innerHTML=sponsorCardHTML(l,t.dataset.spname,b);document.body.appendChild(spEl);
+  const r=t.getBoundingClientRect();const w=280;let left=Math.max(8,Math.min(r.left,innerWidth-w-8));
+  let top=r.bottom+6;if(top+spEl.offsetHeight>innerHeight-50)top=Math.max(8,r.top-spEl.offsetHeight-6);
+  spEl.style.left=left+'px';spEl.style.top=top+'px';
+  spEl.onmouseenter=()=>clearTimeout(spTimer);spEl.onmouseleave=()=>{spTimer=setTimeout(closeSp,250)};
+}
+document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest('.spn');if(t){clearTimeout(spTimer);if(!spEl||spEl.dataset.for!==t.dataset.spname+t.dataset.spbill){spTimer=setTimeout(()=>{openSp(t);if(spEl)spEl.dataset.for=t.dataset.spname+t.dataset.spbill},180)}}});
+document.addEventListener('mouseout',e=>{const t=e.target.closest&&e.target.closest('.spn');if(t){clearTimeout(spTimer);spTimer=setTimeout(closeSp,300)}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('.spn');if(t){e.preventDefault();openSp(t);if(spEl)spEl.dataset.for=t.dataset.spname+t.dataset.spbill;return}if(spEl&&!spEl.contains(e.target))closeSp()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSp();const t=e.target.closest&&e.target.closest('.spn');if(t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openSp(t)}});
+window.addEventListener('scroll',()=>{if(spEl)closeSp()},{passive:true});
+
+/* ===================== FOOTER: WORK-PRODUCT NOTE AND SINE DIE ===================== */
+function sessionCfg(){const ss=CONFIG.sessions||{};if(ss[UI.session])return [UI.session,ss[UI.session]];
+  const now=Date.now();const list=Object.entries(ss).sort((a,b)=>a[1].start.localeCompare(b[1].start));
+  return list.find(([,x])=>pd(x.sineDie)>=now)||list[list.length-1]||[null,null]}
+function countdownParts(target){let ms=Math.max(0,target-Date.now());const d=Math.floor(ms/864e5);ms-=d*864e5;const h=Math.floor(ms/36e5);ms-=h*36e5;const m=Math.floor(ms/6e4);return {d,h,m}}
+function sineDieText(){
+  const [id,c]=sessionCfg(); if(!c) return '';
+  const start=pd(c.start), end=pd(c.sineDie), now=new Date();
+  let lbl,target;
+  if(now<start){lbl=`until the ${esc(sessName(id))} begins`;target=start}
+  else if(now<=end){lbl='until sine die';target=end}
+  else{const nxt=Object.entries(CONFIG.sessions||{}).map(([k,x])=>[k,pd(x.start)]).filter(([,d])=>d>now).sort((a,b)=>a[1]-b[1])[0];
+    if(nxt){lbl=`until the ${esc(sessName(nxt[0]))} begins`;target=nxt[1]}else return `<span class="lbl">The ${esc(sessName(id))} adjourned sine die on ${fmtLong(end)}.</span>`}
+  const p=countdownParts(target);
+  return `<span class="cd"><b>${p.d}</b>d <b>${p.h}</b>h <b>${p.m}</b>m</span><span class="lbl">${lbl}</span>`;
+}
+function deadlineList(){
+  const [id,c]=sessionCfg(); if(!c||!(c.deadlines||[]).length) return '';
+  const nextI=c.deadlines.findIndex(x=>pd(x[0])>=TODAY);
+  return `<h4>Key dates, ${esc(sessName(id))}</h4><ul>${c.deadlines.map((x,i)=>{const d=pd(x[0]);return `<li class="${d<TODAY?'past':''} ${i===nextI?'next':''}"><span>${WD[d.getDay()].slice(0,3)}, ${fmtLong(d)}</span><span class="muted">Day ${esc(x[1])}</span><span>${esc(x[2])}</span></li>`}).join('')}</ul>`;
+}
+function footerHTML(){
+  return `<div class="wp-note">Attorney Work Product / Attorney-Client Communication</div>
+   <div class="sinedie" id="sineDie"><button type="button" id="sdBtn" aria-expanded="false" aria-controls="sdList"><span id="sdTxt">${sineDieText()}</span><span class="chev">Key dates ▴</span></button><div class="dl" id="sdList">${deadlineList()}</div></div>`;
+}
+setInterval(()=>{const t=$('sdTxt');if(t&&CONFIG)t.innerHTML=sineDieText()},30000);
 
 /* ===================== CELLS ===================== */
 function sponsorCell(b,house){
-  let name='',chief=false;
-  if(b.spH===house){name=b.sponsor;chief=true}else if(b.flH===house){name=b.floor}
-  if(!name) return '<span class="muted">—</span>';
-  const clean=name.replace(/^(Rep|Sen)\.\s*/,'');
-  return chief?`<span class="chief" title="Chief sponsor">${esc(clean)}</span><span class="chief-tag">Chief sponsor</span>`:`<span title="Floor sponsor">${esc(clean)}</span><span class="chief-tag">Floor sponsor</span>`;
+  if(b.spH===house) return `<span class="chief">${sponName(b.sponsor,b.spId,b,'Chief sponsor')}</span>`;
+  if(b.flH===house&&b.floor) return sponName(b.floor,b.flId,b,'Floor sponsor');
+  return '<span class="muted">—</span>';
+}
+// Chief sponsor (bold), with the floor sponsor underneath. Hovering a name opens the sponsor card.
+function legFor(id,name){if(id){const l=legById(id);if(l)return l}if(!name||!LEGS)return null;return LEGS.find(l=>legMatchName(l,name))||null}
+function sponName(name,id,b,role){
+  if(!name) return '';
+  const clean=name.replace(/^(Rep|Sen)\.\s*/,'').replace(/^(.+?),\s*(.+)$/,'$2 $1');
+  return `<span class="spon"><span class="spn" tabindex="0" role="button" data-sp="${esc(id||'')}" data-spname="${esc(name)}" data-spbill="${esc(b.key)}">${esc(clean)}</span></span><span class="chief-tag">${role}</span>`;
+}
+function sponsorCol(b){
+  if(!b.sponsor) return '<span class="muted">—</span>';
+  return `<div class="chief">${sponName(b.sponsor,b.spId,b,(b.spH==='H'?'Rep.':'Sen.')+' · chief sponsor')}</div>${b.floor?`<div style="margin-top:4px">${sponName(b.floor,b.flId,b,(b.flH==='H'?'Rep.':'Sen.')+' · floor sponsor')}</div>`:''}`;
 }
 function fnCost(b){const f=b.fn;if(!f||!f.net)return null;return {on:-f.net[0],one:-f.net[1]}}
 function fiscalCell(b){
@@ -328,7 +403,7 @@ const CELL={
   summary:b=>b.file?'<span class="sub">The Legislature publishes only the title until a bill is numbered.</span>':`<div class="clamp">${esc(b.description||'—')}</div>`,
   departments:b=>msHTML('departments',b.key,deptsOf(b),canEdit('departments')),
   committee:b=>esc(committeeOf(b))||'<span class="muted">—</span>',
-  house:b=>sponsorCell(b,'H'), senate:b=>sponsorCell(b,'S'),
+  house:b=>sponsorCell(b,'H'), senate:b=>sponsorCell(b,'S'), sponsor:sponsorCol,
   action:b=>`${esc(b.act||'—')}<div class="sub">${esc(b.own||'')}${b.date?', '+fmtMD(b.date):''}</div>`,
   fiscal:fiscalCell, hearing:hearingCell,
   designations:b=>msHTML('designations',b.key,desigOf(b),canEdit('designations')),
@@ -364,6 +439,7 @@ const SORTS={
   committee:(a,b)=>(committeeOf(a)||'~').localeCompare(committeeOf(b)||'~'),
   house:(a,b)=>sponKey(a,'H').localeCompare(sponKey(b,'H')),
   senate:(a,b)=>sponKey(a,'S').localeCompare(sponKey(b,'S')),
+  sponsor:(a,b)=>(a.sponsor||'~').replace(/^(Rep|Sen)\.\s*/,'').localeCompare((b.sponsor||'~').replace(/^(Rep|Sen)\.\s*/,'')),
   action:(a,b)=>(b.date||0)-(a.date||0),
   fiscal:(a,b)=>costKey(b)-costKey(a),
   hearing:(a,b)=>((nextHearing(a)||{}).d||9e15)-((nextHearing(b)||{}).d||9e15),
@@ -470,26 +546,25 @@ let EM=null, EMTOKEN=null, EMLOADED=null;
 function emailForm(manage){
   const e=EM; const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const signed=!!ME||(manage&&EMLOADED&&EMLOADED.linked);
-  return `<form id="emForm" class="${manage?'':''}">
-   ${manage?`<p>Settings for <b>${esc(EMLOADED.email)}</b>${EMLOADED.confirmed?'':' (not confirmed yet)'}.</p>`:`<div class="filters"><div class="field grow"><label for="emEmail">Email address</label><input type="email" id="emEmail" required value="${esc(e.email)}" placeholder="you@agutah.gov" autocomplete="email"></div></div>`}
-   <div class="opt-block"><span class="flabel">On these days</span><div class="daypick" role="group" aria-label="Days">${days.map((d,i)=>`<label><input type="checkbox" data-day="${i}" ${e.days.includes(i)?'checked':''}>${d}</label>`).join('')}</div></div>
-   <div class="opt-block"><label class="check"><input type="checkbox" id="emDaily" ${e.daily?'checked':''}><span><b>Daily calendar.</b> Which bills are being heard and when, for the coming week, plus new substitutes${''} and hearings added since the last email.</span></label>
-    <div class="row2"><label class="small" for="emTime">Send at</label><input type="time" id="emTime" value="${e.time}" step="900"></div></div>
-   <div class="opt-block"><label class="check"><input type="checkbox" id="emEve" ${e.eve?'checked':''}><span><b>The day before.</b> When and where each bill is heard tomorrow, and bills waiting on a floor calendar.</span></label>
-    <div class="row2"><label class="small" for="emEveTime">Send at</label><input type="time" id="emEveTime" value="${e.eveTime}" step="900"></div></div>
-   <div class="opt-block"><label class="check"><input type="checkbox" id="emWrap" ${e.wrap?'checked':''}><span><b>End of the day.</b> How each bill’s committee or floor discussion went today, from the meeting recordings: motions, votes and any mention of the Attorney General.</span></label>
-    <div class="row2"><label class="small" for="emWrapTime">Send at</label><input type="time" id="emWrapTime" value="${e.wrapTime}" step="900"></div></div>
-   <div class="opt-block"><label class="check"><input type="checkbox" id="emFiles" ${e.files?'checked':''}><span><b>New bill files.</b> When legislators open new bill requests, and what their titles say is in them. Useful before bills are numbered.</span></label></div>
-   <div class="opt-block"><label class="check"><input type="checkbox" id="emFiscal" ${e.fiscal?'checked':''}><span><b>Fiscal notes.</b> Mention new and updated fiscal notes, with the cost.</span></label></div>
-   <div class="opt-block"><span class="flabel">Which bills</span>
-    <label class="check"><input type="radio" name="emScope" value="all" ${e.scope==='all'?'checked':''}><span>Every bill on the calendar</span></label>
-    <label class="check"><input type="radio" name="emScope" value="list" ${e.scope==='list'?'checked':''}><span>Only bills I list, or whose title or summary has these words</span></label>
-    <div class="row2" style="display:${e.scope==='list'?'flex':'none'}" id="emListRow"><input id="emBills" value="${esc(e.bills)}" placeholder="Bills: HB 20, SB 101" style="flex:1;min-width:180px"><input id="emWords" value="${esc(e.words)}" placeholder="Words: victim, firearm" style="flex:1;min-width:180px"></div>
-    ${signed?`<label class="check"><input type="radio" name="emScope" value="mine" ${e.scope==='mine'?'checked':''}><span>Bills assigned to me</span></label>
-    <label class="check"><input type="radio" name="emScope" value="office" ${e.scope==='office'?'checked':''}><span>The office list</span></label>`:''}
+  const tog=(id,on,title,line,timeId,time)=>`<div class="opt-block tog-row"><label class="switch"><input type="checkbox" id="${id}" ${on?'checked':''}><span class="slider" aria-hidden="true"></span><span><b>${title}</b> <span class="muted">${line}</span></span></label>${timeId?`<label class="tm"><span class="sr">${title} time</span><input type="time" id="${timeId}" value="${time}" step="900"></label>`:''}</div>`;
+  return `<form id="emForm">
+   ${manage?`<p>Settings for <b>${esc(EMLOADED.email)}</b>${EMLOADED.confirmed?'':' (not confirmed yet)'}.</p>`:`<div class="filters"><div class="field grow"><label for="emEmail">Email</label><input type="email" id="emEmail" required value="${esc(e.email)}" placeholder="you@example.gov" autocomplete="email"></div></div>`}
+   ${tog('emDaily',e.daily,'Morning calendar.','This week’s hearings, new substitutes and agenda changes.','emTime',e.time)}
+   ${tog('emEve',e.eve,'Day-before heads-up.','Tomorrow’s hearings and floor calendar.','emEveTime',e.eveTime)}
+   ${tog('emWrap',e.wrap,'End-of-day recap.','How today’s hearings and floor debates went.','emWrapTime',e.wrapTime)}
+   ${tog('emFiles',e.files,'New bill files.','New bill requests as they’re opened.')}
+   ${tog('emFiscal',e.fiscal,'Fiscal notes.','Add new and updated fiscal notes, with the cost.')}
+   <div class="opt-block"><span class="flabel">Days</span><div class="daypick" role="group" aria-label="Days">${days.map((d,i)=>`<label><input type="checkbox" data-day="${i}" ${e.days.includes(i)?'checked':''}>${d}</label>`).join('')}</div></div>
+   <div class="opt-block"><span class="flabel">Bills</span>
+    <div class="seg wrapseg" role="radiogroup" aria-label="Which bills">
+     <label><input type="radio" name="emScope" value="all" ${e.scope==='all'?'checked':''}><span>All</span></label>
+     ${signed?`<label><input type="radio" name="emScope" value="office" ${e.scope==='office'?'checked':''}><span>Office list</span></label>
+     <label><input type="radio" name="emScope" value="mine" ${e.scope==='mine'?'checked':''}><span>Assigned to me</span></label>`:''}
+     <label><input type="radio" name="emScope" value="list" ${e.scope==='list'?'checked':''}><span>Ones I pick</span></label></div>
+    <div class="row2" style="display:${e.scope==='list'?'flex':'none'};margin-left:0;margin-top:10px" id="emListRow"><input id="emBills" value="${esc(e.bills)}" placeholder="Bills: HB 20, SB 101" style="flex:1;min-width:180px" aria-label="Bills"><input id="emWords" value="${esc(e.words)}" placeholder="Or words: victim, firearm" style="flex:1;min-width:180px" aria-label="Words"></div>
    </div>
-   <p class="small muted">Emails link to the public view of each bill, so they open without signing in, and never include the office’s departments, priorities or notes. ${manage?'':'We’ll send one email to confirm the address first.'}</p>
-   <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary">${manage?'Save settings':'Sign up'}</button>${manage?'<button type="button" class="btn danger" id="emUnsub">Unsubscribe</button>':''}</div>
+   <p class="small muted">Emails link to the public bill pages and never include the office’s positions or notes.${manage?'':' We’ll send one email first to confirm it’s you.'}</p>
+   <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary">${manage?'Save':'Sign up'}</button>${manage?'<button type="button" class="btn danger" id="emUnsub">Unsubscribe</button>':''}</div>
   </form>`;
 }
 function readEM(){
@@ -523,7 +598,7 @@ function pageUpdates(){
     <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
-    <div class="card"><h2>Get updates by email</h2><p class="desc">Pick what you want and when. Each email focuses on what’s on the calendar and when it meets.</p>${emailForm(false)}</div>
+    <div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>
     <div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
      <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
    </div>`);
@@ -889,6 +964,7 @@ function route(soft){
 const on=(id,ev,fn)=>{const el=$(id);if(el)el[ev]=fn};
 function bind(){
   bindMS(app);
+  on('sdBtn','onclick',()=>{const w=$('sineDie');const o=w.classList.toggle('open');$('sdBtn').setAttribute('aria-expanded',o)});
   on('sessSel','onchange',async e=>{UI.session=e.target.value;saveUI();PAGE=1;await loadSession(UI.session);if(location.hash.startsWith('#bill-'))location.hash='#bills';else route()});
   // bills
   on('fShow','onchange',e=>{FLT.show=e.target.value;PAGE=1;saveFLT();route()});
@@ -914,7 +990,7 @@ function bind(){
     draw();document.body.appendChild(pop);placePop(pop,$('colBtn'),true);$('colBtn').setAttribute('aria-expanded','true');let dirty=false;
     pop.onclick=ev=>{ev.stopPropagation();const t=ev.target;
       if(t.dataset.colmv){const [c,d]=t.dataset.colmv.split('|');const all=COLS.order.filter(colAllowed);const i=all.indexOf(c),j=i+(+d);if(j<0||j>=all.length)return;const other=all[j];const o=COLS.order.slice();const a=o.indexOf(c),b2=o.indexOf(other);[o[a],o[b2]]=[o[b2],o[a]];COLS.order=o;dirty=true;draw()}
-      else if(t.dataset.colreset!==undefined){COLS={order:DEFAULT_ORDER.slice(),hidden:[]};dirty=true;draw()}
+      else if(t.dataset.colreset!==undefined){COLS={v:LAYOUT_VER,order:DEFAULT_ORDER.slice(),hidden:DEFAULT_HIDDEN.slice()};dirty=true;draw()}
       else if(t.dataset.done!==undefined){closeMS()}};
     pop.onchange=ev=>{const c=ev.target.dataset.colshow;if(!c)return;COLS.hidden=ev.target.checked?COLS.hidden.filter(x=>x!==c):[...COLS.hidden,c];dirty=true};
     openMS={wrap,btn:$('colBtn'),pop,onClose:()=>{if(dirty){saveCols();route(true)}}};
