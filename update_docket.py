@@ -1010,7 +1010,7 @@ def build_history(token, out, prev, sessions):
 # Each bill's public status page on le.utah.gov links to its floor roll calls, which list how every
 # member voted. These are web pages, not the Legislature API, and a closed vote never changes, so each
 # one is read once and kept.
-VOTE_FETCH_CAP = int(os.environ.get("VOTE_FETCH_CAP", "1500"))
+VOTE_FETCH_CAP = int(os.environ.get("VOTE_FETCH_CAP", "800"))  # le.utah.gov pages per run; the rest wait for the next run
 VOTE_LINK = re.compile(r'href="(/DynaBill/svotes\.jsp\?sessionid=([0-9A-Z]+)&(?:amp;)?voteid=(\d+)&(?:amp;)?house=([HS]))"')
 
 
@@ -1077,7 +1077,7 @@ def build_votes(out, prev, sessions, legs):
                 except Exception:
                     continue
             have = {v[0]: v for v in (sc.get(b["n"]) or {}).get("v", [])}
-            votes = []
+            votes, missed = [], False
             for vk in dict.fromkeys(ids):
                 if vk in have:
                     votes.append(have[vk]); continue
@@ -1085,10 +1085,11 @@ def build_votes(out, prev, sessions, legs):
                 try:
                     d8, act, r = parse_rollcall(get(f"{LE}/DynaBill/svotes.jsp?sessionid={ses}&voteid={vid}&house={house}").decode("utf-8", "replace")); budget -= 1
                 except Exception:
+                    missed = True
                     continue
                 mem = {k: [i for i in (find(n, house) for n in r[k]) if i] for k in r}
                 votes.append([vk, house, d8, act[:80], mem["y"], mem["n"], mem["a"]])
-            sc[b["n"]] = {"upd": b.get("upd"), "v": votes}
+            sc[b["n"]] = {"upd": None if missed else b.get("upd"), "v": votes}  # a missed roll call is retried next run
         print(f"  votes {ses}: {sum(len(x['v']) for x in sc.values())} floor roll calls ({max(0, len(todo))} bills checked or waiting)")
     json.dump({k: v for k, v in cache.items() if k in sessions}, open(os.path.join(out, "votes.json"), "w"), separators=(",", ":"))
 

@@ -561,7 +561,7 @@ ol.flow p{margin:0;padding:0 14px 14px 76px}
 .lp-orgs{display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:16px}
 .lp-orgs h3{font-family:var(--sans);font-weight:500;font-size:22px;margin:0 0 8px}.lp-orgs h3.pos,.lp-more h4.pos{color:#2f7d4a}.lp-orgs h3.neg{color:#b42318}
 .org{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0}
-.orgb{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:13px;letter-spacing:.02em}
+.orgb{width:48px;height:44px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:11.5px;letter-spacing:.01em}
 .orgb svg{width:30px;height:30px}
 .ob0{background:#fbf3e4;color:#8a6a12}.ob1{background:#eaf3f8;color:#002147}.ob2{background:#f0eef8;color:#5a4a8a}.ob3{background:#ecf4ec;color:#2f6f3a}.ob4{background:#f9ecee;color:#78081c}
 .org .on{font-size:17px;line-height:1.25}.org .os{font-size:14.5px;color:var(--muted)}

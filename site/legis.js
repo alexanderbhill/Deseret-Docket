@@ -20,7 +20,7 @@ function alignment(l){
   const byBill={};for(const x of vs.filter(x=>x.c))byBill[x.key]=x; // last contested passage vote per bill
   return orgs().map(o=>{let n=0,yes=0;const rows=[];for(const x of Object.values(byBill)){const b=BYKEY[x.key];if(!b)continue;const p=posSide(o.pos(b));if(!p)continue;n++;const agree=(p==='support')===(x.how==='y');if(agree)yes++;rows.push({b,x,p,agree})}
     return {...o,n,yes,pct:n?Math.round(yes/n*100):null,rows}}).filter(o=>o.n)}
-const orgBadge=o=>{const ini=(o.full||o.name).replace(/[^A-Za-z ]/g,'').split(/\s+/).filter(Boolean).map(w=>w[0]).join('').slice(0,3).toUpperCase();const hue=[...o.id].reduce((h,c)=>h+c.charCodeAt(0),0)%5;return `<span class="orgb ob${hue}" aria-hidden="true">${o.id==='office'?BEE:esc(ini)}</span>`};
+const orgBadge=o=>{const ini=o.full&&o.full.length<=8?o.full.replace(/[^A-Za-z]/g,'').slice(0,5):(o.full||o.name).replace(/[^A-Za-z ]/g,'').split(/\s+/).filter(Boolean).map(w=>w[0]).join('').slice(0,3).toUpperCase();const hue=[...o.id].reduce((h,c)=>h+c.charCodeAt(0),0)%5;return `<span class="orgb ob${hue}" aria-hidden="true">${o.id==='office'?BEE:esc(ini)}</span>`};
 function loadComs(){if(COMS===null){COMS=undefined;getJSON('data/committees.json').then(j=>{COMS=j||[];if(location.hash.startsWith('#legislators-'))route(true)}).catch(()=>{COMS=[]})}return COMS||[]}
 // Standing committee names without the chamber, so House and Senate versions group together.
 const comKey=c=>String(c||'').replace(/^(House|Senate)\s+/,'').replace(/\s+(Standing\s+)?Committee$/,'').replace(/\s+Confirmation$/,'').trim()||'Not assigned to a committee yet';
