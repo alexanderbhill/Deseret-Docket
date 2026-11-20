@@ -648,7 +648,7 @@ function hearingsCard(){
   const body=hs.map(h=>{const d=ymd(h.d);const head=d!==last?`<h3 style="margin:22px 0 4px">${WD[h.d.getDay()]}, ${fmtLong(h.d)}</h3>`:'';last=d;
     return head+`<div class="hearing"><div class="when"><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span></div><div><h4>${esc(h.committee)}</h4>
      ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(a)}</span>`).join('')}${b.agm?'<span class="pill solid">AG mentioned</span>':''}</div>`).join('')}
-     ${h.url?`<a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a>`:''}</div></div>`}).join('');
+     <div class="hlinks">${h.url?`<a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a>`:''}${calBtn(h,S)}</div></div></div>`}).join('');
   return `<div class="card" id="hearingsCard"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Hearings</h2>
    <p class="desc">Committee agendas with these bills, soonest first. Meetings within three days are marked on the Bills tab.</p></div>${seg}</div>
    ${conflicts.length?conflicts.map(([a,b])=>`<div class="conflict"><b>Two at once:</b> ${a.bills.filter(onOffice).map(x=>esc(shortNum(x.num))).join(', ')} in ${esc(a.committee)} (${fmtTime(a.d)}) and ${b.bills.filter(onOffice).map(x=>esc(shortNum(x.num))).join(', ')} in ${esc(b.committee)} (${fmtTime(b.d)}) on ${WD[a.d.getDay()]}, ${fmtLong(a.d)}. ${[...new Set([...a.bills,...b.bills].flatMap(assignOf))].length?'Assigned: '+esc([...new Set([...a.bills,...b.bills].flatMap(assignOf))].join(', '))+'.':'Nobody is assigned yet.'}</div>`).join(''):''}
@@ -1002,7 +1002,7 @@ function billSecs(b,m,hs){
   add('overview','fiscal','Fiscal note',fiscalSection(b));
   add('overview','changed','What has changed',`<section><h2>What has changed</h2>${b.ch.length?`<table class="compact"><tbody>${b.ch.slice().reverse().slice(0,12).map(x=>{const d=pd(x[0]);return `<tr><td style="white-space:nowrap">${d?fmtMDY(d)+' '+fmtTime(d):''}</td><td><b>${esc(x[1])}</b>: ${esc(x[2])}</td></tr>`}).join('')}</tbody></table>${b.ch.length>12?`<p class="small muted">Showing the latest 12 of ${b.ch.length}.</p>`:''}`:'<p class="small muted">No changes recorded since Deseret Docket started tracking this bill.</p>'}</section>`);
   if(b.file) return out;
-  add('hearings','hearings','Committee hearings',`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight" style="margin-bottom:8px"><b>${esc(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>`);
+  add('hearings','hearings','Committee hearings',`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight hcard" style="margin-bottom:8px"><div><b>${esc(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>${h.d>=TODAY?calBtn(h,b.session):''}</div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>`);
   add('hearings','floor','Floor calendar',X.floor);
   add('hearings','discussed','What was discussed',discussionSection(b));
   add('text','textchanges','Latest text changes',changesCard(b));
@@ -1249,3 +1249,47 @@ ${b.cmp?`<p>Official comparison: <a href="${esc(b.cmp[2])}">${esc(b.cmp[2])}</a>
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
 }
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-chdoc]');if(t){const b=BYKEY[t.dataset.chdoc];if(b)changesDoc(b)}});
+
+// ---------- Add a hearing to Outlook or Google Calendar: committee as the title, the room as the location,
+// and the agenda's bills in the description, with the office's tracked bills marked.
+const calKey=h=>h.id||(h.date+h.committee);
+function calBtn(h,session){return `<button type="button" class="btn sm calbtn" data-cal="${esc(session)}|${esc(calKey(h))}">${ic('calendar')}Add to calendar</button>`}
+function calEvent(session,key){
+  const h=meetings(session).find(x=>calKey(x)===key);if(!h||!h.d)return null;
+  const start=h.d, end=new Date(start.getTime()+2*3600e3);
+  const tracked=b=>ME&&onOffice(b)&&priOf(b)!=='notrelevant';
+  const bills=h.bills.slice().sort((a,b)=>tracked(b)-tracked(a)||a.num.localeCompare(b.num,undefined,{numeric:true}));
+  const loc=h.place?`${h.place}, Utah State Capitol Complex, Salt Lake City, UT`:'Utah State Capitol Complex, Salt Lake City, UT';
+  const nT=bills.filter(tracked).length;
+  const line=b=>`${tracked(b)?'★ ':'   '}${shortNum(b.num)} ${b.title} (${b.sponsor.replace(/^(Rep|Sen)\.\s*/,'')})`;
+  const head=`${h.committee}\n${WD[start.getDay()]}, ${fmtLong(start)} at ${fmtTime(start)}${h.place?' · '+h.place:''}`;
+  const text=`${head}\n\nBills on the agenda${nT?` (★ = on the office’s list, ${nT} of ${bills.length})`:''}:\n${bills.map(line).join('\n')}\n\n${h.url?`Full agenda: ${h.url}\n`:''}Bill details: ${location.origin}/#bills\n\nThe end time is an estimate; committee meetings often run long or short.`;
+  const html=`<b>${esc(h.committee)}</b><br>${esc(WD[start.getDay()])}, ${esc(fmtLong(start))} at ${esc(fmtTime(start))}${h.place?' · '+esc(h.place):''}<br><br><b>Bills on the agenda</b>${nT?` (★ = on the office’s list)`:''}:<br>${bills.map(b=>tracked(b)?`<b>★ ${esc(shortNum(b.num))} ${esc(b.title)}</b> (${esc(b.sponsor.replace(/^(Rep|Sen)\.\s*/,''))})`:`${esc(shortNum(b.num))} ${esc(b.title)} (${esc(b.sponsor.replace(/^(Rep|Sen)\.\s*/,''))})`).join('<br>')}<br><br>${h.url?`<a href="${esc(h.url)}">Full agenda</a><br>`:''}<i>The end time is an estimate.</i>`;
+  return {title:h.committee,start,end,location:loc,text,html};
+}
+const calUTC=d=>d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+function calLinks(ev){
+  const google=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(ev.title)}&dates=${calUTC(ev.start)}/${calUTC(ev.end)}&location=${encodeURIComponent(ev.location)}&details=${encodeURIComponent(ev.html)}`;
+  const outlook=`https://outlook.office.com/calendar/0/deeplink/compose?path=%2Fcalendar%2Faction%2Fcompose&rru=addevent&subject=${encodeURIComponent(ev.title)}&startdt=${encodeURIComponent(ev.start.toISOString())}&enddt=${encodeURIComponent(ev.end.toISOString())}&location=${encodeURIComponent(ev.location)}&body=${encodeURIComponent(ev.text)}`;
+  return {google,outlook};
+}
+function calICS(ev){
+  const e=s=>String(s).replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/([,;])/g,'\\$1');
+  const fold=l=>{const out=[];while(l.length>74){out.push(l.slice(0,74));l=' '+l.slice(74)}out.push(l);return out.join('\r\n')};
+  const uid=`${calUTC(ev.start)}-${ev.title.replace(/\W+/g,'').slice(0,40)}@deseret-docket`;
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Deseret Docket//Hearings//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','BEGIN:VEVENT',`UID:${uid}`,`DTSTAMP:${calUTC(new Date())}`,`DTSTART:${calUTC(ev.start)}`,`DTEND:${calUTC(ev.end)}`,`SUMMARY:${e(ev.title)}`,`LOCATION:${e(ev.location)}`,`DESCRIPTION:${e(ev.text)}`,'BEGIN:VALARM','TRIGGER:-PT30M','ACTION:DISPLAY',`DESCRIPTION:${e(ev.title)}`,'END:VALARM','END:VEVENT','END:VCALENDAR'];
+  const blob=new Blob([lines.map(fold).join('\r\n')+'\r\n'],{type:'text/calendar'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${ev.title.replace(/[\\/:*?"<>|]+/g,'-')} ${ymd(ev.start)}.ics`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+document.addEventListener('click',e=>{
+  const open=document.querySelector('.calmenu');
+  const b=e.target.closest&&e.target.closest('[data-cal]');
+  if(open&&!open.contains(e.target)){open.remove();if(!b)return}
+  if(!b)return;
+  const [session,key]=b.dataset.cal.split('|');const ev=calEvent(session,key);if(!ev){toast('That hearing isn’t on the calendar anymore.');return}
+  const L=calLinks(ev);const m=document.createElement('div');m.className='calmenu';m.setAttribute('role','menu');
+  m.innerHTML=`<a role="menuitem" href="${L.outlook}" target="_blank" rel="noopener">${ic('mail')}Outlook on the web</a><button type="button" role="menuitem" data-calics>${ic('calendar')}Outlook app or Apple Calendar (.ics)</button><a role="menuitem" href="${L.google}" target="_blank" rel="noopener">${ic('calendar')}Google Calendar</a><div class="tiny muted" style="padding:6px 10px 2px">Adds the committee, room and agenda. ★ marks bills on the office’s list.</div>`;
+  document.body.appendChild(m);const r=b.getBoundingClientRect();m.style.top=(r.bottom+6+scrollY)+'px';m.style.left=Math.max(8,Math.min(r.left+scrollX,innerWidth-m.offsetWidth-8))+'px';
+  m.querySelector('[data-calics]').onclick=()=>{calICS(ev);m.remove()};
+  m.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>setTimeout(()=>m.remove(),50)));
+});

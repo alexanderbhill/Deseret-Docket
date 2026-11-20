@@ -822,3 +822,11 @@ a.welcome-card:hover{box-shadow:0 10px 30px rgba(0,33,71,.25)}
   .seg{max-width:100%;flex-wrap:wrap}
 }
 @media (max-width:700px){.row .pill,.pill{white-space:normal;max-width:100%}}
+/* Add to calendar */
+.hlinks{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.calbtn .ic{color:var(--steel)}
+.hcard{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.calmenu{position:absolute;z-index:80;background:#fff;color:var(--ink);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:6px;min-width:250px;max-width:300px}
+.calmenu a,.calmenu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 10px;border:0;background:none;border-radius:7px;font:inherit;font-size:14.5px;color:var(--ink);text-decoration:none;cursor:pointer}
+.calmenu a:hover,.calmenu button:hover{background:var(--row-alt)}
+.calmenu .ic{color:var(--steel);margin:0}
