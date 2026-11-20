@@ -163,13 +163,13 @@ async function setBill(db, user, body, peopleAll) {
   }
   // Outside committees' positions on the bill: { ULELC: "oppose" | "tagged" | null, ... }
   if ("cpos" in body) {
-    if (!canEdit(user, "designations")) throw new Error("not allowed: committee positions");
+    if (!canEdit(user, "designations")) throw new Error("not allowed: association positions");
     const curC = obj(cur.cpos), nextC = { ...curC };
     for (const [c, v] of Object.entries(body.cpos && typeof body.cpos === "object" ? body.cpos : {})) {
       if (!DESIGNATIONS.has(c)) continue;
       if (v === null || v === "" || v === "none") { delete nextC[c]; continue; }
       const val = String(v);
-      if (val !== "tagged" && !POSITIONS.has(val)) throw new Error("bad committee position");
+      if (val !== "tagged" && !POSITIONS.has(val)) throw new Error("bad association position");
       if (!curC[c] || curC[c].pos !== val) nextC[c] = { pos: val, by: user.name, at: now, src: "manual" };
     }
     if (JSON.stringify(nextC) !== JSON.stringify(curC)) {

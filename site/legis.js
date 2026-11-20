@@ -59,7 +59,7 @@ function lpAlignHTML(l){
   return `<div class="lp-votes"><div class="lp-vs"><span><b>${pv}</b> passage votes</span><span><b>${cv.length}</b> contested</span><span><b>${pv?Math.round(yes/pv*100):0}%</b> voted yes</span></div>${pv?`<div class="small muted">${ses}, contested bills only</div>`:'<div class="small muted">No recorded floor votes in this data yet.</div>'}</div>
    ${al.length?`<div class="lp-orgs"><div><h3 class="pos">Most aligned organizations</h3>${most.slice(0,5).map(o=>row(o,'pos')).join('')||'<p class="small muted">None yet.</p>'}</div><div><h3 class="neg">Least aligned organizations</h3>${least.slice(0,5).map(o=>row(o,'neg')).join('')||'<p class="small muted">None yet.</p>'}</div></div>
     <p class="lp-note">Organizations take positions on far fewer bills than legislators vote on, so organization scores rest on less data. The number of shared bills is shown with each score.</p>`
-    :`<p class="lp-note">${ME?`Alignment scores appear once the office or the outside committees (Admin → Committee positions) take support or oppose positions on contested bills ${pron(l).s} voted on.`:`Sign in to see how ${pron(l).p} votes line up with the positions the office tracks.`}</p>`}
+    :`<p class="lp-note">${ME?`Alignment scores appear once the office or the outside associations (Admin → Association positions) take support or oppose positions on contested bills ${pron(l).s} voted on.`:`Sign in to see how ${pron(l).p} votes line up with the positions the office tracks.`}</p>`}
    <div class="lp-btns"><button type="button" class="btn ${LPMODE==='all'?'':'primary'}" data-lpm="all">Compare with all organizations</button>${ME?`<button type="button" class="btn" data-lpm="office">Compare with the office</button>`:''}</div>
    ${extra}`;
 }

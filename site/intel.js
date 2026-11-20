@@ -44,7 +44,7 @@ function collisions(){
   COLL=out;return out;
 }
 
-// ---------- this bill has run before
+// ---------- has this bill run before?
 function tokens(t){return new Set(String(t||'').toLowerCase().replace(/amendments?|modifications?|act|provisions?/g,' ').split(/[^a-z0-9]+/).filter(w=>w.length>2))}
 function runBefore(b){
   const H=loadHist();if(!H)return null;const out=[];const ts=tokens(b.title);const secs=new Set(b.secs);
@@ -64,22 +64,24 @@ function billExtraTags(b){const t=[];
 }
 
 // ---------- the bill page: overview extras and tabs
-function billOverviewExtras(b){
-  if(b.file)return '';
-  const ai=aiOf(b), ss=subSummary(b), hits=ME?subWatchHits(b):[], col=(collisions()[b.key]||[]).sort((x,y)=>y.nd-x.nd), fm=floorMoves(b,14);
-  let h='';
-  if(ai&&ai.sum)h+=`<section class="plain"><h2>In plain English</h2><p class="serif" style="font-size:17px">${esc(ai.sum)}</p><p class="tiny muted">AI summary of ${esc(ai.ver||'the bill')}. Check the bill text before relying on it.</p></section>`;
-  if(ss)h+=`<section><h2>What this ${/sub/i.test(b.version)?'substitute':'version'} does</h2><p>${ss.html?ss.txt:esc(ss.txt)}</p>${hits.length?`<div class="alertbox"><b>Touches code on the watch list:</b> Section ${esc(hits.join(', '))}</div>`:''}<p class="tiny muted">${ss.src==='ai'?'AI summary of the changes.':'Automatic summary from the text comparison.'}</p></section>`;
-  if(fm.length)h+=`<section><h2>Floor calendar</h2>${fm.map(x=>`<div class="small"><b>${esc(floorWords(x[1]))}</b> · ${esc(x[1])} · ${fmtMDY(pd(x[0]))}</div>`).join('')}<p class="tiny muted">Circling, Rules and calendar moves are where bills often stall or speed up.</p></section>`;
-  if(col.length)h+=`<section><h2>Bill collisions</h2><p class="small muted">Other bills this session that amend the same Utah Code sections. Different wording in the same subsection usually needs a coordination clause.</p>${col.slice(0,8).map(x=>`<div class="coll ${x.nd?'hot':''}"><a class="billnum" href="${billHref(x.other)}">${esc(shortNum(x.other.num))}</a> <span class="serif">${esc(x.other.title)}</span><div class="small">Both amend Section ${esc(x.sec)}${x.nd?` · <b>different wording in ${esc(x.diff.join(', '))}${x.nd>x.diff.length?` and ${x.nd-x.diff.length} more`:''}</b>`:' · no conflicting wording found'}</div></div>`).join('')}</section>`;
-  return h;
+function billExtraParts(b){
+  if(b.file)return {};
+  const ai=aiOf(b), ss=subSummary(b), hits=ME?subWatchHits(b):[], col=(collisions()[b.key]||[]).sort((x,y)=>y.nd-x.nd), fm=floorMoves(b,14), o={};
+  if(ai&&ai.sum)o.plain=`<section class="plain" id="bs-plain"><h2>In plain English</h2><p class="serif" style="font-size:17px">${esc(ai.sum)}</p><p class="tiny muted">AI summary of ${esc(ai.ver||'the bill')}. Check the bill text before relying on it.</p></section>`;
+  if(ss)o.version=`<section id="bs-version"><h2>What this ${/sub/i.test(b.version)?'substitute':'version'} does</h2><p>${ss.html?ss.txt:esc(ss.txt)}</p>${hits.length?`<div class="alertbox"><b>Touches code on the watch list:</b> Section ${esc(hits.join(', '))}</div>`:''}<p class="tiny muted">${ss.src==='ai'?'AI summary of the changes.':'Automatic summary from the text comparison.'}</p></section>`;
+  if(fm.length)o.floor=`<section id="bs-floor"><h2>Floor calendar</h2>${fm.map(x=>`<div class="small"><b>${esc(floorWords(x[1]))}</b> · ${esc(x[1])} · ${fmtMDY(pd(x[0]))}</div>`).join('')}<p class="tiny muted">Circling, Rules and calendar moves are where bills often stall or speed up.</p></section>`;
+  if(col.length)o.collisions=`<section id="bs-collisions"><h2>Bill collisions</h2><p class="small muted">Other bills this session that amend the same Utah Code sections. Different wording in the same subsection usually needs a coordination clause.</p>${col.slice(0,8).map(x=>`<div class="coll ${x.nd?'hot':''}"><a class="billnum" href="${billHref(x.other)}">${esc(shortNum(x.other.num))}</a> <span class="serif">${esc(x.other.title)}</span><div class="small">Both amend Section ${esc(x.sec)}${x.nd?` · <b>different wording in ${esc(x.diff.join(', '))}${x.nd>x.diff.length?` and ${x.nd-x.diff.length} more`:''}</b>`:' · no conflicting wording found'}</div></div>`).join('')}</section>`;
+  return o;
 }
-function billTabsNav(b){
+function billOverviewExtras(b){const o=billExtraParts(b);return (o.plain||'')+(o.version||'')+(o.floor||'')+(o.collisions||'')}
+const BILL_TABS=[['overview','Overview'],['hearings','Hearings and debate'],['text','Text and watch list'],['history','History and votes'],['media','News']];
+function billTabsNav(b,secs){
   if(b.file)return '';
   if(BILLTAB_KEY!==b.key){BILLTAB_KEY=b.key;BILLTAB='overview'}
   const m=(loadMedia()||{bills:{}}).bills[b.num]&&MEDIA.session===b.session?MEDIA.bills[b.num]:null;
-  const tabs=[['overview','Overview'],['media',`News${m?` (${m.items.length})`:''}`],['history','History']];
-  return `<nav class="billtabs" aria-label="Bill sections">${tabs.map(([k,l])=>`<button type="button" data-billtab="${k}" class="${BILLTAB===k?'on':''}" aria-pressed="${BILLTAB===k}">${esc(l)}</button>`).join('')}${ME?`<a class="btn sm" href="#packet-${esc(b.session)}-${esc(b.num)}" style="margin-left:auto">Prep packet</a>`:''}</nav>`;
+  const label=k=>{const l=BILL_TABS.find(t=>t[0]===k)[1];return k==='media'&&m?`${l} (${m.items.length})`:l};
+  const jump=secs&&secs.length?`<label class="sr" for="billJump">Jump to a section</label><select id="billJump" class="billjump"><option value="">Jump to…</option>${BILL_TABS.map(([k])=>{const ss=secs.filter(x=>x[0]===k);return ss.length?`<optgroup label="${esc(label(k))}">${ss.map(x=>`<option value="${k}|${x[1]}">${esc(x[2])}</option>`).join('')}</optgroup>`:''}).join('')}</select>`:'';
+  return `<nav class="billtabs" aria-label="Bill sections">${BILL_TABS.map(([k])=>`<button type="button" data-billtab="${k}" class="${BILLTAB===k?'on':''}" aria-pressed="${BILLTAB===k}">${esc(label(k))}</button>`).join('')}<span class="grow"></span>${jump}${ME?`<a class="btn sm" href="#packet-${esc(b.session)}-${esc(b.num)}">Prep packet</a>`:''}</nav>`;
 }
 function meterSVG(score,n){
   const a=Math.PI*(1-(score+1)/2), r=70, cx=90, cy=86, x=cx+r*Math.cos(a), y=cy-r*Math.sin(a);
@@ -93,7 +95,7 @@ function billTabBody(b){
   if(BILLTAB==='media'){
     const M=loadMedia();if(!M)return '<p>Loading…</p>';
     const m=M.session===b.session?M.bills[b.num]:null;
-    return `<section><h2>News & sentiment</h2><p class="small muted">News stories that mention ${esc(shortNum(b.num))} by number or exact title, from the last 60 days. Checked with every data update${M.fetched?`; last checked ${fmtAP(new Date(M.fetched+'Z'))}`:''}.</p>
+    return `<section id="bs-news"><h2>News & sentiment</h2><p class="small muted">News stories that mention ${esc(shortNum(b.num))} by number or exact title, from the last 60 days. Checked with every data update${M.fetched?`; last checked ${fmtAP(new Date(M.fetched+'Z'))}`:''}.</p>
      ${m?`<div class="sent"><div>${meterSVG(m.score,m.n)}</div><div class="small"><p><b>What is the sentiment meter?</b> A rough read of the tone of the ${plural(m.n,'recent news story','recent news stories')}, from the positive and negative words they use. It tells you which way the conversation is leaning, not how many people agree. Open the stories to judge for yourself.</p></div></div>
       <div class="rows">${m.items.map(x=>`<div class="row" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="small">${x.date?fmtMD(new Date(x.date.length>10?x.date+'Z':x.date)):''}<span class="sub">${esc(x.src)}</span></span><div class="what" style="font-size:15px"><a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t||'(post)')}</a>${x.d?`<span class="sub">${esc(x.d.slice(0,200))}</span>`:''}</div><div class="r"><span class="sdot" style="--c:${x.s>0.2?'var(--green)':x.s<-0.2?'var(--maroon)':'var(--line-2)'}" title="Tone ${x.s}"></span></div></div>`).join('')}</div>`
      :`<p class="empty">No news stories mention this bill yet.</p>`}
@@ -104,10 +106,10 @@ function billTabBody(b){
     const prompt=`Look for bills similar to this Utah bill that other states have considered or passed, and any model legislation it may be based on. For each one, say the state, the bill or law, whether it passed, and anything notable about how it worked out.\n\nUtah ${b.session.slice(0,4)} ${shortNum(b.num)}: ${b.title}\nSponsor: ${b.sponsor.replace(/^(Rep|Sen)\.\s*/,'')}\nSummary: ${b.description||'(no summary yet)'}\nBill text: https://le.utah.gov/~${b.session.slice(0,4)}/bills/static/${b.num}.html`;
     const V=typeof loadVotes==='function'?loadVotes():null;const rec=V&&V[b.session]&&V[b.session][b.num];
     const nm=id=>{const l=legById(id);return l?(l.full||l.name).split(',')[0]:id};
-    return `<section><h2>This bill has run before</h2><p class="small muted">Earlier Utah bills with the same code sections or a very similar title, from the last four general sessions.</p>
+    return `<section id="bs-runbefore"><h2>Has this bill run before?</h2><p class="small muted">Earlier Utah bills with the same code sections or a very similar title, from the last four general sessions.</p>
      ${rb===null?'<p>Loading…</p>':rb.length?`<div class="tablewrap"><table class="compact"><thead><tr><th>Session</th><th>Bill</th><th>Sponsor</th><th>How far it got</th><th>Where it stopped</th></tr></thead><tbody>${rb.map(x=>`<tr><td>${esc(x.ses.slice(0,4))}</td><td><a href="https://le.utah.gov/~${esc(x.ses.slice(0,4))}/bills/static/${esc(x.r.n)}.html" target="_blank" rel="noopener"><b>${esc(shortNum(x.r.n))}</b></a> ${esc(x.r.t)}<div class="sub">${x.shared?plural(x.shared,'shared code section'):'Similar title'}</div></td><td class="small">${esc(x.r.sp.replace(/^(Rep|Sen)\.\s*/,''))}</td><td><span class="pill ${/law/i.test(x.r.stage)?'pass':/vetoed|stopped|never/i.test(x.r.stage)?'dead':'ink'}">${esc(x.r.stage)}</span></td><td class="small">${esc(x.r.died||'—')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="empty">No close match in the last four sessions. (Earlier sessions fill in over the first few data updates.)</p>'}
      <div class="claudebox"><div><b>Similar bills in other states</b><div class="small muted">Opens Claude with this bill’s title and summary, ready to ask about similar bills and model legislation elsewhere.</div></div><a class="btn primary" href="https://claude.ai/new?q=${encodeURIComponent(prompt)}" target="_blank" rel="noopener">Ask Claude</a></div></section>
-     <section><h2>Votes</h2>${(()=>{const fl=(rec&&rec.v)||[];const cm=b.hist.filter(h=>h[3]&&/^(\d+)-(\d+)/.test(h[3])&&(+h[3].split('-')[0]+ +h[3].split('-')[1])>0&&!(h[4]&&fl.some(v=>v[0]===h[4])));
+     <section id="bs-votes"><h2>Votes</h2>${(()=>{const fl=(rec&&rec.v)||[];const cm=b.hist.filter(h=>h[3]&&/^(\d+)-(\d+)/.test(h[3])&&(+h[3].split('-')[0]+ +h[3].split('-')[1])>0&&!(h[4]&&fl.some(v=>v[0]===h[4])));
        return (fl.length?fl.slice().sort((x,y)=>(y[2]||'').localeCompare(x[2]||'')).map(v=>`<details class="vote"><summary><b>${v[1]==='H'?'House':'Senate'}</b> · ${esc(v[3]||'Floor vote')} · ${esc(v[2]||'')}<span class="vt"><span class="y">${v[4].length} yes</span> <span class="n">${v[5].length} no</span> <span class="muted">${v[6].length} absent</span></span></summary>
          <div class="vcols"><div><b>Yes</b><p>${v[4].map(nm).sort().map(esc).join(', ')||'—'}</p></div><div><b>No</b><p>${v[5].map(nm).sort().map(esc).join(', ')||'—'}</p></div><div><b>Absent or not voting</b><p>${v[6].map(nm).sort().map(esc).join(', ')||'—'}</p></div></div></details>`).join(''):'')
        +(cm.length?`<table class="compact" style="margin-top:8px"><tbody>${cm.map(h=>`<tr><td>${fmtMDY(pd(h[0]))}</td><td>${esc(h[1])}</td><td><b>${esc(h[3])}</b> <span class="tiny muted">yes–no–absent</span></td></tr>`).join('')}</tbody></table>`:'')
@@ -144,6 +146,8 @@ function mavHTML(){
 
 function billExtraBind(){
   app.querySelectorAll('[data-billtab]').forEach(b=>b.onclick=()=>{BILLTAB=b.dataset.billtab;route(true)});
+  on('billJump','onchange',e=>{const [t,id]=e.target.value.split('|');if(!t)return;e.target.blur();BILLTAB=t;route();
+    setTimeout(()=>{const el=document.getElementById('bs-'+id);if(el){el.scrollIntoView({behavior:'smooth',block:'start'});el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1600)}},60)});
   on('mavForm','onsubmit',async e=>{e.preventDefault();try{const j=await api('media/queue',{url:$('mavUrl').value.trim()});MQ=j.queue;toast('Added. It’s analyzed on the next run (within about 30 minutes on session weekdays), or run “Media availability analysis” from GitHub Actions.');route(true)}catch(err){toast(err.message)}});
   if(isAdmin()&&MQ===null&&location.hash.slice(1).split('-')[0]==='updates'){MQ=[];api('media/queue').then(j=>{MQ=j.queue||[];if(MQ.length)route(true)}).catch(()=>{})}
 }

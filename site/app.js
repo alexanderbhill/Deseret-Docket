@@ -175,7 +175,7 @@ const COLDEFS={
   position:{label:'Position',office:true}, num:{label:'Bill #'}, priority:{label:'Office priority',need:'priority'}, title:{label:'Title'}, summary:{label:'Summary'},
   departments:{label:'Department',office:true}, committee:{label:'Committee'}, house:{label:'House'}, senate:{label:'Senate'},
   action:{label:'Last action and location'}, fiscal:{label:'Fiscal impact'}, hearing:{label:'Next hearing'},
-  designations:{label:'Committee positions',office:true}, assignees:{label:'Assigned to',office:true}, notes:{label:'Notes',need:'note'},
+  designations:{label:'Association positions',office:true}, assignees:{label:'Assigned to',office:true}, notes:{label:'Notes',need:'note'},
   divisions:{label:'Division',office:true}, agAction:{label:'AG office action'}, sponsor:{label:'Sponsor'},
 };
 // Bill number, then who's carrying it, then what it is and where it stands, then the office's columns
@@ -359,7 +359,7 @@ function deadlineList(){
 }
 function footerHTML(){
   return `<div class="wp-note">Attorney Work Product / Attorney-Client Communication</div>
-   <div class="sinedie" id="sineDie"><button type="button" id="sdBtn" aria-expanded="false" aria-controls="sdList"><span id="sdTxt">${sineDieText()}</span><span class="chev">Key dates ▴</span></button><div class="dl" id="sdList">${deadlineList()}</div></div>`;
+   <div class="sinedie" id="sineDie"><div id="sdBtn" class="sd-plain"><span id="sdTxt">${sineDieText()}</span></div></div>`;
 }
 setInterval(()=>{const t=$('sdTxt');if(t&&CONFIG)t.innerHTML=sineDieText()},30000);
 
@@ -415,7 +415,7 @@ const CELL={
   num:b=>b.file?`<a class="billnum" href="${billHref(b)}" style="font-size:14px">${esc(fileStatus(b))}</a><span class="filelabel">No number yet</span>`:`<a class="billnum" href="${billHref(b)}">${esc(billLabel(b))}</a>`,
   priority:priCell,
   title:b=>{const o=outcome(b);return `<div class="btitle"><a href="${billHref(b)}" class="tlink">${esc(b.title)}</a>${o?` <span class="pill ${o.k}">${esc(o.l)}</span>`:''}</div>${tagsFor(b)}`},
-  summary:b=>b.file?'<span class="sub">The Legislature publishes only the title until a bill is numbered.</span>':`<div class="clamp">${esc(b.description||'—')}</div>`,
+  summary:b=>b.file?'<span class="sub">The Legislature publishes only the title until a bill is numbered.</span>':`<div class="clamp${(b.description||'').length>160?' hasfull" tabindex="0" data-full="'+esc(b.description)+'"':'"'}>${esc(b.description||'—')}</div>`,
   departments:b=>msHTML('departments',b.key,deptsOf(b),canEdit('departments')),
   committee:b=>esc(committeeOf(b))||'<span class="muted">—</span>',
   house:b=>sponsorCell(b,'H'), senate:b=>sponsorCell(b,'S'), sponsor:sponsorCol,
@@ -950,7 +950,7 @@ function officePanel(b){
    <div class="sidegroup"><span class="flabel">Position</span>${[['','No position','var(--line-2)'],...(CONFIG.positions||[]).map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(pos||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pos" value="${v}" ${(pos||'')===v?'checked':''} ${canEdit('position')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('position')}</div>
    <div class="sidegroup"><span class="flabel">Department</span>${msHTML('departments',b.key,deptsOf(b),canEdit('departments'))}${by('departments')}</div>
    <div class="sidegroup"><span class="flabel">Division</span>${msHTML('divisions',b.key,divsOf(b),canEdit('divisions'),deptsOf(b).length?'Choose…':'Department first')}${suggHTML(b)}${by('divisions')}</div>
-   <div class="sidegroup"><span class="flabel">Committee positions</span>${(CONFIG.designations||[]).map(d=>{const x=cposOf(b)[d.id];return `<div class="cprow"><label for="cp-${d.id}" title="${esc(d.full)}">${esc(d.name)}</label><select id="cp-${d.id}" data-cpsel="${d.id}" ${canEdit('designations')?'':'disabled'} style="--c:${x&&x.pos!=='tagged'?posColor(x.pos):'var(--line-2)'}"><option value="">—</option><option value="tagged" ${x&&x.pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${x&&x.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`}).join('')}${by('designations')}</div>
+   <div class="sidegroup"><span class="flabel">Association positions</span>${(CONFIG.designations||[]).map(d=>{const x=cposOf(b)[d.id];return `<div class="cprow"><label for="cp-${d.id}" title="${esc(d.full)}">${esc(d.name)}</label><select id="cp-${d.id}" data-cpsel="${d.id}" ${canEdit('designations')?'':'disabled'} style="--c:${x&&x.pos!=='tagged'?posColor(x.pos):'var(--line-2)'}"><option value="">—</option><option value="tagged" ${x&&x.pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${x&&x.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`}).join('')}${by('designations')}</div>
    ${canSee('priority')?`<div class="sidegroup"><span class="flabel">Office priority</span>${[['','No priority','var(--line-2)'],...CONFIG.priorities.map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(p||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pri" value="${v}" ${(p||'')===v?'checked':''} ${canEdit('priority')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('priority')}</div>`:''}
    <div class="sidegroup"><span class="flabel">Assigned to</span>${msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…')}${by('assignees')}</div>
    ${canSee('note')?`<div class="sidegroup"><label class="flabel" for="noteIn">Notes</label><textarea id="noteIn" ${canEdit('note')?'':'readonly'}>${esc(noteOf(b))}</textarea>${by('note')}${canEdit('note')?'<button class="btn primary" id="saveNote" style="margin-top:8px">Save note</button>':''}</div>`:''}
@@ -966,20 +966,39 @@ function pageBill(session,num){
     <div class="sponsors"><div><span class="l">House</span>${sp('H')}</div><div><span class="l">Senate</span>${sp('S')}</div>${b.cosp.length?`<div><span class="l">Cosponsors</span>${esc(b.cosp.join(', '))}</div>`:''}</div>
     <div class="where"><span class="muted">Where it is now</span><span class="now">${esc(b.own)}</span><span>${esc(b.act)}${b.date?', '+fmtMDY(b.date):''}</span></div>
     ${b.file?'':`<a class="small" href="https://le.utah.gov/~${yr}/bills/static/${esc(b.num)}.html" target="_blank" rel="noopener">Open on le.utah.gov</a>`}</div>
-   ${typeof billTabsNav==='function'?billTabsNav(b):''}
-   ${typeof BILLTAB==='undefined'||BILLTAB==='overview'||b.file?changesCard(b):''}
-   ${typeof BILLTAB!=='undefined'&&BILLTAB!=='overview'&&!b.file?`<div class="detail"><div>${billTabBody(b)}</div>${officePanel(b)}</div>`:`<div class="detail"><div>
-    ${typeof billOverviewExtras==='function'?billOverviewExtras(b):''}
-    <section><h2>Summary</h2><p class="serif" style="font-size:17px">${esc(b.description||(b.file?'The Legislature publishes only the title and sponsor of a bill file until it gets a number.':'No summary yet.'))}</p>${b.subj.length?`<p class="small muted">Subjects: ${esc(b.subj.join(', '))}</p>`:''}${b.rc.length?`<p class="small muted">Recommended by ${esc(b.rc.join(', '))}</p>`:''}</section>
-    ${agSection(b)}
-    ${fiscalSection(b)}
-    <section><h2>What has changed</h2>${b.ch.length?`<table class="compact"><tbody>${b.ch.slice().reverse().map(x=>{const d=pd(x[0]);return `<tr><td style="white-space:nowrap">${d?fmtMDY(d)+' '+fmtTime(d):''}</td><td><b>${esc(x[1])}</b>: ${esc(x[2])}</td></tr>`}).join('')}</tbody></table>`:'<p class="small muted">No changes recorded since Deseret Docket started tracking this bill.</p>'}</section>
-    ${b.file?'':discussionSection(b)}
-    ${b.file?'':`<section><h2>Where the watch list appears</h2>${m.length?`<p class="small muted">${plural(m.length,'place')} in ${esc(b.version||'the bill')}.</p><div class="tablewrap" style="border:0"><table class="compact"><thead><tr><th>Term</th><th>Where</th><th>Text</th></tr></thead><tbody>${m.slice(0,200).map(x=>`<tr><td><b>${esc(x.term)}</b>${x.inDef?' <span class="pill muted">definition</span>':''}${x.struck?' <span class="pill warn">struck</span>':''}</td><td>${esc(x.where)}</td><td>${x.code?esc(x.raw):snippet(x.raw,x.term)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="small muted">None of the watch list’s words or code chapters appear in this bill.</p>'}</section>`}
-    ${b.file?'':`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight" style="margin-bottom:8px"><b>${esc(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>
-    <section><h2>Status and votes</h2><div class="tablewrap" style="border:0"><table class="compact"><thead><tr><th>Date</th><th>Action</th><th>Location</th><th>Vote</th></tr></thead><tbody>${b.hist.map(h=>{const d=pd(h[0]);return `<tr><td>${d?fmtMDY(d):''}</td><td>${esc(h[1])}</td><td>${esc(h[2])}</td><td>${esc(h[3])}</td></tr>`}).join('')}</tbody></table></div></section>
-    <section class="docs"><h2>Documents</h2>${b.docs.map(g=>`<b>${esc(g[0])}</b><ul>${g[1].map(i=>{const d=pd(i[1]);return `<li><a href="${esc(i[2])}" target="_blank" rel="noopener">${esc(i[0])}</a>${d?', '+MONTHS[d.getMonth()]+' '+d.getDate():''}</li>`}).join('')}</ul>`).join('')||'<p class="small muted">None yet.</p>'}</section>`}
-   </div>${officePanel(b)}</div>`}`,true);
+   ${b.file?`<div class="detail"><div>${billSecs(b,m,hs).filter(x=>x.t==='overview'||x.t==='hearings').map(x=>x.h).join('')}</div>${officePanel(b)}</div>`:(()=>{
+     const secs=billSecs(b,m,hs);const tab=BILLTAB_KEY===b.key?BILLTAB:'overview';
+     const nav=billTabsNav(b,secs.map(x=>[x.t,x.id,x.l]));
+     const body=secs.filter(x=>x.t===(BILLTAB||'overview')).map(x=>x.h).join('')||'<p class="small muted">Nothing here yet.</p>';
+     return `${nav}<div class="detail"><div>${body}</div>${officePanel(b)}</div>`})()}`,true);
+}
+// Every section of the bill page, with the tab it lives on, for the tabs and the "Jump to" menu.
+function billSecs(b,m,hs){
+  const X=typeof billExtraParts==='function'?billExtraParts(b):{};const out=[];
+  const add=(t,id,l,h)=>{if(h)out.push({t,id,l,h:h.includes(`id="bs-${id}"`)?h:`<div id="bs-${id}" class="bs">${h}</div>`})};
+  add('overview','plain','In plain English',X.plain);
+  add('overview','version','What this version does',X.version);
+  add('overview','summary','Summary',`<section><h2>Summary</h2><p class="serif" style="font-size:17px">${esc(b.description||(b.file?'The Legislature publishes only the title and sponsor of a bill file until it gets a number.':'No summary yet.'))}</p>${b.subj.length?`<p class="small muted">Subjects: ${esc(b.subj.join(', '))}</p>`:''}${b.rc.length?`<p class="small muted">Recommended by ${esc(b.rc.join(', '))}</p>`:''}</section>`);
+  add('overview','ag','What the AG office will have to do',agSection(b));
+  add('overview','fiscal','Fiscal note',fiscalSection(b));
+  add('overview','changed','What has changed',`<section><h2>What has changed</h2>${b.ch.length?`<table class="compact"><tbody>${b.ch.slice().reverse().slice(0,12).map(x=>{const d=pd(x[0]);return `<tr><td style="white-space:nowrap">${d?fmtMDY(d)+' '+fmtTime(d):''}</td><td><b>${esc(x[1])}</b>: ${esc(x[2])}</td></tr>`}).join('')}</tbody></table>${b.ch.length>12?`<p class="small muted">Showing the latest 12 of ${b.ch.length}.</p>`:''}`:'<p class="small muted">No changes recorded since Deseret Docket started tracking this bill.</p>'}</section>`);
+  if(b.file) return out;
+  add('hearings','hearings','Committee hearings',`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight" style="margin-bottom:8px"><b>${esc(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>`);
+  add('hearings','floor','Floor calendar',X.floor);
+  add('hearings','discussed','What was discussed',discussionSection(b));
+  add('text','textchanges','Latest text changes',changesCard(b));
+  add('text','watch','Where the watch list appears',`<section><h2>Where the watch list appears</h2>${m.length?`<p class="small muted">${plural(m.length,'place')} in ${esc(b.version||'the bill')}.</p><div class="tablewrap" style="border:0"><table class="compact"><thead><tr><th>Term</th><th>Where</th><th>Text</th></tr></thead><tbody>${m.slice(0,200).map(x=>`<tr><td><b>${esc(x.term)}</b>${x.inDef?' <span class="pill muted">definition</span>':''}${x.struck?' <span class="pill warn">struck</span>':''}</td><td>${esc(x.where)}</td><td>${x.code?esc(x.raw):snippet(x.raw,x.term)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="small muted">None of the watch list’s words or code chapters appear in this bill.</p>'}</section>`);
+  add('text','collisions','Bill collisions',X.collisions);
+  add('text','docs','Documents',`<section class="docs"><h2>Documents</h2>${b.docs.map(g=>`<b>${esc(g[0])}</b><ul>${g[1].map(i=>{const d=pd(i[1]);return `<li><a href="${esc(i[2])}" target="_blank" rel="noopener">${esc(i[0])}</a>${d?', '+MONTHS[d.getMonth()]+' '+d.getDate():''}</li>`}).join('')}</ul>`).join('')||'<p class="small muted">None yet.</p>'}</section>`);
+  add('history','status','Status and actions',`<section><h2>Status and actions</h2><div class="tablewrap" style="border:0"><table class="compact"><thead><tr><th>Date</th><th>Action</th><th>Location</th><th>Vote</th></tr></thead><tbody>${b.hist.map(h=>{const d=pd(h[0]);return `<tr><td>${d?fmtMDY(d):''}</td><td>${esc(h[1])}</td><td>${esc(h[2])}</td><td>${esc(h[3])}</td></tr>`}).join('')}</tbody></table></div></section>`);
+  if(typeof billTabBody==='function'){
+    const keep=BILLTAB;BILLTAB='history';const hh=billTabBody(b);BILLTAB='media';const mm=billTabBody(b);BILLTAB=keep;
+    const i=hh.indexOf('<section id="bs-votes"');
+    add('history','runbefore','Has this bill run before?',i>0?hh.slice(0,i):hh);
+    if(i>0)add('history','votes','Votes',hh.slice(i));
+    add('media','news','News and sentiment',mm);
+  }
+  return out;
 }
 
 /* ===================== ROUTER ===================== */
@@ -1013,7 +1032,7 @@ function route(soft){
 const on=(id,ev,fn)=>{const el=$(id);if(el)el[ev]=fn};
 function bind(){
   bindMS(app);
-  on('sdBtn','onclick',()=>{const w=$('sineDie');const o=w.classList.toggle('open');$('sdBtn').setAttribute('aria-expanded',o)});
+
   on('sessSel','onchange',async e=>{UI.session=e.target.value;saveUI();PAGE=1;await loadSession(UI.session);if(location.hash.startsWith('#bill-'))location.hash='#bills';else route()});
   // bills
   on('fShow','onchange',e=>{FLT.show=e.target.value;PAGE=1;saveFLT();route()});
@@ -1049,8 +1068,8 @@ function bind(){
   app.querySelectorAll('input[name=pos]').forEach(r=>r.onchange=async()=>{const b=BYKEY[curKey()];if(await saveBill(b,{position:r.value||null}))toast('Position saved');route(true)});
   app.querySelectorAll('select[data-cpsel]').forEach(sel=>sel.onchange=async()=>{const b=BYKEY[curKey()];if(await saveBill(b,{cpos:{[sel.dataset.cpsel]:sel.value||null}}))toast(`${desigName(sel.dataset.cpsel)}: ${sel.value?cposLabel(sel.value):'cleared'}`);route(true)});
   app.querySelectorAll('[data-cpos]').forEach(btn=>btn.onclick=()=>{const b=BYKEY[btn.dataset.cpos];let dlg=$('noteDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='noteDlg';document.body.appendChild(dlg)}const c=cposOf(b);
-    dlg.innerHTML=`<form method="dialog"><h2>Committee positions: ${esc(billLabel(b))}</h2><p class="small muted">${esc(b.title)}</p>${(CONFIG.designations||[]).map(d=>`<div class="cprow"><label for="dcp-${d.id}" title="${esc(d.full)}"><b>${esc(d.name)}</b> <span class="tiny muted">${esc(d.full)}</span></label><select id="dcp-${d.id}" data-dcp="${d.id}"><option value="">—</option><option value="tagged" ${c[d.id]&&c[d.id].pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${c[d.id]&&c[d.id].pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`).join('')}<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgSave">Save</button></div></form>`;
-    dlg.showModal();$('dlgCancel').onclick=()=>dlg.close();$('dlgSave').onclick=async e=>{e.preventDefault();const patch={};dlg.querySelectorAll('[data-dcp]').forEach(s=>{const was=(c[s.dataset.dcp]||{}).pos||'';if(s.value!==was)patch[s.dataset.dcp]=s.value||null});if(!Object.keys(patch).length){dlg.close();return}if(await saveBill(b,{cpos:patch})){toast('Committee positions saved');dlg.close();route(true)}}});
+    dlg.innerHTML=`<form method="dialog"><h2>Association positions: ${esc(billLabel(b))}</h2><p class="small muted">${esc(b.title)}</p>${(CONFIG.designations||[]).map(d=>`<div class="cprow"><label for="dcp-${d.id}" title="${esc(d.full)}"><b>${esc(d.name)}</b> <span class="tiny muted">${esc(d.full)}</span></label><select id="dcp-${d.id}" data-dcp="${d.id}"><option value="">—</option><option value="tagged" ${c[d.id]&&c[d.id].pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${c[d.id]&&c[d.id].pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`).join('')}<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgSave">Save</button></div></form>`;
+    dlg.showModal();$('dlgCancel').onclick=()=>dlg.close();$('dlgSave').onclick=async e=>{e.preventDefault();const patch={};dlg.querySelectorAll('[data-dcp]').forEach(s=>{const was=(c[s.dataset.dcp]||{}).pos||'';if(s.value!==was)patch[s.dataset.dcp]=s.value||null});if(!Object.keys(patch).length){dlg.close();return}if(await saveBill(b,{cpos:patch})){toast('Association positions saved');dlg.close();route(true)}}});
   on('saveAg','onclick',async()=>{const b=BYKEY[curKey()];if(await saveBill(b,{agAction:$('agActIn').value.trim()}))toast('Saved for the office')});
   app.querySelectorAll('[data-agact]').forEach(btn=>btn.onclick=()=>{const b=BYKEY[btn.dataset.agact];let dlg=$('noteDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='noteDlg';document.body.appendChild(dlg)}
     dlg.innerHTML=`<form method="dialog"><h2>AG office action: ${esc(billLabel(b))}</h2><p class="small muted">${esc(b.title)}</p>${b.agd.length?`<p class="small muted">From the bill text: ${esc(b.agd[0][1].slice(0,240))}${b.agd.length>1?' (and '+(b.agd.length-1)+' more)':''}</p>`:''}<textarea id="dlgNote" style="min-height:140px" placeholder="What the office will need to do if this passes">${esc(agActOf(b))}</textarea><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgSave">Save</button></div></form>`;
@@ -1139,3 +1158,13 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     app.innerHTML=`<main class="gut"><div class="wrap"><h2 style="margin-top:40px">Couldn’t load bill data</h2><p class="lede">The data files didn’t load (${esc(e.message)}). Reload the page to try again.</p></div></main>`;
   }
 })();
+
+// Hover (or focus) a shortened summary to read all of it.
+(()=>{let tip=null;const hide=()=>{if(tip){tip.remove();tip=null}};
+  const show=el=>{hide();tip=document.createElement('div');tip.className='fulltip';tip.textContent=el.dataset.full;document.body.appendChild(tip);
+    const r=el.getBoundingClientRect(),w=Math.min(460,innerWidth-24);tip.style.width=w+'px';
+    let x=Math.min(Math.max(12,r.left-8),innerWidth-w-12);let y=r.bottom+6;if(y+tip.offsetHeight>innerHeight-50)y=Math.max(12,r.top-tip.offsetHeight-6);
+    tip.style.left=x+'px';tip.style.top=y+'px'};
+  document.addEventListener('mouseover',e=>{const el=e.target.closest&&e.target.closest('[data-full]');if(el)show(el);else if(!(e.target.closest&&e.target.closest('.fulltip')))hide()});
+  document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('[data-full]');if(el)show(el)});
+  document.addEventListener('focusout',hide);addEventListener('scroll',hide,true);addEventListener('hashchange',hide);})();

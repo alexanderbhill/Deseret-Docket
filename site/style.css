@@ -318,7 +318,7 @@ table.compact td:first-child,table.compact th:first-child{padding-left:8px}
 /* ---------- footer: work-product notice and the sine die bar ---------- */
 .wp-note{max-width:1360px;margin:0 auto;padding:18px 16px 8px;font-size:11.5px;color:#8a929b;letter-spacing:.03em;text-align:center}
 .sinedie{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--navy);color:#fff;font-size:13.5px;border-top:3px solid var(--maroon)}
-.sinedie>button{all:unset;box-sizing:border-box;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%;padding:7px 16px;cursor:pointer}
+.sinedie>.sd-plain{box-sizing:border-box;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;width:100%;padding:7px 16px}
 .sinedie>button:focus-visible{outline:2px solid var(--goldc);outline-offset:-3px}
 .sinedie .cd{font-variant-numeric:tabular-nums;font-weight:700;color:var(--goldc)}
 .sinedie .cd b{font-size:15px;color:#fff;margin-right:2px}
@@ -611,3 +611,13 @@ table.lgb .n{text-align:right;font-variant-numeric:tabular-nums}
 table.lgb tr.me td{background:var(--gold-bg)}
 table.lgb td:first-child{width:40px}
 @media (max-width:700px){table.lgb .hide-m{display:none}}
+/* full summary on hover */
+.hasfull{cursor:help}
+.hasfull:focus-visible{outline:2px solid var(--link);outline-offset:2px;border-radius:3px}
+.fulltip{position:fixed;z-index:95;background:#fff;color:var(--ink);border:1px solid var(--line-2);border-radius:9px;box-shadow:var(--shadow);padding:10px 13px;font-size:14px;line-height:1.5;max-height:60vh;overflow:auto;pointer-events:auto}
+/* bill page tabs and jump menu */
+.billtabs .grow{flex:1}
+.billtabs .billjump{min-height:34px;padding:4px 30px 4px 10px;font-size:14px;margin:4px 8px 4px 0;max-width:240px}
+.bs,section[id^="bs-"]{scroll-margin-top:16px}
+.flash{animation:bsflash 1.6s ease-out}
+@keyframes bsflash{0%{box-shadow:0 0 0 3px var(--goldc)}100%{box-shadow:0 0 0 3px transparent}}

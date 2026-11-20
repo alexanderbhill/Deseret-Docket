@@ -28,13 +28,13 @@ function normCommittee(t){t=String(t||'').toUpperCase().replace(/[^A-Z]/g,'');if
   const d=(CONFIG.designations||[]).find(x=>[x.id,x.name,x.full].some(v=>String(v).toUpperCase().replace(/[^A-Z]/g,'')===t));return d?d.id:''}
 function normBill(t,session){const m=String(t||'').toUpperCase().replace(/\./g,'').replace(/\s+/g,'').match(/^(HB|SB|HCR|SCR|HJR|SJR|HR|SR)0*(\d{1,4})/);return m?`${session}/${m[1]}${m[2].padStart(4,'0')}`:''}
 
-// ---------- the committee positions importer (Admin page)
+// ---------- the association positions importer (Admin page)
 let CPI=null; // {rows, head, mode, billCol, comCol, posCol, source}
 function adminExtraHTML(){
   const pending=CPI&&CPI.rows.length?cpiPreview():'';
   return `<div class="card"><h2>Session wrap-up page</h2><p class="desc">The Session wrap-up tab (scorecard, governor watch, implementation tracker, season recaps) turns on by itself in the last week of the session. Switch it on early here.</p>
    <label class="switch"><input type="checkbox" id="wrapFlag" ${ME.flags&&ME.flags.wrap?'checked':''}><span class="slider" aria-hidden="true"></span><span>Show Session wrap-up to everyone now</span></label></div>
-   <div class="card" id="cpiCard"><h2>Committee positions</h2><p class="desc">Upload the positions outside committees (${esc((CONFIG.designations||[]).map(d=>d.name).join(', '))}) have taken. They show up in the Committee positions column. You can also set them by hand on any bill.</p>
+   <div class="card" id="cpiCard"><h2>Association positions</h2><p class="desc">Upload the positions outside associations (${esc((CONFIG.designations||[]).map(d=>d.name).join(', '))}) have taken. They show up in the Association positions column. You can also set them by hand on any bill.</p>
    <div class="filters"><div class="field"><label for="cpiFile">Excel or CSV file</label><input type="file" id="cpiFile" accept=".xlsx,.xls,.csv,.txt"></div>
     <div class="field grow"><label for="cpiUrl">Or a Google Sheet link</label><input id="cpiUrl" placeholder="https://docs.google.com/spreadsheets/d/…"></div><button class="btn" id="cpiFetch">Read sheet</button></div>
    <p class="small muted">Two layouts work: one row per bill with a column for each committee (headings like ULELC, SWAP), or one row per position with columns for bill, committee and position. Positions can be written the usual way (“Priority oppose”, “Support”, “Neutral”…). An X just tags the bill.</p>

@@ -24,7 +24,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
 ## What's in this repository
 
 - `site/index.html`, `site/app.js`, `site/style.css` – the website. Each newer feature has its own file:
-  `fiscal.js` (Fiscal Hive), `office.js` (committee-position and budget uploads), `intel.js` (floor watch,
+  `fiscal.js` (Fiscal Hive), `office.js` (association-position and budget uploads), `intel.js` (floor watch,
   collisions, run-before, media, follow the money), `legis.js` (legislator profiles), `learn.js`
   (Learn the Legislature: games, Capitol quirks, the sponsor ranking under “Members and their bills”, a
   leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu)

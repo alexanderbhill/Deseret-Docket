@@ -9,7 +9,7 @@ const TOUR=[
   {hash:'bills',sel:'#billForm',title:'Find any bill',text:'Filter by what’s on the office list, assigned to you, heard this week, or matching the watch list. Search finds bill numbers, titles, sponsors and notes.'},
   {hash:'bills',sel:'table.bills thead',title:'Arrange the table your way',text:'Click a heading to sort. Drag a heading to move the column, or use Columns to hide and reorder. Your layout is saved to your account.'},
   {hash:'bills',sel:'td.c-sponsor .spn',title:'Sponsor cards',text:'Hover a sponsor’s name for their photo and district, plus a button that starts an email to them with the bill number and title already in the subject line.'},
-  {hash:'bills',sel:'td.c-position, td.c-departments',need:'me',title:'The office’s columns',text:'Set the office position, department, division, committee positions and assignments right in the table. Everyone signed in sees the same information.'},
+  {hash:'bills',sel:'td.c-position, td.c-departments',need:'me',title:'The office’s columns',text:'Set the office position, department, division, association positions and assignments right in the table. Everyone signed in sees the same information.'},
   {hash:'updates',sel:'#hearingsCard',title:'Hearings',text:'Upcoming committee agendas with your bills, soonest first. When two important bills are heard at the same time in different rooms, you’ll see a warning.'},
   {hash:'learn-members',sel:'#legRank',title:'Members and their bills',text:'On the Learn tab: every legislator, ranked by how many bills they’re sponsoring. Open a profile for a photo, committees and how each member’s votes line up with the positions you track.'},
   {hash:'budget',sel:'#budCom',title:'Budget',text:'Pick any appropriations committee to see its agencies’ budgets and the fiscal notes on bills in its area, plus what the office requested compared with what’s being funded.'},
@@ -17,8 +17,8 @@ const TOUR=[
   {hash:'fiscal',sel:'main .card',need:'fiscal',title:'Fiscal Hive',text:'Route new bills and substitutes to the right division in a few clicks. Divisions answer by email, and their estimates come back here.'},
   {hash:'postsession',sel:'main .card',need:'wrap',title:'Session wrap-up',text:'The end-of-session scorecard, governor watch, implementation tracker and your personal season recap.'},
   {hash:'learn',sel:'main .card',title:'Learn the Legislature',text:'Games and visual guides for new staff and interns: match faces to names, guess who said it, and walk through how a bill becomes law.'},
-  {hash:'admin',sel:'main .card',need:'admin',title:'Admin',text:'Approve account requests, choose what each person can see and change, and upload committee positions and budget documents.'},
-  {hash:'updates',sel:'#sineDie',title:'Sine die countdown',text:'Always at the bottom of the page. Click it for the session’s key deadlines, with the next one highlighted.'},
+  {hash:'admin',sel:'main .card',need:'admin',title:'Admin',text:'Approve account requests, choose what each person can see and change, and upload association positions and budget documents.'},
+  {hash:'updates',sel:'#sineDie',title:'Sine die countdown',text:'Always at the bottom of the page: the time left until the session ends at sine die.'},
   {hash:'updates',sel:'#helpBtn',title:'That’s the tour',text:'Help is here whenever you need it, including this tour. Enjoy the session!'},
 ];
 let TS=null;
@@ -58,8 +58,8 @@ document.addEventListener('click',e=>{
   if(open&&!open.contains(e.target)){open.remove();const hb=$('helpBtn');hb&&hb.setAttribute('aria-expanded','false')}
   if(!b||open)return;
   const m=document.createElement('div');m.className='helpmenu';m.setAttribute('role','menu');
-  m.innerHTML=`<button type="button" role="menuitem" data-h="tour">Take the tour</button><a role="menuitem" href="#learn">Learn the Legislature</a><button type="button" role="menuitem" data-h="dates">Key session dates</button>${ME?'<a role="menuitem" href="#account">Your account</a>':'<a role="menuitem" href="/login">Sign in or create an account</a>'}`;
+  m.innerHTML=`<button type="button" role="menuitem" data-h="tour">Take the tour</button><a role="menuitem" href="#learn">Learn the Legislature</a>${ME?'<a role="menuitem" href="#account">Your account</a>':'<a role="menuitem" href="/login">Sign in or create an account</a>'}`;
   document.body.appendChild(m);const r=b.getBoundingClientRect();m.style.top=(r.bottom+6)+'px';m.style.left=Math.max(8,Math.min(r.left,innerWidth-m.offsetWidth-8))+'px';b.setAttribute('aria-expanded','true');
-  m.onclick=ev=>{const h=ev.target.dataset.h;m.remove();if(h==='tour')startTour();else if(h==='dates'){const w=$('sineDie');if(w){w.classList.add('open');$('sdBtn').setAttribute('aria-expanded','true')}}};
+  m.onclick=ev=>{const h=ev.target.dataset.h;m.remove();if(h==='tour')startTour();};
   m.querySelector('button,a').focus();
 });
