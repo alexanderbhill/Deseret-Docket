@@ -974,11 +974,15 @@ function route(soft){
   else if(view==='account') html=pageAccount();
   else if(view==='admin') html=pageAdmin();
   else if(view==='email') html=pageEmail(parts.slice(1).join('-'));
+  else if(view==='fiscal') html=pageFiscal(parts.slice(1).join('-'));
+  else if(view==='learn') html=pageLearn(parts.slice(1).join('-'));
+  else if(view==='postsession') html=pageWrap(parts.slice(1).join('-'));
+  else if(view==='packet') html=pagePacket(parts[1],parts.slice(2).join('-'));
   else if(view==='bill') html=pageBill(parts[1],parts.slice(2).join('-'));
   else html=shell('',`<div class="card"><h2>Not found</h2></div>`);
   app.innerHTML=html; bind();
   if(soft) scrollTo(0,y);
-  const titles={updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
+  const titles={fiscal:'Fiscal Hive',learn:'Learn the Legislature',postsession:'Session wrap-up',packet:'Prep packet',updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
   document.title=(titles[view]?titles[view]+' · ':'')+'Deseret Docket';
 }
 const on=(id,ev,fn)=>{const el=$(id);if(el)el[ev]=fn};
@@ -1095,6 +1099,8 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     await loadSession(UI.session);
     if(ME){await off;setInterval(()=>pullOffice(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)pullOffice(true)})}
     booted=true; route();
+    if(isAdmin())api('requests').then(r=>{ADMIN_PENDING=(r.requests||[]).length;if(ADMIN_PENDING)route(true)}).catch(()=>{});
+    if(typeof maybeStartTour==='function')maybeStartTour();
   }catch(e){
     app.innerHTML=`<main class="gut"><div class="wrap"><h2 style="margin-top:40px">Couldn’t load bill data</h2><p class="lede">The data files didn’t load (${esc(e.message)}). Reload the page to try again.</p></div></main>`;
   }
