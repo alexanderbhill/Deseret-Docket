@@ -48,7 +48,7 @@ function collisions(){
 function tokens(t){return new Set(String(t||'').toLowerCase().replace(/amendments?|modifications?|act|provisions?/g,' ').split(/[^a-z0-9]+/).filter(w=>w.length>2))}
 function runBefore(b){
   const H=loadHist();if(!H)return null;const out=[];const ts=tokens(b.title);const secs=new Set(b.secs);
-  for(const [ses,bills] of Object.entries(H)){if(ses===b.session)continue;
+  for(const [ses,bills] of Object.entries(H)){if(ses===b.session||ses[0]==='_')continue;
     for(const r of Object.values(bills)){const shared=r.secs.filter(s=>secs.has(s)).length;const rt=tokens(r.t);const inter=[...ts].filter(w=>rt.has(w)).length;const jac=inter/Math.max(1,new Set([...ts,...rt]).size);
       const score=(secs.size?shared/Math.max(secs.size,r.secs.length||1):0)*0.6+jac*0.4+(r.t.toLowerCase()===b.title.toLowerCase()?0.5:0);
       if((shared>=2||jac>=0.55||(shared>=1&&jac>=0.3))&&score>=0.3)out.push({ses,r,shared,score})}}

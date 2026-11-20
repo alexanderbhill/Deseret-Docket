@@ -113,7 +113,7 @@ const REDO_TRIVIA=[
 function redoRounds(){
   // Current-session bills that change code a law from an earlier session just changed.
   const H=typeof loadHist==='function'?loadHist():null;if(!H)return null;const S=UI.session;
-  const laws={};for(const [ses,bills] of Object.entries(H)){if(ses>=S)continue;for(const r of Object.values(bills)){if(r.stage!=='Became law')continue;for(const sec of r.secs)(laws[sec]=laws[sec]||[]).push({ses,r})}}
+  const laws={};for(const [ses,bills] of Object.entries(H)){if(ses>=S||ses[0]==='_')continue;for(const r of Object.values(bills)){if(r.stage!=='Became law')continue;for(const sec of r.secs)(laws[sec]=laws[sec]||[]).push({ses,r})}}
   const pool=(BILLS[S]||[]).filter(b=>!b.file&&b.secs.length);if(!pool.length||!Object.keys(laws).length)return [];
   return pool.map(b=>{const hit=b.secs.flatMap(sec=>(laws[sec]||[]).map(x=>({...x,sec})));return {b,hit}});
 }

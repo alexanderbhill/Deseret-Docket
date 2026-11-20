@@ -941,7 +941,7 @@ def diff(old, new, stamp):
 
 # ---------------------------------------------------------------- earlier sessions ("this bill has run before")
 HISTORY_YEARS = 4
-HISTORY_FETCH_CAP = 700  # bill details fetched per run; old sessions don't change, so this fills in over a few runs
+HISTORY_SPREAD = 20  # spread the one-time backfill of earlier sessions evenly over this many data updates
 
 
 def stage_of(hist, act):
@@ -982,17 +982,31 @@ def build_history(token, out, prev, sessions):
     cache = {}
     if prev and os.path.exists(os.path.join(prev, "history.json")):
         cache = json.load(open(os.path.join(prev, "history.json")))
-    budget = HISTORY_FETCH_CAP
+    # Count what's missing once, then fetch the same share on each run so the Legislature API load is
+    # spread over HISTORY_SPREAD updates instead of landing on the first few.
+    plan = cache.pop("_plan", None) or {}
+    lists = {}
+    for ses in want:
+        if os.path.exists(os.path.join(out, ses, "bills.json")):
+            continue
+        try:
+            lists[ses] = json.loads(get(f"{API}/bills/{ses}/billlist/{token}"))
+        except Exception as e:
+            print(f"  history {ses}: {e}", file=sys.stderr)
+    missing_total = sum(1 for ses, bl in lists.items() for b in bl if b["number"] not in cache.get(ses, {}))
+    if not plan.get("per_run") or plan.get("sessions") != want:
+        plan = {"sessions": want, "per_run": max(1, -(-missing_total // HISTORY_SPREAD)) if missing_total else 0}
+    budget = plan["per_run"]
+    print(f"  history: {missing_total} earlier bills still to look up, {budget} per update")
     for ses in want:
         live = os.path.join(out, ses, "bills.json")
         if os.path.exists(live):  # sessions we already track: reuse their records
             cache[ses] = {b["n"]: history_rec(b) for b in json.load(open(live))}
             continue
         have = cache.get(ses, {})
-        try:
-            bl = json.loads(get(f"{API}/bills/{ses}/billlist/{token}"))
-        except Exception as e:
-            print(f"  history {ses}: {e}", file=sys.stderr); continue
+        if ses not in lists:
+            continue
+        bl = lists[ses]
         missing = [b["number"] for b in bl if b["number"] not in have][:budget]
         budget -= len(missing)
 
@@ -1010,6 +1024,7 @@ def build_history(token, out, prev, sessions):
         if budget <= 0:
             break
     cache = {k: v for k, v in cache.items() if k in want}
+    cache["_plan"] = plan
     json.dump(cache, open(os.path.join(out, "history.json"), "w"), separators=(",", ":"))
 
 
