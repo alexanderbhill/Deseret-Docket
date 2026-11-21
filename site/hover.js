@@ -28,11 +28,17 @@ const legTitle2=l=>`${l.house==='H'?'Rep.':'Sen.'} ${l.name}`;
 function divCard(id){
   const d=divById(id);if(!d)return '';
   const lead=(typeof AG_LEADS!=='undefined'&&AG_LEADS[d.dept])||null;
-  const n=allRows(UI.session).filter(b=>(b.sug||[]).includes(id)).length;
+  // This session's bills for the division (or the latest session with numbered bills, before bills are numbered)
+  const sid=allRows(UI.session).some(b=>!b.file)?UI.session:((INDEX.sessions.find(x=>x.count>0&&BILLS[x.id])||{}).id||UI.session);
+  const rows=allRows(sid).filter(b=>divWork(b,id));
+  const mine=rows.filter(b=>divsOf(b).includes(id)), rest=rows.filter(b=>!divsOf(b).includes(id));
+  const list=[...mine,...rest].sort((a,b)=>(divsOf(b).includes(id)-divsOf(a).includes(id))||(!!b.agm-!!a.agm)).slice(0,6);
   return `<div class="nm">${esc(d.name)}</div><div class="tiny muted">${esc(deptName(d.dept))} Department${lead?` · led by ${esc(lead[0])}, ${esc(lead[1])}`:''}</div>
    ${(d.keywords||[]).length?`<p class="small" style="margin:8px 0 4px">Handles bills about: ${esc(d.keywords.slice(0,8).join(', '))}${d.keywords.length>8?'…':''}.</p>`:''}
    ${(d.codes||[]).length?`<p class="tiny muted" style="margin:0 0 6px">Utah Code it watches: ${esc(d.codes.slice(0,6).join(', '))}</p>`:''}
-   <p class="small" style="margin:0"><b>${n}</b> ${esc(sessName(UI.session))} bill${n===1?'':'s'} look like this division’s work.</p>`;
+   <div class="small" style="margin:8px 0 4px"><b>${rows.length}</b> ${esc(sessName(sid))} bill${rows.length===1?'':'s'}${mine.length?` (${mine.length} assigned by the office)`:''}</div>
+   ${list.length?`<div class="dc-bills">${list.map(b=>`<a href="${billHref(b)}"><span class="billnum">${esc(b.file?'File':shortNum(b.num))}</span><span>${esc(b.title)}</span>${divsOf(b).includes(id)?'<span class="tiny dc-a">assigned</span>':''}</a>`).join('')}</div>`:''}
+   ${rows.length?`<a class="btn sm" href="#bills" data-divbills="${esc(id)}" data-divsess="${esc(sid)}" style="margin-top:8px">See all ${rows.length} on the Bills tab</a>`:''}`;
 }
 
 function legCard(id){const l=legById(id);if(!l)return '';
@@ -57,6 +63,10 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeInfo()});
 addEventListener('scroll',()=>{if(infoEl)closeInfo()},{passive:true});
 addEventListener('hashchange',closeInfo);
+// "See all" from a division card: the Bills tab, every bill, narrowed to that division
+document.addEventListener('click',async e=>{const a=e.target.closest&&e.target.closest('[data-divbills]');if(!a)return;
+  FLT.sug=a.dataset.divbills;FLT.show='all';FLT.find='';FLT.div=[];FLT.dept=[];PAGE=1;saveFLT();closeInfo();
+  if(a.dataset.divsess&&a.dataset.divsess!==UI.session){e.preventDefault();UI.session=a.dataset.divsess;saveUI();await loadSession(UI.session);location.hash='#bills'}});
 
 // ---------- pie slices: hover (or focus) a slice to see its category, amount and share
 (()=>{let tip=null;

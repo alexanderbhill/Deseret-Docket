@@ -33,6 +33,8 @@ const divChip=d=>`<span class="chip divchip" tabindex="0" data-info="div:${esc(d
 function pageAGGuide(){
   const divs=CONFIG.divisions||[], depts=CONFIG.departments||[];
   const N=loadAGNews();
+  // division cards list bills; before this session's bills are numbered, use the latest session that has them
+  if(!allRows(UI.session).some(b=>!b.file)){const x=INDEX.sessions.find(x=>x.count>0);if(x&&!BILLS[x.id]&&!pageAGGuide.l){pageAGGuide.l=1;loadSession(x.id)}}
   const news=N?{news:N.news||[],oped:N.oped||[],press:N.press||[]}:null;
   const item=x=>{const d=pd(x.date);return `<a class="agnews" href="${esc(x.u)}" target="_blank" rel="noopener">${x.img?`<img src="${esc(x.img)}" alt="" loading="lazy">`:`<span class="agn-ph">${AGTAB==='oped'?'✍️':AGTAB==='press'?'⚖️':'📰'}</span>`}<span><b>${esc(x.t)}</b><span class="tiny muted">${esc(x.src||'')}${d?' · '+fmtLong(d):''}</span>${x.d?`<span class="small">${esc(x.d.slice(0,170))}${x.d.length>170?'…':''}</span>`:''}</span></a>`};
   return `<div class="card ag-hero"><div class="ag-hero-t"><div class="kicker">A beginner’s guide</div><h2>How the Utah Attorney General’s Office works</h2>

@@ -1066,3 +1066,8 @@ dialog.demo-dlg::backdrop{background:rgba(0,33,71,.45)}
 .talk-q{white-space:normal;overflow-wrap:break-word}
 .talk-q .ts{font-family:var(--sans);margin-right:4px}
 .talk-item>div{min-width:0}
+.dc-bills{display:grid;gap:2px;max-height:220px;overflow:auto;margin:2px 0}
+.dc-bills a{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:4px 6px;border-radius:6px;text-decoration:none;color:var(--ink);font-size:13.5px;line-height:1.3}
+.dc-bills a:nth-child(even){background:var(--row-alt)}.dc-bills a:hover{background:#dcecf3}
+.dc-bills .billnum{font-size:13px}.dc-a{color:var(--live);font-weight:700}
+.infocard{width:340px!important}

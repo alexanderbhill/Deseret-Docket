@@ -490,6 +490,8 @@ function showOptions(){
     ['agm','AG mentioned in a hearing',b=>b.agm>0],['agduty','Gives the AG office something to do',b=>b.agd.length>0||!!agActOf(b)],['passed','Passed',b=>(outcome(b)||{}).k==='pass'],['killed','Killed',b=>(outcome(b)||{}).k==='dead'],['cj','Criminal justice related',b=>b.cj],['watch','Matches the watch list',b=>matchesFor(b).length>0]);
   return o;
 }
+// A division's bills: the ones the office assigned to it, plus the ones the bill text suggests for it.
+const divWork=(b,id)=>divsOf(b).includes(id)||(b.sug||[]).includes(id);
 function filteredBills(){
   const S=UI.session; const opts=showOptions();
   if(!FLT.show||!opts.find(o=>o[0]===FLT.show)) FLT.show=ME?'office':'all';
@@ -502,6 +504,7 @@ function filteredBills(){
   if(FLT.desig.length) rows=rows.filter(b=>desigOf(b).some(d=>FLT.desig.includes(d)));
   if(FLT.pos&&ME) rows=rows.filter(b=>(posOf(b)||'none')===FLT.pos);
   if(FLT.pri.length&&canSee('priority')) rows=rows.filter(b=>FLT.pri.includes(priOf(b)||'none'));
+  if(FLT.sug) rows=rows.filter(b=>divWork(b,FLT.sug));
   if(FLT.sponsor){const id=FLT.sponsor;rows=rows.filter(b=>b.spId===id||b.flId===id||(legById(id)&&legMatchName(legById(id),b.sponsor)))}
   if(q) rows=rows.filter(b=>[agActOf(b),posName(posOf(b)),b.num,b.title,b.sponsor,b.floor,b.own,b.act,b.description,noteOf(b),deptsOf(b).map(deptName).join(' '),divsOf(b).map(divName).join(' '),desigOf(b).join(' '),assignOf(b).join(' ')].join(' ').toLowerCase().includes(q));
   const s=SORTS[FLT.sort.col]||SORTS.num; rows.sort((a,b)=>FLT.sort.dir*s(a,b)||SORTS.num(a,b));
@@ -536,6 +539,7 @@ function pageBills(){
     <button type="button" class="btn" id="csvBtn" title="Download the bills shown as a spreadsheet">Download .csv</button>
     ${ME?`<button type="button" class="btn ${WATCHOPEN?'primary':''}" id="watchToggle" aria-expanded="${WATCHOPEN}">Watch list${W.terms.length+W.codes.length?` (${W.terms.filter(x=>x.on).length+W.codes.filter(x=>x.on).length})`:''}</button>`:''}
    </form>
+   ${FLT.sug&&divById(FLT.sug)?`<p class="small">Showing bills for <b>${esc(divName(FLT.sug))}</b>: assigned to it by the office or suggested by the bill text. <button class="linkbtn" id="clearSug">Show all divisions</button></p>`:''}
    ${sp?`<p class="small">Showing bills sponsored by <b>${esc(sp.name)}</b> (${sp.house==='H'?'House':'Senate'} District ${esc(sp.district)}). <button class="linkbtn" id="clearSp">Show all sponsors</button></p>`:''}
    <p class="small muted" style="margin:0 0 10px">${rows.length?`${((PAGE-1)*per+1).toLocaleString()}–${Math.min(PAGE*per,rows.length).toLocaleString()} of ${plural(rows.length,'bill')}`:''}${textReady(S)?'':` · Loading bill text (${TEXTSTATE[S].loaded} of ${TEXTSTATE[S].total})…`}</p>
    ${rows.length?billTable(slice,cols):`<p class="empty">${FLT.show==='office'?'Nothing on the office list yet. Switch <b>Show</b> to every bill and give a bill a department, division, designation or priority to add it.':'No bills match.'}</p>`}
@@ -1141,6 +1145,7 @@ function bind(){
   on('fPri','onchange',e=>{FLT.pri=e.target.value?[e.target.value]:[];PAGE=1;saveFLT();route()});
   const ff=$('fFind'); if(ff){ff.onchange=()=>{FLT.find=ff.value;PAGE=1;saveFLT();route()};ff.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();ff.blur()}}}
   on('clearSp','onclick',()=>{FLT.sponsor='';saveFLT();route()});
+  on('clearSug','onclick',()=>{FLT.sug='';saveFLT();route()});
   on('csvBtn','onclick',()=>downloadCSV(filteredBills(),`deseret-docket-${UI.session}-${todayStr}.csv`));
   on('csvAll','onclick',()=>downloadCSV(ME?allRows(UI.session).filter(onOffice).sort(SORTS.num):allRows(UI.session).sort(SORTS.num),`deseret-docket-${UI.session}-${ME?'office-list':'all-bills'}-${todayStr}.csv`));
   app.querySelectorAll('[data-sort]').forEach(btn=>btn.onclick=()=>{const c=btn.dataset.sort;FLT.sort=FLT.sort.col===c?{col:c,dir:-FLT.sort.dir}:{col:c,dir:1};saveFLT();route(true)});
