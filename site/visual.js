@@ -51,7 +51,7 @@ const H2ICON={'Today’s updates':'bell','Hearings':'calendar','New bill files':
   'Office budget request':'dollar','What we asked for vs. what we’re getting':'chart','Session wrap-up page':'wrap','Your account':'user','Change your password':'gear',
   'Appropriations threshold':'dollar','By department':'building','Fastest responders':'trophy','Outbox':'mail','Where the suggestion missed':'search','Who gets requests':'users','History':'clock',
   'Governor watch':'scale','Implementation tracker':'list','My season':'trophy','Collisions':'merge','Money':'dollar','Office':'building','Sponsor':'user','Team notes':'pencil','What it does':'file','What the office would have to do':'scale',
-  'People for “Assigned to”':'users','Media availabilities':'mic','Legislature in the news':'news'};
+  'People for “Assigned to”':'users','Media availabilities':'mic','Legislature in the news':'news','Where the money goes':'dollar','Staff list upload':'table'};
 // Icons for the kinds of change on the Updates page.
 function changeIcon(k){k=k||'';return /hearing|agenda|meeting/i.test(k)?'calendar':/sub|text|version|amend/i.test(k)?'diff':/fiscal/i.test(k)?'dollar':/AG/.test(k)?'scale':/vote|pass|read|floor|circl|rules|calendar/i.test(k)?'ballot':/sponsor/i.test(k)?'user':/governor|sign|veto|law/i.test(k)?'check':/new bill|numbered/i.test(k)?'file':/discuss|transcript|video/i.test(k)?'mic':'bell'}
 function iconHeads(html){

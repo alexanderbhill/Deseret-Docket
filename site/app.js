@@ -29,7 +29,7 @@ const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const BEE=`<svg viewBox="0 0 32 32" aria-hidden="true" class="bee"><g class="wings"><ellipse cx="13.2" cy="9.6" rx="4.4" ry="7.2" transform="rotate(-28 13.2 9.6)"/><ellipse cx="19" cy="10.2" rx="3.6" ry="6.2" transform="rotate(22 19 10.2)"/></g><path class="feelers" d="M5.4 15.4C4.6 12.6 3.2 11.4 1.6 11.2M7.2 14.6C7.4 11.8 8.4 10.4 9.8 9.8" fill="none"/><ellipse class="body" cx="16.6" cy="19.6" rx="10.2" ry="6.6"/><clipPath id="beeclip"><ellipse cx="16.6" cy="19.6" rx="10.2" ry="6.6"/></clipPath><path class="stripe" d="M12.3 13.5h3.1v12.2h-3.1zM18.4 13.1h3.1v13h-3.1z" clip-path="url(#beeclip)"/><path class="stripe" d="M26.6 18.6l4 1-4 1.2z"/><circle class="head" cx="6.3" cy="18.6" r="3.9"/><circle class="eye" cx="5.2" cy="17.8" r="0.9"/></svg>`;
 
 /* ===================== DATA ===================== */
-let INDEX=null, CONFIG=null, LEGS=null, BUDGET=null;
+let INDEX=null, CONFIG=null, LEGS=null, BUDGET=null, WHERE=null;
 const BILLS={}, FILES={}, BYKEY={}, TEXT={}, TEXTSTATE={}, TX={};
 async function getJSON(p){const r=await fetch(p,{cache:'no-cache'});if(!r.ok)throw new Error(p+' '+r.status);return r.json()}
 function toBill(session,r){return {key:`${session}/${r.n}`,session,num:r.n,file:false,title:r.t,sponsor:r.sp,floor:r.fl,spH:r.spH||(/^Rep\./.test(r.sp)?'H':/^Sen\./.test(r.sp)?'S':''),flH:r.flH||(/^Rep\./.test(r.fl||'')?'H':/^Sen\./.test(r.fl||'')?'S':''),spId:r.spId||'',flId:r.flId||'',version:r.ver,act:r.act,own:r.own,date:pd(r.date),description:r.gd,hist:r.hist||[],vers:r.vers||[],docs:r.docs||[],ag:r.ag||[],secs:r.secs||[],subj:r.subj||[],ch:r.ch||[],tx:r.tx||[],agm:r.agm||0,txc:r.txc,fn:r.fn||null,vd:r.vd||null,cmp:r.cmp||null,sug:r.sug||[],cj:!!r.cj,tid:r.tid||'',cosp:r.cosp||[],rc:r.rc||[],fa:r.fa||'',agd:r.agd||[]}}
@@ -283,8 +283,8 @@ function shell(active,inner,compact){
   sum+=wk.length?`<b>${wk.length}</b> committee meeting${wk.length===1?' is':'s are'} on the calendar this week, covering <b>${wkBills}</b> bill${wkBills===1?'':'s'}.`:`No committee meetings are on the calendar this week.`;
   if(ME) sum+=` The office is tracking <b>${tracked.length.toLocaleString()}</b>; <b>${changed}</b> changed today.`;
   else if(changed) sum+=` <b>${changed}</b> changed today.`;
-  const fine=ME?`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}`:''}<br>Signed in as ${esc(ME.display||ME.user)}${isAdmin()?' (admin)':''}: departments, divisions, designations${canSee('priority')?', priorities':''}${canSee('note')?', notes':''} and assignments are shared with the office.`
-    :`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m. You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
+  const sched=`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}.`:''}`;
+  const fine=ME?'':`You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
   const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];const TABICON={updates:'bell',bills:'list',budget:'chart',fiscal:'hive',postsession:'wrap',learn:'book',admin:'gear'};
   if(canFiscal()) tabs.push(['fiscal','Fiscal Hive']);
   if(ME&&wrapVisible()) tabs.push(['postsession','Session wrap-up']);
@@ -295,9 +295,9 @@ function shell(active,inner,compact){
     <div class="who"><select id="sessSel" aria-label="Session">${INDEX.sessions.map(s=>`<option value="${s.id}" ${s.id===S?'selected':''}>${esc(sessName(s.id))}</option>`).join('')}</select>
      <div class="helpwrap"><button type="button" class="helpbtn" id="helpBtn" aria-haspopup="true" aria-expanded="false">Help ▾</button></div>
      ${ME?`<a class="user" href="#account">${esc(ME.display||ME.user)}</a><a href="/logout" class="small">Sign out</a>`:`<span class="guest">Guest view</span><a class="btn sm" href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a>`}</div></div>
-   <div class="live">Updated <b>${fmtAP(u)}</b></div>
+   <div class="live" tabindex="0" data-full="${esc(sched)}">Updated <b>${fmtAP(u)}</b></div>
    ${compact?'':`<p class="summary">${sum}</p>
-   <p class="fine">${fine}</p>`}
+   ${fine?`<p class="fine">${fine}</p>`:''}`}
    <nav class="tabs" aria-label="Sections">${tabs.map(([h,l])=>`<a href="#${h}" class="${active===h?'on':''}" ${active===h?'aria-current="page"':''}>${typeof ic==='function'?ic(TABICON[h]):''}${l}</a>`).join('')}</nav>
   </div></header>${ME?'':`<div class="guestbar gut"><div class="wrap">You’re browsing as a guest: public bill information only, and nothing you change is saved. <a href="/login">Sign in</a> or <a href="/login#signup" data-signup>create an account</a> for full access.</div></div>`}<main class="gut"><div class="wrap">${typeof iconHeads==='function'?iconHeads(inner):inner}</div></main>${footerHTML()}`;
 }
@@ -309,6 +309,13 @@ const SHE=new Set('Angela Ann Ariel Ashlee Candice Carol Cheryl Christine Emily 
 const pron=l=>{const o=(CONFIG.pronouns||{})[l&&l.id];const f=o||(l&&SHE.has((l.name||'').split(/\s+/)[0])?'she':'he');return f==='she'?{s:'she',o:'her',p:'her',S:'She',P:'Her'}:{s:'he',o:'him',p:'his',S:'He',P:'His'}};
 const legPhoto=l=>l&&(l.image||(l.id?`https://le.utah.gov/images/legislator/${encodeURIComponent(l.id)}.jpg`:''));
 const legEmail=l=>(l&&l.email)||'';
+// The cities a district covers when it's in a city-heavy county (Salt Lake, Utah, Davis…); the counties for rural districts.
+function legWhere(l){if(!l)return '';const w=WHERE&&WHERE[l.house]&&WHERE[l.house][String(l.district)];
+  if(!w||!w.w||!w.w.length)return l.counties?`${l.counties} ${/,/.test(l.counties)?'counties':'County'}`:'';
+  const list=a=>a.length>1?a.slice(0,-1).join(', ')+' and '+a[a.length-1]:a[0]||'';
+  const whole=[],part=[];for(const x of w.w){const p=/^part of /.test(x),n=x.replace(/^part of /,'');if(whole.includes(n)||part.includes(n))continue;(p?part:whole).push(n)}
+  const out=[];if(whole.length)out.push(list(whole.slice(0,6)));if(part.length)out.push(`part${part.length>1?'s':''} of ${list(part.slice(0,6))}`);
+  return out.join(', plus ')}
 function sponsorCardHTML(l,name,b,ctx){
   const nm=l?l.name:name.replace(/^(Rep|Sen)\.\s*/,'');
   const ttl=l?`${l.house==='H'?'Rep.':'Sen.'} ${nm}`:name;
@@ -317,7 +324,7 @@ function sponsorCardHTML(l,name,b,ctx){
   const mail=`mailto:${encodeURIComponent(legEmail(l))}?subject=${encodeURIComponent(subj)}`;
   const ini=nm.split(/\s+/).filter(w=>/^[A-Z]/.test(w)).map(w=>w[0]).filter((c,i,a)=>i===0||i===a.length-1).join('');
   return `<div class="hd">${l&&legPhoto(l)?`<img src="${esc(legPhoto(l))}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ph0',textContent:'${esc(ini)}'}))">`:`<span class="ph0">${esc(ini)}</span>`}
-   <div><div class="nm">${esc(ttl)}</div>${l?`<div class="small muted">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${l.party==='R'?'Republican':l.party==='D'?'Democrat':esc(l.party||'')}</div>${l.counties?`<div class="tiny muted">${esc(l.counties)}</div>`:''}`:''}</div></div>
+   <div><div class="nm">${esc(ttl)}</div>${l?`<div class="small muted">${l.house==='H'?'House':'Senate'} District ${esc(l.district)} · ${l.party==='R'?'Republican':l.party==='D'?'Democrat':esc(l.party||'')}</div>${legWhere(l)?`<div class="tiny muted">${esc(legWhere(l))}</div>`:''}`:''}</div></div>
    <a class="btn primary" href="${esc(mail)}">Email ${l&&l.house==='S'?'senator':l?'representative':'sponsor'} about ${esc(ctx?ctx.about:b.file?'this bill file':shortNum(b.num))}</a>
    ${l&&!legEmail(l)?'<div class="tiny muted" style="margin-top:6px">Their address will fill in after the next data update; for now, add it in your email app.</div>':''}
    ${l?`<a class="btn sm" href="#legislators-${esc(l.id)}" style="margin-top:6px">See ${pron(l).p} bills and profile</a>`:''}`;
@@ -617,7 +624,7 @@ function pageUpdates(){
     <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">${ic('file')}Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
     ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
-    <div>${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive.</p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours.</p></div>`}
+    <div>${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive. <button type="button" class="linkbtn demo-btn" data-demo="alerts">▶ See what the emails look like</button></p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours. <button type="button" class="linkbtn demo-btn" data-demo="alerts">▶ See what the emails look like</button></p></div>`}
      ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
     <div><div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
      <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
@@ -648,7 +655,7 @@ function hearingsCard(){
   const seg=`<div class="seg" role="group" aria-label="Which bills">${[...(ME?[['office','Office list'],['mine','Assigned to me']]:[]),['watch','Watch list'],['all','All bills']].map(([k,l])=>`<button type="button" data-hear="${k}" class="${hearScope===k?'on':''}" aria-pressed="${hearScope===k}">${l}</button>`).join('')}</div>`;
   let last=null;
   const body=hs.map(h=>{const d=ymd(h.d);const head=d!==last?`<h3 style="margin:22px 0 4px">${WD[h.d.getDay()]}, ${fmtLong(h.d)}</h3>`:'';last=d;
-    return head+`<div class="hearing"><div class="when"><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span></div><div><h4>${esc(h.committee)}</h4>
+    return head+`<div class="hearing"><div class="when"><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span></div><div><h4>${comInfo(h.committee)}</h4>
      ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(a)}</span>`).join('')}${b.agm?'<span class="pill solid">AG mentioned</span>':''}</div>`).join('')}
      <div class="hlinks">${h.url?`<a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a>`:''}${calBtn(h,S)}</div></div></div>`}).join('');
   return `<div class="card" id="hearingsCard"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Hearings</h2>
@@ -685,7 +692,7 @@ function pieSVG(items,label){
   const tot=items.reduce((s,x)=>s+x.v,0)||1; let a=-Math.PI/2; const R=100,r=58,cx=110,cy=110;
   const arc=(a0,a1)=>{const big=a1-a0>Math.PI?1:0;const p=(ang,rad)=>[cx+rad*Math.cos(ang),cy+rad*Math.sin(ang)];const [x0,y0]=p(a0,R),[x1,y1]=p(a1,R),[x2,y2]=p(a1,r),[x3,y3]=p(a0,r);
     return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${R} ${R} 0 ${big} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}L${x2.toFixed(2)} ${y2.toFixed(2)}A${r} ${r} 0 ${big} 0 ${x3.toFixed(2)} ${y3.toFixed(2)}Z`};
-  const paths=items.map((x,i)=>{const a0=a,a1=a+(x.v/tot)*Math.PI*2*(items.length===1?.9999:1);a=a1;return `<path d="${arc(a0,a1)}" fill="${x.c}" data-i="${i}"><title>${esc(x.l)}: ${money(x.v)} (${(x.v/tot*100).toFixed(1)}%)</title></path>`}).join('');
+  const paths=items.map((x,i)=>{const a0=a,a1=a+(x.v/tot)*Math.PI*2*(items.length===1?.9999:1);a=a1;return `<path d="${arc(a0,a1)}" fill="${x.c}" data-i="${i}" tabindex="0" data-tip="${esc(x.l)}" data-tipv="${esc(money(x.v))} · ${(x.v/tot*100).toFixed(1)}%${x.sub?' · '+esc(x.sub.slice(0,160)):''}" aria-label="${esc(x.l)}: ${money(x.v)} (${(x.v/tot*100).toFixed(1)}%)"></path>`}).join('');
   return `<svg viewBox="0 0 220 220" role="img" aria-label="${esc(label)}">${paths}<text x="110" y="104" text-anchor="middle" style="font:600 19px var(--sans);fill:var(--ink)">${money(tot,true)}</text><text x="110" y="126" text-anchor="middle" style="font:12px var(--sans);fill:var(--muted)">total</text></svg>`;
 }
 function pieBlock(id,items,label,note){
@@ -747,12 +754,12 @@ function pageBudget(){
   P.overview=`
    <div class="card bs" id="bs-bud-overview"><h2>How the budget is shaping up</h2>
     <p class="desc">The state budget from the Legislature’s Compendium of Budget Information (COBI), the costs in this session’s fiscal notes, the requests legislators have made, and what’s being said about money in appropriations meetings.</p>
-    <div class="stat3 icstat"><div>${ic('chart')}<span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div>${ic('layers')}<span>${esc(selName)} share</span><b>${money(cjTotal,true)}</b></div><div>${ic('file')}<span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b></div><div>${ic('dollar')}<span>Their combined cost</span><b>${money(fnTotal,true)}</b></div></div>
-    <p class="small muted" style="margin:0">Budget figures are COBI’s operating and capital budgets plus expendable funds. Fiscal-note costs are General, Income Tax and Uniform School Fund amounts (ongoing plus one-time) from each bill’s latest fiscal note; a fiscal note isn’t an appropriation.</p></div>
+    <div class="stat3 icstat"><div>${ic('chart')}<span>State budget, ${esc(hdrNice)}</span><b>${money(total,true)}</b></div><div>${ic('layers')}<span>${esc(selName)} share</span><b>${money(cjTotal,true)}</b></div><a class="stat-link" href="#bills" data-goshow="fiscal" data-gosess="${esc(S)}" data-full="See every ${esc(sessName(S))} bill whose fiscal note says it would cost the state money, on the Bills tab.">${ic('file')}<span>${esc(sessName(S))} fiscal notes with a cost${S!==sess?' (no '+B.fy+' bills numbered yet)':''}</span><b>${costly.length}</b><span class="tiny">See the bills →</span></a></div>
+    <p class="small muted" style="margin:0">Budget figures are COBI’s operating and capital budgets plus expendable funds. A fiscal note “with a cost” asks for General, Income Tax or Uniform School Fund money (ongoing or one-time) in its latest version; a fiscal note isn’t an appropriation.</p></div>
    <div class="card bs" id="bs-bud-general"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>General budget</h2><p class="desc">${budView.gen==='base'?`By appropriations subcommittee, ${esc(hdrNice)}.`:`Fiscal-note costs by the subcommittee the agency belongs to.`}</p></div>${seg('gen',[['base','Budget'],['fn','Fiscal notes']])}</div>
      ${pieBlock('pieGen',genItems,'General budget',budView.gen==='fn'?'Matched to a subcommittee by the agency named in each fiscal note.':'')}</div>`;
   P.committee=`
-    <div class="card bs" id="bs-bud-committee"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Committee budget</h2><p class="desc">${budView.cj==='base'?`${esc(selName)} agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on bills in this committee’s area, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
+    <div class="card bs" id="bs-bud-committee"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h2>Committee budget</h2><p class="desc">${budView.cj==='base'?`${comInfo(selName)} agencies, ${esc(hdrNice)}.`:`Fiscal-note costs on bills in this committee’s area, by agency.`}</p></div>${seg('cj',[['base','Budget'],['fn','Fiscal notes']])}</div>
      ${pieBlock('pieCj',cjItems,selName+' budget')}</div>
    <div class="card bs" id="bs-bud-fn"><h2>${esc(selName)} fiscal notes</h2><p class="desc">Every ${esc(sessName(S))} bill with a fiscal note that falls under the ${esc(selName)} committee (${cjBills.length}), largest cost first. Bills are matched by the agency named in the fiscal note.</p>
     ${cjBills.length?`<div class="tablewrap"><table class="compact" style="min-width:760px"><thead><tr><th style="padding-left:12px">Bill</th><th>Title</th><th style="text-align:right">Ongoing</th><th style="text-align:right">One-time</th><th>Agency</th><th>Where it is</th></tr></thead><tbody>
@@ -769,7 +776,7 @@ function pageBudget(){
       <div class="links"><a href="${esc(m.page)}" target="_blank" rel="noopener">Meeting page</a>${m.agenda?`<a href="${esc(m.agenda)}" target="_blank" rel="noopener">Agenda</a>`:''}</div>
       ${m.rfa.length?`<div class="agbox" style="margin-bottom:10px"><b>Requests for appropriation</b><ul>${m.rfa.map(x=>`<li><a class="ts" href="${esc(vAtM(m,x[2],x[0]))}" target="_blank" rel="noopener">${clock(x[0])}</a><span>${esc(x[1])}</span></li>`).join('')}</ul></div>`:''}
       ${m.money.slice(0,40).map(x=>`<div class="money-moment"><a class="ts" href="${esc(vAtM(m,x[3],x[0]))}" target="_blank" rel="noopener">${clock(x[0])}</a><div>${x[1]?`<div class="ctx">${esc(x[1])}</div>`:''}${esc(x[2]).replace(/(\$\s?\d[\d,.]*\s*(?:million|billion|thousand)?|\b\d[\d,.]*\s+(?:million|billion)\b)/gi,'<mark>$1</mark>')}</div></div>`).join('')}</details>`}).join(''):`<p class="empty">No appropriations meeting transcripts yet.</p>`}</div>`;
-  return shell('budget',nav+(P[T]||P.overview));
+  return shell('budget',`<div class="budpage">${nav}${P[T]||P.overview}</div>`);
 }
 let BUDTAB='overview';
 const offReq_has=()=>typeof budgetReqHTML==='function'&&!!budgetReqHTML();
@@ -786,15 +793,55 @@ function budJump(hasOff,hasTalk){
 
 // How much money talk each subcommittee's meetings have had lately, from the recordings.
 function spokenAmount(t){const m=String(t).replace(/,/g,'').match(/\$?\s?(\d+(?:\.\d+)?)\s*(million|billion|thousand|k|m)?/i);if(!m)return 0;const n=+m[1],u=(m[2]||'').toLowerCase();return n*(u==='billion'?1e9:u==='million'||u==='m'?1e6:u==='thousand'||u==='k'?1e3:1)}
+// ---------- Money talk: how each subcommittee's meetings feel about the items in front of them.
+// The weekday update splits each recording at its agenda items and counts warm words ("important",
+// "support", "worthwhile") against balking ones ("that's a lot", "concerned", "can we afford"). It's a gauge
+// from automatic captions, so every score comes with the quotes behind it.
+const toneWord=x=>x>=0.35?'Warm':x<=-0.1?'Pushback':'Mixed';
+const toneCls=x=>x>=0.35?'warm':x<=-0.1?'cool':'mixed';
+function toneMeter(score,n,big){return `<span class="tone ${big?'big':''} ${toneCls(score)}" role="meter" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="${score}" aria-label="Tone: ${toneWord(score)}"><span class="tone-bar"><i style="left:${((score+1)*50).toFixed(0)}%"></i></span><span class="tone-l">${toneWord(score)}</span></span>`}
+const subShort=n=>String(n||'').replace(/ Appropriations Subcommittee$/,'').replace(/ Appropriations Committee$/,'');
+function toneItems(B,filt){
+  const out=[];for(const m of (B.meetings||[]))if(m.status==='ok'&&(!filt||filt(m)))for(const t of (m.tone||[]))out.push({m,at:t[0],label:t[1],score:t[2],pos:t[3],neg:t[4],quotes:t[5]||[],vi:t[6]||0});
+  return out}
+// The tone of the meeting moment where a legislator's request was presented, if the recording shows it.
+let TONEIDX=null;
+function toneFor(r){
+  if(!BUDGET||!BUDGET.meetings)return null;
+  if(!TONEIDX){TONEIDX=toneItems(BUDGET)}
+  const code=(r.code||'').replace(/^([HS])AR0*/,'$1AR');const words=(r.name||'').toLowerCase().replace(/\([^)]*\)/g,'').split(/[^a-z]+/).filter(w=>w.length>4);
+  let best=null,sc=0;
+  for(const t of TONEIDX){const L=t.label.toLowerCase();let h=0;
+    if(code&&L.replace(/[\s.]/g,'').includes(code.toLowerCase()))h=1;else if(words.length){h=words.filter(w=>L.includes(w)).length/words.length;if(h<0.6)h=0}
+    if(h>sc){sc=h;best=t}}
+  return best}
+function reqTone(r){const t=toneFor(r);if(!t)return r.txt?`<div class="sub${r.txt.length>180?' hasfull" tabindex="0" data-full="'+esc(r.txt)+'"':'"'}>${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:'';
+  const q=t.quotes[0];
+  return `<div class="sub">${r.txt?esc(r.txt.slice(0,140))+(r.txt.length>140?'…':''):''}</div><div class="reqtone" tabindex="0" data-full="${esc(`How the room sounded when this came up in ${subShort(t.m.name)} (${fmtLong(pd(t.m.date))}): ${t.pos} warm and ${t.neg} skeptical phrases.${q?' “'+q[1]+'”':''} Automatic captions; a rough gauge.`)}">${toneMeter(t.score,t.pos+t.neg)}</div>`}
+const talkVid=(m,vi,sec)=>m.videos&&m.videos[vi]?`${m.videos[vi]}#t=${Math.max(0,Math.floor(sec))}s`:m.page;
 function talkChart(B){
-  const since=ymd(new Date(Date.now()-120*864e5));
+  const since=ymd(new Date(Date.now()-240*864e5));
   const ms=(B.meetings||[]).filter(m=>m.status==='ok'&&(m.date||'')>=since);
   if(!ms.length) return '';
+  const selName=(B.subs.find(r=>String(r.id)===String(budView.com))||{}).t||'';
+  const mine=m=>budView.mtg!=='sel'||m.name.toLowerCase().includes(selName.toLowerCase().split(/[ ,]/)[0]);
+  const items=toneItems(B,m=>(m.date||'')>=since&&mine(m));
   const by={};
-  for(const m of ms){const k=m.name.replace(/ Appropriations Subcommittee$/,'').replace(/ Appropriations Committee$/,'');const x=by[k]=by[k]||{n:0,amt:0,rfa:0,mt:0};x.mt++;x.n+=m.money.length;x.rfa+=m.rfa.length;for(const mm of m.money)x.amt+=Math.max(0,...(mm[4]||[]).map(spokenAmount),0)}
-  const rows=Object.entries(by).sort((a,b)=>b[1].n-a[1].n); const max=Math.max(1,...rows.map(r=>r[1].n));
-  return `<div class="card"><h2>Where the money talk is</h2><p class="desc">Each appropriations subcommittee’s meetings in the last four months: how often someone named a dollar amount and how many legislator requests were presented. It’s a rough gauge of where budget conversations are heading, not a tally of decisions.</p>
-   ${rows.map(([k,x],i)=>`<div style="display:grid;grid-template-columns:minmax(140px,280px) minmax(0,1fr) 120px;gap:14px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)"><div class="small"><b>${esc(k)}</b><div class="sub">${plural(x.mt,'meeting')}${x.rfa?' · '+plural(x.rfa,'request'):''}</div></div><div class="bar" style="height:14px;--c:${/criminal/i.test(k)?'var(--c1)':'var(--c9)'}"><i style="width:${(x.n/max*100).toFixed(1)}%"></i></div><div class="small" style="text-align:right"><b>${x.n}</b> money mentions</div></div>`).join('')}</div>`;
+  for(const m of ms){const k=subShort(m.name);const x=by[k]=by[k]||{name:m.name,mt:0,n:0,rfa:0,p:0,q:0};x.mt++;x.n+=m.money.length;x.rfa+=m.rfa.length;for(const t of (m.tone||[])){x.p+=t[3];x.q+=t[4]}}
+  const rows=Object.entries(by).sort((a,b)=>b[1].n-a[1].n);const max=Math.max(1,...rows.map(r=>r[1].n));
+  const scrut=items.filter(t=>t.neg>=2&&t.score<0.35).sort((a,b)=>a.score-b.score||b.neg-a.neg).slice(0,8);
+  const warm=items.filter(t=>t.pos>=3&&t.score>=0.35).sort((a,b)=>b.score-a.score||b.pos-a.pos).slice(0,5);
+  const big=ms.filter(mine).flatMap(m=>m.money.map(x=>({m,x,v:Math.max(0,...(x[4]||[]).map(spokenAmount))}))).filter(y=>y.v>=1e6).sort((a,b)=>b.v-a.v).slice(0,8);
+  const itemRow=t=>`<div class="talk-item"><div><div class="kicker">${comInfo(subShort(t.m.name))} · ${fmtLong(pd(t.m.date))}</div><b class="serif">${esc(t.label)}</b>
+     ${t.quotes.slice(0,2).map(q=>`<div class="talk-q ${q[2]}"><a class="ts" href="${esc(talkVid(t.m,t.vi,q[0]))}" target="_blank" rel="noopener">${clock(q[0])}</a> “${esc(q[1])}”${q[3]?` <span class="tiny muted">(${esc(q[3])})</span>`:''}</div>`).join('')}</div>
+     <div class="talk-m" data-full="${esc(`${t.pos} warm phrases and ${t.neg} skeptical phrases while this item was up.`)}">${toneMeter(t.score,t.pos+t.neg,true)}<span class="tiny muted">${t.pos} warm · ${t.neg} skeptical</span></div></div>`;
+  return `<div class="card"><h2>Where the money talk is</h2><p class="desc">What appropriations meetings in the last eight months sound like. For each agenda item (an agency’s budget, a funding request), the transcript is scored for warm words (“important,” “worthwhile,” “support”) against balking ones (“that’s a lot,” “I’m concerned,” “can we afford it”). If a legislator balks at the Board of Pardons’ ask, that item’s meter drops. It comes from automatic captions, so it’s a rough gauge: read the quotes and follow the time links.</p>
+   <div class="grid2" style="align-items:start;gap:22px">
+    <div><h3>${ic('impact')} Getting pushback</h3>${scrut.length?scrut.map(itemRow).join(''):'<p class="empty">No item drew much pushback in these meetings.</p>'}</div>
+    <div><h3>${ic('check')} Warm reception</h3>${warm.length?warm.map(itemRow).join(''):'<p class="empty">Nothing stood out as especially warm.</p>'}
+     ${big.length?`<h3 style="margin-top:22px">${ic('dollar')} Biggest dollar figures said out loud</h3>${big.map(y=>`<div class="money-moment"><a class="ts" href="${esc(talkVid(y.m,y.x[3],y.x[0]))}" target="_blank" rel="noopener">${clock(y.x[0])}</a><div><b>${money(y.v,true)}</b> <span class="tiny muted">${esc(subShort(y.m.name))}, ${fmtMD(pd(y.m.date))}${y.x[1]?' · '+esc(y.x[1].slice(0,70)):''}</span><div class="small">${esc(y.x[2].slice(0,180))}…</div></div></div>`).join('')}`:''}</div></div>
+   <h3 style="margin-top:22px">By subcommittee</h3><p class="small muted">Meetings, money mentions and the overall tone. Hover a committee for its chairs.</p>
+   ${rows.map(([k,x])=>`<div class="talk-row"><div class="small"><b>${comInfo(k)}</b><div class="sub">${plural(x.mt,'meeting')}${x.rfa?' · '+plural(x.rfa,'request'):''}</div></div><div class="bar" style="height:14px;--c:${/criminal/i.test(k)?'var(--c1)':'var(--c4)'}"><i style="width:${(x.n/max*100).toFixed(1)}%"></i></div><div class="small" style="text-align:right"><b>${x.n}</b> money mentions</div><div>${x.p+x.q>=3?toneMeter(Math.round((x.p-x.q)/(x.p+x.q)*100)/100,x.p+x.q):'<span class="tiny muted">Not enough talk</span>'}</div></div>`).join('')}</div>`;
 }
 
 /* ===================== WATCH LIST ===================== */
@@ -951,6 +998,27 @@ function discussionSection(b){
     ${t.notes&&t.notes.length?`<ul>${t.notes.map(n=>`<li><a class="ts" href="${esc(vAt(t,n[0]))}" target="_blank" rel="noopener">${clock(n[0])}</a><span>${esc(n[2])}</span></li>`).join('')}</ul>`:''}
     ${t.status==='ok'&&b.txc!=null?`<details data-tx="${esc(b.session)}|${b.txc}|${esc(b.num)}|${esc(t.key)}"><summary>Read the transcript</summary><div class="tx">Loading…</div></details>`:''}</div>`}).join('')}</section>`;
 }
+// Base budget and appropriations bills: a pie of where the money goes, from COBI (the Legislature's budget
+// data), for the subcommittee area the bill funds. Hover a slice to see what it is.
+const isBudgetBill=b=>!b.file&&/\bBase Budget\b|Appropriations Act|Supplemental Appropriations|Bond Authorization/i.test(b.title||'');
+function budgetPieSection(b){
+  if(!isBudgetBill(b))return '';
+  if(!BUDGET){getJSON('data/budget.json').then(x=>{BUDGET=x;route(true)}).catch(()=>{BUDGET={error:true}});return `<section><h2>Where the money goes</h2><p class="small muted">Loading the budget…</p></section>`}
+  if(BUDGET.error||!BUDGET.subs)return '';
+  const B=BUDGET,col=B.subs[0]?B.subs[0].v.length-1:6,hdr=((B.header||[])[col]||'').replace(/^(\d{4}) Base Start$/,'FY$1 base budget').replace(/^(\d{4}) Appropriat\w+$/,'FY$1 appropriation');
+  const area=(b.title.match(/^(.+?) Base Budget/)||[])[1]||'';
+  const sub=area?B.subs.find(r=>r.t.toLowerCase()===area.toLowerCase())||(/national guard|legislature/i.test(area)?B.subs.find(r=>/executive appropriations/i.test(r.t)):null):null;
+  let items,title,note;
+  if(sub){
+    const ags=(B.agencies||{})[String(sub.id)]||[];const tot=ags.reduce((t,r)=>t+(r.v[col]||0),0);
+    const top=ags.slice().sort((x,y)=>(y.v[col]||0)-(x.v[col]||0))[0];
+    // one department carrying almost all of it (Social Services is all Health and Human Services): show its line items instead
+    if(ags.length<=4&&top&&tot&&(top.v[col]||0)/tot>0.8&&(B.lines||{})[String(top.id)]){items=B.lines[String(top.id)].map(r=>({l:r.t,v:r.v[col]}));title=`${top.t}, by line item`}
+    else{items=ags.map(r=>({l:r.t,v:r.v[col]}));title=`${sub.t}, by agency`}
+    note=`From COBI, the Legislature’s budget data: the ${esc(sub.t)} subcommittee’s area, ${esc(hdr)}. The base budget bill funds this area; supplemental bills later in the session add to it.`;
+  }else{items=B.subs.map(r=>({l:r.t,v:r.v[col]}));title='The whole state budget, by subcommittee';note=`From COBI, ${esc(hdr)}. This bill adds to or adjusts these amounts; the pie shows the budget it builds on.`}
+  return `<section><h2>Where the money goes</h2><p class="desc" style="margin-bottom:10px">${esc(title)}. Hover a slice to see what it is.</p>${pieBlock('pieBill',items,title,note)}<p class="small"><a href="#budget">Open the Budget tab</a> for the rest of the budget.</p></section>`;
+}
 function fiscalSection(b){
   const f=b.fn; if(b.file) return '';
   if(!f) return `<section><h2>Fiscal note</h2><p class="small muted">No fiscal note posted yet.</p></section>`;
@@ -1007,6 +1075,7 @@ function pageBill(session,num){
 function billSecs(b,m,hs){
   const X=typeof billExtraParts==='function'?billExtraParts(b):{};const out=[];
   const add=(t,id,l,h)=>{if(h)out.push({t,id,l,h:h.includes(`id="bs-${id}"`)?h:`<div id="bs-${id}" class="bs">${h}</div>`})};
+  add('overview','budgetpie','Where the money goes',budgetPieSection(b));
   add('overview','plain','In plain English',X.plain);
   add('overview','version','What this version does',X.version);
   add('overview','summary','Summary',`<section><h2>Summary</h2><p class="serif" style="font-size:17px">${esc(b.description||(b.file?'The Legislature publishes only the title and sponsor of a bill file until it gets a number.':'No summary yet.'))}</p>${b.subj.length?`<p class="small muted">Subjects: ${esc(b.subj.join(', '))}</p>`:''}${b.rc.length?`<p class="small muted">Recommended by ${esc(b.rc.join(', '))}</p>`:''}</section>`);
@@ -1014,7 +1083,7 @@ function billSecs(b,m,hs){
   add('overview','fiscal','Fiscal note',fiscalSection(b));
   add('overview','changed','What has changed',`<section><h2>What has changed</h2>${b.ch.length?`<table class="compact"><tbody>${b.ch.slice().reverse().slice(0,12).map(x=>{const d=pd(x[0]);return `<tr><td style="white-space:nowrap">${d?fmtMDY(d)+' '+fmtTime(d):''}</td><td><b>${esc(x[1])}</b>: ${esc(x[2])}</td></tr>`}).join('')}</tbody></table>${b.ch.length>12?`<p class="small muted">Showing the latest 12 of ${b.ch.length}.</p>`:''}`:'<p class="small muted">No changes recorded since Deseret Docket started tracking this bill.</p>'}</section>`);
   if(b.file) return out;
-  add('hearings','hearings','Committee hearings',`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight hcard" style="margin-bottom:8px"><div><b>${esc(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>${h.d>=TODAY?calBtn(h,b.session):''}</div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>`);
+  add('hearings','hearings','Committee hearings',`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight hcard" style="margin-bottom:8px"><div><b>${comInfo(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>${h.d>=TODAY?calBtn(h,b.session):''}</div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>`);
   add('hearings','floor','Floor calendar',X.floor);
   add('hearings','discussed','What was discussed',discussionSection(b));
   add('text','textchanges','Latest text changes',changesCard(b));
@@ -1112,7 +1181,7 @@ function bind(){
   app.querySelectorAll('[data-note]').forEach(btn=>btn.onclick=()=>{const b=BYKEY[btn.dataset.note];let dlg=$('noteDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='noteDlg';document.body.appendChild(dlg)}
     dlg.innerHTML=`<form method="dialog"><h2>Note for ${esc(billLabel(b))}</h2><p class="small muted">${esc(b.title)}</p><textarea id="dlgNote" style="min-height:140px">${esc(noteOf(b))}</textarea><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgSave">Save note</button></div></form>`;
     dlg.showModal();$('dlgCancel').onclick=()=>dlg.close();$('dlgSave').onclick=async e=>{e.preventDefault();const v=$('dlgNote').value.trim();if(await saveBill(b,{note:v})){toast('Note saved');dlg.close();route(true)}}});
-  app.querySelectorAll('[data-goshow]').forEach(a=>a.onclick=()=>{FLT.show=a.dataset.goshow;saveFLT()});
+  app.querySelectorAll('[data-goshow]').forEach(a=>a.onclick=async()=>{FLT.show=a.dataset.goshow;FLT.find='';PAGE=1;saveFLT();if(a.dataset.gosess&&a.dataset.gosess!==UI.session){UI.session=a.dataset.gosess;saveUI();await loadSession(UI.session);route()}});
   // updates and email
   app.querySelectorAll('[data-upd]').forEach(b=>b.onclick=()=>{updScope=b.dataset.upd;route(true)});
   app.querySelectorAll('[data-side]').forEach(b=>b.onclick=()=>{SIDETAB=b.dataset.side;route(true)});
@@ -1182,7 +1251,7 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     const me=await meP;
     if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{}};PEOPLE=me.people||[]}
     loadCols();
-    getJSON('data/legislators.json').then(l=>{LEGS=l;if(booted&&/^#(legislators|learn)/.test(location.hash))route(true)}).catch(()=>{LEGS=[]});
+    Promise.all([getJSON('data/legislators.json'),getJSON('geo/where.json').catch(()=>null)]).then(([l,w])=>{WHERE=w;LEGS=l;if(booted&&/^#(legislators|learn)/.test(location.hash))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);
     if(!UI.session||!ids.includes(UI.session)) UI.session=(INDEX.sessions.find(s=>s.count>0||s.files>0)||INDEX.sessions[0]).id;
     const off=ME?pullOffice(false):null;
@@ -1279,7 +1348,7 @@ function calEvent(session,key){
   const line=b=>`${tracked(b)?'★ ':'   '}${shortNum(b.num)} ${b.title} (${b.sponsor.replace(/^(Rep|Sen)\.\s*/,'')})`;
   const head=`${h.committee}\n${WD[start.getDay()]}, ${fmtLong(start)} at ${fmtTime(start)}${h.place?' · '+h.place:''}`;
   const text=`${head}\n\nBills on the agenda${nT?` (★ = on the office’s list, ${nT} of ${bills.length})`:''}:\n${bills.map(line).join('\n')}\n\n${h.url?`Full agenda: ${h.url}\n`:''}Bill details: ${location.origin}/#bills\n\nThe end time is an estimate; committee meetings often run long or short.`;
-  const html=`<b>${esc(h.committee)}</b><br>${esc(WD[start.getDay()])}, ${esc(fmtLong(start))} at ${esc(fmtTime(start))}${h.place?' · '+esc(h.place):''}<br><br><b>Bills on the agenda</b>${nT?` (★ = on the office’s list)`:''}:<br>${bills.map(b=>tracked(b)?`<b>★ ${esc(shortNum(b.num))} ${esc(b.title)}</b> (${esc(b.sponsor.replace(/^(Rep|Sen)\.\s*/,''))})`:`${esc(shortNum(b.num))} ${esc(b.title)} (${esc(b.sponsor.replace(/^(Rep|Sen)\.\s*/,''))})`).join('<br>')}<br><br>${h.url?`<a href="${esc(h.url)}">Full agenda</a><br>`:''}<i>The end time is an estimate.</i>`;
+  const html=`<b>${comInfo(h.committee)}</b><br>${esc(WD[start.getDay()])}, ${esc(fmtLong(start))} at ${esc(fmtTime(start))}${h.place?' · '+esc(h.place):''}<br><br><b>Bills on the agenda</b>${nT?` (★ = on the office’s list)`:''}:<br>${bills.map(b=>tracked(b)?`<b>★ ${esc(shortNum(b.num))} ${esc(b.title)}</b> (${esc(b.sponsor.replace(/^(Rep|Sen)\.\s*/,''))})`:`${esc(shortNum(b.num))} ${esc(b.title)} (${esc(b.sponsor.replace(/^(Rep|Sen)\.\s*/,''))})`).join('<br>')}<br><br>${h.url?`<a href="${esc(h.url)}">Full agenda</a><br>`:''}<i>The end time is an estimate.</i>`;
   return {title:h.committee,start,end,location:loc,text,html};
 }
 const calUTC=d=>d.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
@@ -1313,6 +1382,11 @@ document.addEventListener('click',e=>{
 const REQCOLDEFS={by:'Requested by',name:'Request',agency:'Agency',req:'Requested',pri:'Prioritized',app:'Appropriated'};
 let REQCOLS=lsGet('docket-reqcols',Object.keys(REQCOLDEFS)).filter(c=>REQCOLDEFS[c]);Object.keys(REQCOLDEFS).forEach(c=>{if(!REQCOLS.includes(c))REQCOLS.push(c)});
 let REQSORT=lsGet('docket-reqsort',{col:'req',dir:-1});
+// The request's own page on COBI (the Legislature's budget site), with the full description on hover.
+function reqFy(r){return (BUDGET&&BUDGET.requestsPrev||[]).includes(r)?BUDGET.prevFy:(BUDGET&&BUDGET.fy)}
+function reqLink(r){const nm=r.name.replace(/\s*\([HS]AR\d+\)\s*$/,'');const u=r.k?`https://cobi.utah.gov/${reqFy(r)}/1/issues/${r.k}`:'';
+  const tip=[r.code?r.code.replace(/^([HS])AR0*/,(m,h)=>h+'.A.R. '):'',r.heard?'Heard: '+r.heard.replace(/\s+/g,' '):'',r.txt||'','Opens the request on cobi.utah.gov'].filter(Boolean).join(' · ');
+  return u?`<a class="serif reqlink" href="${esc(u)}" target="_blank" rel="noopener" data-full="${esc(tip)}">${esc(nm)}</a>`:`<span class="serif">${esc(nm)}</span>`}
 function reqTable(reqs,reqAmt){
   const amt=(x)=>Math.abs((x||[])[0]||0)+Math.abs((x||[])[1]||0);
   const key={by:r=>r.by||'',name:r=>r.name||'',agency:r=>(r.agency||'')+' '+(r.sub||''),req:r=>reqAmt(r),pri:r=>amt(r.pri),app:r=>amt(r.app)};
@@ -1320,8 +1394,8 @@ function reqTable(reqs,reqAmt){
   reqs.sort((a,b)=>{const x=k(a),y=k(b);return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*REQSORT.dir});
   const num=c=>['req','pri','app'].includes(c);
   const cell={by:r=>`<td class="rq-by"><span class="spn" tabindex="0" role="button" data-sp="" data-spname="${esc(r.by)}" data-spsubj="${esc('Budget request: '+r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}" data-spbill="">${esc(r.by)}</span></td>`,
-    name:r=>`<td><span class="serif">${esc(r.name.replace(/\s*\([HS]AR\d+\)\s*$/,''))}</span>${r.txt?`<div class="sub${r.txt.length>180?' hasfull" tabindex="0" data-full="'+esc(r.txt)+'"':'"'}>${esc(r.txt.slice(0,180))}${r.txt.length>180?'…':''}</div>`:''}</td>`,
-    agency:r=>`<td class="small">${esc(r.agency)}<div class="sub">${esc(r.sub)}</div></td>`,
+    name:r=>`<td>${reqLink(r)}${reqTone(r)}</td>`,
+    agency:r=>`<td class="small">${esc(r.agency)}<div class="sub">${comInfo(r.sub)}</div></td>`,
     req:r=>`<td class="n">${money(reqAmt(r))}<div class="sub">${r.req[0]?'ongoing':'one-time'}</div></td>`,
     pri:r=>`<td class="n">${money(amt(r.pri))}</td>`,app:r=>`<td class="n">${money(amt(r.app))}</td>`};
   return `<p class="tiny muted" style="margin:0 0 6px">Click a heading to sort. Drag a heading to move the column.</p><div class="tablewrap"><table class="compact reqtbl" style="min-width:900px"><thead><tr>${REQCOLS.map(c=>`<th draggable="true" data-rqcol="${c}" class="${num(c)?'n':''} ${REQSORT.col===c?'sorted':''}" aria-sort="${REQSORT.col===c?(REQSORT.dir>0?'ascending':'descending'):'none'}"><button type="button" class="sort" data-rqsort="${c}">${REQCOLDEFS[c]}${REQSORT.col===c?(REQSORT.dir>0?' ▲':' ▼'):''}</button></th>`).join('')}</tr></thead>
@@ -1346,7 +1420,7 @@ function sampleHearingHTML(){
   const d=new Date(TODAY);do{d.setDate(d.getDate()+1)}while(d.getDay()===0||d.getDay()===6);d.setHours(8,0,0,0);
   SAMPLE_H={id:'SAMPLE',date:d.toISOString(),d,committee:'TEST · House Judiciary Committee',place:'20 House Building',url:'https://le.utah.gov/committee/committee.jsp',bills:pick};
   const h=SAMPLE_H;
-  return `<div class="hearing sample"><div class="when"><span class="samplebadge">${ic('spark')}Test</span><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span><span class="tiny muted">${WD[h.d.getDay()]}, ${fmtLong(h.d)}</span></div><div><h4>${esc(h.committee)}</h4>
+  return `<div class="hearing sample"><div class="when"><span class="samplebadge">${ic('spark')}Test</span><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span><span class="tiny muted">${WD[h.d.getDay()]}, ${fmtLong(h.d)}</span></div><div><h4>${comInfo(h.committee)}</h4>
     <p class="small muted" style="margin:0 0 8px">This is a test hearing, not a real meeting, so you can see how hearings look and try “Add to calendar.” It goes away as soon as the Legislature posts real hearings. The bills are real; the meeting isn’t.</p>
     ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(a)}</span>`).join('')}${b.agm&&typeof agTip==='function'?`<a class="pill solid tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|hearings|discussed" data-full="${esc(agTip(b))}">${ic('scale')}AG mentioned</a>`:''}</div>`).join('')}
     <div class="hlinks"><a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a><button type="button" class="btn sm calbtn" data-cal="${esc(UI.session)}|SAMPLE">${ic('calendar')}Add to calendar</button></div></div></div>`;

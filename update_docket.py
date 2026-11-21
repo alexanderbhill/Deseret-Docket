@@ -706,6 +706,17 @@ def build_cobi(prev_budget):
             out["agencies"][str(r["id"])] = out["cj"] if r["id"] == cj_id else _cobi_rows(cobi(f"tab/financials/hierarchyChart/{fy}/funding/GEN-ERF/{r['id']}.json"))
         except Exception as e:
             print(f"  cobi {r['t']}: {e}", file=sys.stderr)
+    # line items for committees with only a few agencies (Social Services is one big department), so the
+    # base budget bill pages can show where the money goes in more than one slice
+    out["lines"] = {}
+    for sid, ags in out["agencies"].items():
+        if len(ags) > 4:
+            continue
+        for a in ags:
+            try:
+                out["lines"][str(a["id"])] = _cobi_rows(cobi(f"tab/financials/hierarchyChart/{fy}/funding/GEN-ERF/{a['id']}.json"))
+            except Exception as e:
+                print(f"  cobi lines {a['t']}: {e}", file=sys.stderr)
     # every agency's issues (budget items), keeping the legislator requests
     out["requests"] = cobi_requests(fy, {r["k"]: r for r in (prev_budget or {}).get("requests", []) if (prev_budget or {}).get("fy") == fy})
     # last session's items too, for comparison until this session's requests are posted
@@ -771,6 +782,40 @@ def cobi_requests(fy, old, keep_only_requested=False):
     return reqs
 
 
+# How the room felt about each item: words and phrases legislators use when they're warm to a request or
+# balking at it. Automatic captions are rough, so this is a gauge, not a verdict; the quotes are kept so
+# anyone can check it.
+TONE_NEG = re.compile(r"\b(concern(?:s|ed)?|worried|worry|too much|a lot of money|that'?s a lot|expensive|can'?t afford|cannot afford|not comfortable|uncomfortable|hard to justify|hard time|why do (?:you|we) need|why not|duplicat\w*|redundant|already (?:funded|have)|not convinced|push ?back|skeptic\w*|hesitan\w*|reluctan\w*|where (?:is|does) the money|how (?:will|would) (?:you|we) pay|overrun|cost overrun|not supportive|don'?t support|oppose|against this|scale (?:it|this) back|cut (?:it|this)|reduce|less than|tight budget|limited (?:funds|resources|dollars)|competing (?:needs|priorities)|not a priority|lower priority|frustrat\w*|disappoint\w*|troubl\w*|problem)\b", re.I)
+TONE_POS = re.compile(r"\b(support(?:ive)?|great|excellent|appreciate|important|worthwhile|good work|love|needed|critical|commend|impressive|makes sense|happy to|glad|priority|success(?:ful)?|effective|return on (?:the )?investment|saves? (?:the state )?money|well spent|strong|fully fund|champion|grateful|exciting|good job)\b", re.I)
+
+
+def money_tone(notes, cues):
+    """Split a video at its agenda items and score each one. Returns [[start, label, score, pos, neg, quotes]]."""
+    items = [n for n in notes if n[1] == "AI"]
+    out = []
+    for i, it in enumerate(items):
+        end = items[i + 1][0] if i + 1 < len(items) else 10 ** 9
+        seg = [c for c in cues if it[0] <= c[0] < end]
+        if len(seg) < 8:
+            continue
+        p = n = 0
+        quotes = []
+        speakers = [x for x in notes if x[1] == "speaker" and it[0] <= x[0] < end]
+        for j, (s0, t) in enumerate(seg):
+            np_, nn = len(TONE_POS.findall(t)), len(TONE_NEG.findall(t))
+            p += np_; n += nn
+            if (nn or np_) and len(quotes) < 6 and (not quotes or s0 - quotes[-1][0] > 30):
+                txt = _html.unescape(" ".join(c[1] for c in seg[max(0, j - 1):j + 3]))[:260]
+                who = next((x[2] for x in reversed(speakers) if x[0] <= s0 + 2), "")
+                quotes.append([s0, txt, "neg" if nn > np_ else "pos", who[:80]])
+        if p + n < 2:
+            continue
+        # keep the balking quotes first; that's what people come looking for
+        quotes.sort(key=lambda q: (q[2] != "neg", q[0]))
+        out.append([it[0], it[2][:200], round((p - n) / (p + n), 2), p, n, quotes[:4]])
+    return out
+
+
 def approp_meetings(token, years, prev_budget):
     """Money talk in appropriations meetings: official timeline notes plus caption lines that mention dollars."""
     old = {m["id"]: m for m in (prev_budget or {}).get("meetings", [])}
@@ -791,12 +836,14 @@ def approp_meetings(token, years, prev_budget):
                 if m.get("mtgtype") == "past" and m.get("status") != "C":
                     want.append((cid, name, y, m))
     cutoff = (datetime.now(MT) - timedelta(days=21)).date().isoformat()
+    # meetings from the last eight months get the tone analysis added once (v2)
+    cutoff_tone = (datetime.now(MT) - timedelta(days=240)).date().isoformat()
 
     def one(w):
         cid, name, y, m = w
         mid = str(m["mtgid"])
         o = old.get(mid)
-        if o and (o.get("status") == "ok" or (o.get("date", "") < cutoff and o.get("status") in ("nocap", "novideo"))):
+        if o and ((o.get("status") == "ok" and (o.get("v", 0) >= 2 or o.get("date", "") < cutoff_tone)) or (o.get("date", "") < cutoff and o.get("status") in ("nocap", "novideo"))):
             return o
         if not m.get("audioVideo"):
             try:
@@ -805,7 +852,7 @@ def approp_meetings(token, years, prev_budget):
                 pass
         if not m.get("audioVideo"):
             return {"id": mid, "com": cid, "name": name, "status": "novideo", "date": (o or {}).get("date", ""), "notes": [], "money": [], "rfa": []}
-        rec = {"id": mid, "com": cid, "name": name, "page": m["audioVideo"], "date": "", "status": "nocap",
+        rec = {"id": mid, "com": cid, "name": name, "page": m["audioVideo"], "date": "", "status": "nocap", "v": 2, "tone": [],
                "agenda": _abs(m.get("agenda") or "") if m.get("agenda") else "", "notes": [], "money": [], "rfa": []}
         dm = re.match(r"\w+\.? (\w{3}) (\d{1,2}), (\d{1,2}):(\d{2}) (AM|PM)", m.get("mtgTimeStr", ""))
         if dm:
@@ -832,6 +879,10 @@ def approp_meetings(token, years, prev_budget):
                 continue
             rec["status"] = "ok"
             ctx = [n for n in rec["notes"] if n[3] == vi]
+            try:
+                rec["tone"] += [t + [vi] for t in money_tone(ctx, cues)]
+            except Exception as e:
+                print(f"  tone {mid}: {e}", file=sys.stderr)
             last = -999
             for s0, t in cues:
                 if MONEY_SPOKEN.search(t) and s0 - last > 25:
@@ -865,7 +916,7 @@ def build_budget(token, out_dir, prev_dir):
     except Exception as e:
         print(f"  COBI failed: {e}", file=sys.stderr)
         if prev:
-            for k in ("fy", "header", "subs", "cj", "cjId", "requests"):
+            for k in ("fy", "header", "subs", "cj", "cjId", "requests", "agencies", "lines", "prevFy", "requestsPrev"):
                 if k in prev:
                     b[k] = prev[k]
     now = datetime.now(MT)

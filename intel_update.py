@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Deseret Docket extras, run after update_docket.py on each data update.
 
+  data/ag.json               the Utah Attorney General's office in the news: press releases, AG Brown's
+                             op-eds, and newspaper stories that mention the office (Learn → AG's Office)
   data/media.json            news stories (RSS feeds in site/config.json) that mention a bill, a simple
                              sentiment score per bill, and what's trending in the news.
 
@@ -114,6 +116,61 @@ def legislature_news(items, old, now):
     return out[:30]
 
 
+# ---------------------------------------------------------------- the AG's office in the news
+AG_SITE = "https://attorneygeneral.utah.gov"
+AG_RX = re.compile(r"\b(utah attorney general|attorney general derek brown|ag derek brown|derek brown|attorney general'?s office|utah ag\b|state attorney general)", re.I)
+NOT_AG = re.compile(r"\b(u\.s\. attorney general|us attorney general|attorney general (?:pam |pamela )?bondi|department of justice|justice department)\b", re.I)
+
+
+def ag_opeds():
+    """Op-eds and articles AG Brown lists on attorneygeneral.utah.gov/op-eds-and-articles/."""
+    s = get(f"{AG_SITE}/op-eds-and-articles/").decode("utf-8", "replace")
+    out = []
+    for m in re.finditer(r'<h[23][^>]*>\s*<a[^>]+href="(https?://[^"]+)"[^>]*>([\s\S]*?)</a>\s*</h[23]>(?:\s*<p[^>]*>([\s\S]*?)</p>)?', s):
+        u, t, d = m.group(1), m.group(2), m.group(3) or ""
+        if "attorneygeneral.utah.gov" in u:
+            continue
+        t = html.unescape(re.sub(r"<[^>]+>", "", t)).strip()
+        dm = re.search(r"/(20\d\d)/(\d\d)/(\d\d)/", u)
+        src = re.sub(r"^www\.", "", urllib.parse.urlparse(u).netloc)
+        src = {"deseret.com": "Deseret News", "sltrib.com": "Salt Lake Tribune", "ksl.com": "KSL", "foxnews.com": "Fox News", "thehill.com": "The Hill", "wsj.com": "Wall Street Journal"}.get(src, src)
+        out.append({"t": t.replace("Opinion: ", "")[:240], "u": u, "src": src, "d": html.unescape(re.sub(r"<[^>]+>", "", d)).strip()[:300], "date": f"{dm.group(1)}-{dm.group(2)}-{dm.group(3)}" if dm else ""})
+    return sorted(out, key=lambda x: x["date"], reverse=True)
+
+
+def build_ag(out, prev, items):
+    old = load(os.path.join(prev, "ag.json"), {}) if prev else {}
+    res = {"fetched": datetime.now(timezone.utc).isoformat()[:16]}
+    try:  # the office's own press releases (skip the "Schedule" posts)
+        raw = get(f"{AG_SITE}/feed/").decode("utf-8", "replace")
+        press = []
+        for blk in re.findall(r"<item\b[\s\S]*?</item>", raw):
+            cats = re.findall(r"<category><!\[CDATA\[([^\]]*)", blk)
+            if "Schedule" in cats and "News" not in cats:
+                continue
+            press += [{**x, "src": "AG’s office"} for x in parse_feed(blk.encode(), "AG’s office")]
+        res["press"] = press[:20] or old.get("press", [])
+    except Exception as e:
+        print(f"  ag press: {e}", file=sys.stderr); res["press"] = old.get("press", [])
+    try:
+        res["oped"] = ag_opeds() or old.get("oped", [])
+    except Exception as e:
+        print(f"  ag op-eds: {e}", file=sys.stderr); res["oped"] = old.get("oped", [])
+    # newspaper stories that mention the office, kept for 60 days
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()[:16]
+    seen, news = set(), []
+    for it in sorted(items + old.get("news", []), key=lambda x: x.get("date") or "", reverse=True):
+        text = f"{it.get('t', '')} {it.get('d', '')}"
+        if not it.get("u") or it["u"] in seen or (it.get("date") or "") < cutoff or "attorneygeneral.utah.gov" in it["u"]:
+            continue
+        if AG_RX.search(text) and not (NOT_AG.search(it.get("t", "")) and not re.search(r"\butah\b|derek brown", text, re.I)):
+            seen.add(it["u"])
+            news.append({k: it[k] for k in ("t", "u", "date", "src", "img") if it.get(k)} | {"d": it.get("d", "")[:260], "s": sentiment(text)})
+    res["news"] = news[:40]
+    json.dump(res, open(os.path.join(out, "ag.json"), "w"), separators=(",", ":"))
+    print(f"  ag: {len(res['press'])} press releases, {len(res['oped'])} op-eds, {len(res['news'])} news stories")
+
+
 def build_media(out, prev):
     old = load(os.path.join(prev, "media.json"), {}) if prev else {}
     idx = load(os.path.join(out, "index.json"), {})
@@ -151,6 +208,10 @@ def build_media(out, prev):
         week[num] = sum((x.get("date") or "") >= (now - timedelta(days=7)).isoformat()[:16] for x in lst)
     top = lambda m: [[k, v] for k, v in sorted(m.items(), key=lambda kv: -kv[1]) if v][:15]
     leg = legislature_news(items, old.get("leg") or [], now)
+    try:
+        build_ag(out, prev, items)
+    except Exception as e:
+        print(f"  ag failed: {e}", file=sys.stderr)
     json.dump({"session": session, "fetched": now.isoformat()[:16], "sources": status, "bills": bills_out, "trending": {"day": top(day), "week": top(week)}, "leg": leg},
               open(os.path.join(out, "media.json"), "w"), separators=(",", ":"))
     print(f"  media: {len(items)} items read, {len(bills_out)} bills mentioned, {len(leg)} legislature stories")
@@ -170,7 +231,7 @@ def main():
     # carry forward files other jobs write (media availability analyses)
     if a.prev:
         import shutil
-        for f in ("media-avail.json",):
+        for f in ("media-avail.json", "ag.json"):
             if os.path.exists(os.path.join(a.prev, f)) and not os.path.exists(os.path.join(a.out, f)):
                 shutil.copy(os.path.join(a.prev, f), os.path.join(a.out, f))
 

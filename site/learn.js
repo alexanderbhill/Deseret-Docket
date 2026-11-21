@@ -5,7 +5,7 @@
 let LG={score:0,streak:0,best:lsGet('docket-learn-best',{}),q:null,answered:null};
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const legTitle=l=>`${l.house==='H'?'Rep.':'Sen.'} ${l.name}`;
-const GAMES=[['faces','🧑‍⚖️ Face match'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['terms','📖 Floor vocabulary']];
+const GAMES=[['faces','🧑‍⚖️ Face match'],['map','🗺️ District map'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['terms','📖 Floor vocabulary']];
 function lgBest(k,v){if(v>(LG.best[k]||0)){LG.best[k]=v;lsSet('docket-learn-best',LG.best)}
   // Post to the shared leaderboard when it beats what the board has for you.
   if(ME&&LGB&&v>(((LGB.board[ME.user]||{}).s||{})[k]||0))api('lgboard',{game:k,score:v}).then(j=>{LGB=j}).catch(()=>{})}
@@ -13,7 +13,7 @@ function lgBest(k,v){if(v>(LG.best[k]||0)){LG.best[k]=v;lsSet('docket-learn-best
 let LGF=null;
 function loadFlags(){if(LGF===null){LGF={};if(ME)api('lgflags').then(j=>{LGF=j.flags||{};if(location.hash.startsWith('#learn'))route(true)}).catch(()=>{})}return LGF}
 const hash32=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36)};
-function qidOf(sub,q){if(!q)return '';if(sub==='faces'||sub==='party')return q.l?`${sub}:${q.l.id}`:'';if(sub==='facts')return q.l&&q.fact?`facts:${q.l.id}:${hash32(q.fact[0])}`:'';if(sub==='quotes')return q.q?`quotes:${hash32(q.q)}`:'';if((sub==='redo'||sub==='terms')&&q.t)return `${sub}:${hash32(q.t[0])}`;return ''}
+function qidOf(sub,q){if(!q)return '';if(sub==='faces'||sub==='party')return q.l?`${sub}:${q.l.id}`:'';if(sub==='facts')return q.l&&q.fact?`facts:${q.l.id}:${hash32(q.fact[0])}`:'';if(sub==='quotes')return q.q?`quotes:${hash32(q.q)}`:'';if((sub==='redo'||sub==='terms')&&q.t)return `${sub}:${hash32(q.t[0])}`;if(sub==='map'&&q.l)return `map:${q.ch}:${q.l.id}:${q.mode}`;return ''}
 const isHidden=id=>id&&(loadFlags()[id]||[]).length>=2;
 // ---------- leaderboard: everyone's best streak in each game (best points for Put it in order)
 let LGB=null, LGBGAME='all';
@@ -38,7 +38,7 @@ document.addEventListener('keydown',e=>{
   const card=document.querySelector('#app .card.lg');if(!card)return;
   const next=$('lgNext');
   if(next&&(e.key==='Enter'||e.key===' '||e.key==='ArrowRight')){e.preventDefault();next.click();return}
-  const btns=[...card.querySelectorAll('[data-lgface],[data-lgquote],[data-lgparty],[data-lgfact],[data-lgquirk],[data-lgterm]')].filter(b=>!b.disabled);
+  const btns=[...card.querySelectorAll('[data-lgface],[data-lgquote],[data-lgparty],[data-lgfact],[data-lgquirk],[data-lgterm],[data-lgmapface]')].filter(b=>!b.disabled);
   if(!btns.length)return;
   let b=null;const k=e.key.toLowerCase();
   if(/^[1-9]$/.test(k))b=btns[+k-1];else if(k==='r'||k==='d')b=btns.find(x=>x.dataset.lgparty===k.toUpperCase());
@@ -74,20 +74,44 @@ const TERMS=[
  ['Interim','The months between sessions when committees study issues and draft bills.',['The last week of session','A recess during floor debate','A vote by mail']],
 ];
 
+// Games you play and guides you read, kept apart. External links open in a new tab.
+const LEARN_PLAY=[['faces','🧑‍⚖️','Face match','See a photo, pick the legislator. Then flip it: see a name, pick the face.'],
+ ['map','🗺️','District map','Find a legislator’s district on the map of Utah, or name who represents the gold one.'],
+ ['party','🗳️','Red or blue?','Guess whether each legislator is a Republican or a Democrat from the photo.'],
+ ['facts','✨','Fun facts','A clue about someone’s job, hometown or years in office. Who is it?'],
+ ['quotes','💬','Who said it?','A real line from a committee hearing. Guess which legislator said it.'],
+ ['redo','🏛️','Capitol quirks','Jell-O, the state dinosaur, a 45-day session: odd bills and fun facts from Utah’s Legislature.'],
+ ['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],
+ ['board','🏆','Leaderboard','See who in the office has the longest streak in each game.']];
+const LEARN_READ=[['process','🛤️','How a bill becomes law','Where bill ideas come from, who drafts and prices them, every step to the governor, and how the budget gets built.'],
+ ['ag','⚖️','The AG’s Office, explained','Counselors, protectors and stewards: the org chart, what each division does, the office in the news, and fun facts.'],
+ ['districts','📍','Where every legislator is','A map of Utah with a dot for each senator or representative, colored by party.'],
+ ['members','👥','Members and their bills','Every legislator with a photo, ranked by how many bills they’re sponsoring this session.'],
+ ['https://utahsenate.smugmug.com','📸','Utah Senate photos','The Senate’s photo galleries: floor sessions, committee hearings, bill signings and Capitol events.'],
+ ['https://adambrown.info/p/research/utah_legislature','📊','Adam Brown’s guide to the Legislature','A BYU political scientist’s data on every session: bill statistics, how legislators vote, ideology scores and rankings.']];
+function learnTile([k,i,t,d]){const ext=/^https?:/.test(k);
+  return `<a class="learn-tile${ext?' ext':''}" href="${ext?k:'#learn-'+k}"${ext?' target="_blank" rel="noopener"':''}><span class="ico">${i}</span><b>${t}${ext&&typeof ic==='function'?ic('external'):''}</b><span>${d}</span>${!ext&&LG.best[k]?`<span class="best">Best: ${LG.best[k]}</span>`:''}${ext?`<span class="tiny muted">${esc(k.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</span>`:''}</a>`}
 function pageLearn(sub,extra=''){
   if(LG.sub!==(sub||'')){LG.sub=sub||'';LG.q=null;LG.answered=null}
   if(!LEGS)return shell('learn','<div class="card"><p>Loading legislators…</p></div>');
+  const cur=sub||'', chip=([k,i,t])=>/^https?:/.test(k)?'':`<a href="#learn-${k}" class="${cur===k?'on':''}">${i} ${t}</a>`;
   const head=`<div class="card learn-hero"><div><h2>Learn the Legislature</h2></div>
-   <nav class="learn-nav">${[['','🏠 Start'],['faces','🧑‍⚖️ Face match'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['process','🛤️ How a bill becomes law'],['terms','📖 Floor vocabulary'],['members','👥 Members and their bills'],['board','🏆 Leaderboard']].map(([k,l])=>`<a href="#learn${k?'-'+k:''}" class="${(sub||'')===k?'on':''}">${l}</a>`).join('')}</nav></div>`;
+   <nav class="learn-nav" aria-label="Learn"><a href="#learn" class="${cur===''?'on':''}">🏠 Start</a></nav>
+   <div class="learn-navs"><nav class="learn-nav" aria-label="Games"><span class="nav-l">Play</span>${LEARN_PLAY.map(chip).join('')}</nav>
+   <nav class="learn-nav" aria-label="Guides"><span class="nav-l">Learn</span>${LEARN_READ.map(chip).join('')}</nav></div></div>`;
+  const pick={faces:gameFaces,party:gameParty,redo:gameRedo,facts:gameFacts,quotes:gameQuotes,terms:gameTerms,map:()=>typeof gameMap==='function'?gameMap():''};
   let body='';
-  if(sub==='faces')body=gameFaces();else if(sub==='party')body=gameParty();else if(sub==='redo')body=gameRedo();else if(sub==='facts')body=gameFacts();else if(sub==='quotes')body=gameQuotes();else if(sub==='process')body=guideProcess();else if(sub==='terms')body=gameTerms();else if(sub==='members')body=memberGrid();else if(sub==='board')body=boardHTML();
+  if(pick[sub])body=pick[sub]();else if(sub==='process')body=guideProcess();else if(sub==='members')body=memberGrid();else if(sub==='board')body=boardHTML();
+  else if(sub==='districts')body=typeof refMap==='function'?refMap():'';else if(sub==='ag')body=typeof pageAGGuide==='function'?pageAGGuide():'';
   // Skip anything two people have flagged.
-  for(let i=0;i<25&&body&&LG.q&&!LG.answered&&isHidden(qidOf(sub,LG.q));i++){LG.q=null;body=sub==='faces'?gameFaces():sub==='party'?gameParty():sub==='redo'?gameRedo():sub==='facts'?gameFacts():sub==='quotes'?gameQuotes():sub==='terms'?gameTerms():body}
+  for(let i=0;i<25&&body&&pick[sub]&&LG.q&&!LG.answered&&isHidden(qidOf(sub,LG.q));i++){LG.q=null;body=pick[sub]()}
   const qid=qidOf(sub,LG.q), mine=qid&&ME&&(loadFlags()[qid]||[]).includes(ME.user);
   if(qid&&ME&&body.startsWith('<div class="card lg"'))body=body.slice(0,-6)+`<p class="lg-flag">${mine?'<span class="tiny muted">🚩 You flagged this question. It’s removed once someone else flags it too.</span> <button type="button" class="linkbtn tiny" data-lgunflag="'+esc(qid)+'">Undo</button>':'<button type="button" class="linkbtn tiny" data-lgflag="'+esc(qid)+'" title="Wrong, confusing or has more than one right answer? Two flags remove it.">🚩 Flag this question</button>'}</p></div>`;
-  if(body.startsWith('<div class="card lg"')&&body.endsWith('</div>'))body=body.slice(0,-6)+(sub==='party'?`<p class="tiny muted lg-keys">Keys: <kbd>R</kbd> or <kbd>D</kbd> to answer · <kbd>Enter</kbd> for the next one</p>`:keyHint())+'</div>';
-  if(!body) body=`<div class="learn-grid">${[['faces','🧑‍⚖️','Face match','See a photo, pick the legislator. Then flip it: see a name, pick the face.'],['party','🗳️','Red or blue?','Guess whether each legislator is a Republican or a Democrat from the photo.'],['facts','✨','Fun facts','A clue about someone’s job, hometown or years in office. Who is it?'],['quotes','💬','Who said it?','A real line from a committee hearing. Guess which legislator said it.'],['redo','🏛️','Capitol quirks','Jell-O, the state dinosaur, a 45-day session: odd bills and fun facts from Utah’s Legislature.'],['process','🛤️','How a bill becomes law','An illustrated walk from bill file to effective date.'],['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],['members','👥','Members and their bills','Every legislator with a photo, ranked by how many bills they’re sponsoring this session.'],['board','🏆','Leaderboard','See who in the office has the longest streak in each game.']].map(([k,i,t,d])=>`<a class="learn-tile" href="#learn-${k}"><span class="ico">${i}</span><b>${t}</b><span>${d}</span>${LG.best[k]?`<span class="best">Best: ${LG.best[k]}</span>`:''}</a>`).join('')}</div>
-   <div class="card"><h2>Go deeper: Adam Brown’s Guide to the Utah Legislature</h2><p class="desc">Adam R. Brown is a political science professor at BYU who studies Utah politics, wrote the book <i>Utah Politics and Government</i>, and runs a Utah Legislature internship program. His guide collects data on every session: bill statistics, how legislators vote, ideology scores and rankings. It’s a great next step once you know the faces.</p><a class="btn primary" href="https://adambrown.info/p/research/utah_legislature" target="_blank" rel="noopener">Open Adam Brown’s guide</a></div>`;
+  if(body.startsWith('<div class="card lg"')&&body.endsWith('</div>')&&!(sub==='map'&&LG.q&&LG.q.mode==='where'))body=body.slice(0,-6)+(sub==='party'?`<p class="tiny muted lg-keys">Keys: <kbd>R</kbd> or <kbd>D</kbd> to answer · <kbd>Enter</kbd> for the next one</p>`:keyHint())+'</div>';
+  if(!body) body=`<h3 class="learn-sec">${typeof ic==='function'?ic('trophy'):''} Play</h3><p class="small muted learn-sec-d">Quick games to learn faces, districts and the vocabulary. Your best streaks go on the office leaderboard.</p>
+   <div class="learn-grid">${LEARN_PLAY.map(learnTile).join('')}</div>
+   <h3 class="learn-sec">${typeof ic==='function'?ic('book'):''} Learn</h3><p class="small muted learn-sec-d">Guides and references to read at your own pace.</p>
+   <div class="learn-grid">${LEARN_READ.map(learnTile).join('')}</div>`;
   return shell('learn',head+body+extra);
 }
 
@@ -100,7 +124,7 @@ function newFaceQ(rev){
 function gameFaces(){
   if(!LG.q||!LG.q.opts||LG.q.kind!=='face'){newFaceQ(Math.random()<.3);LG.q.kind='face'}
   const {l,opts,rev}=LG.q, a=LG.answered;
-  const fb=a?(a===l.id?`<div class="lg-fb ok">Yes! That’s ${esc(legTitle(l))}, ${l.house==='H'?'House':'Senate'} District ${esc(l.district)} (${esc(l.counties||'')}).</div>`:`<div class="lg-fb no">Not quite. That’s ${esc(legTitle(l))}, ${l.house==='H'?'House':'Senate'} District ${esc(l.district)}.</div>`):'';
+  const fb=a?(a===l.id?`<div class="lg-fb ok">Yes! That’s ${esc(legTitle(l))}, ${l.house==='H'?'House':'Senate'} District ${esc(l.district)}${legWhere(l)?` (${esc(legWhere(l))})`:''}.</div>`:`<div class="lg-fb no">Not quite. That’s ${esc(legTitle(l))}, ${l.house==='H'?'House':'Senate'} District ${esc(l.district)}.</div>`):'';
   return `<div class="card lg"><div class="lg-top"><h2>${rev?'Which one is…':'Who is this?'}</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.faces||0}</b></div></div>
    ${rev?`<p class="lg-name">${esc(legTitle(l))}</p><div class="lg-faces">${opts.map((o,i)=>`<button class="lg-face ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgface="${esc(o.id)}" ${a?'disabled':''} aria-label="Option ${i+1}"><span class="kn">${i+1}</span><img src="${esc(legPhoto(o))}" alt="" loading="lazy">${a?`<span>${esc(o.name)}</span>`:''}</button>`).join('')}</div>`
    :`<div class="lg-photo"><img src="${esc(legPhoto(l))}" alt="Photo of a legislator"></div><div class="lg-opts">${opts.map((o,i)=>`<button class="btn lg-opt ${a?(o.id===l.id?'right':o.id===a?'wrong':''):''}" data-lgface="${esc(o.id)}" ${a?'disabled':''}><span class="kn">${i+1}</span>${esc(legTitle(o))}</button>`).join('')}</div>`}
@@ -114,7 +138,7 @@ function gameParty(){
   return `<div class="card lg"><div class="lg-top"><h2>Republican or Democrat?</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.party||0}</b></div></div>
    <div class="lg-photo"><img src="${esc(legPhoto(l))}" alt="Photo of a legislator"></div>
    <div class="lg-opts"><button class="btn lg-opt party-btn r ${a?(l.party==='R'?'right':a==='R'?'wrong':''):''}" data-lgparty="R" ${a?'disabled':''}><span class="kn">R</span>Republican</button><button class="btn lg-opt party-btn d ${a?(l.party==='D'?'right':a==='D'?'wrong':''):''}" data-lgparty="D" ${a?'disabled':''}><span class="kn">D</span>Democrat</button></div>
-   ${a?`<div class="lg-fb ${a===l.party?'ok':'no'}">${a===l.party?'Right!':'Not this time.'} ${esc(legTitle(l))} is a ${l.party==='R'?'Republican':'Democrat'} representing ${l.house==='H'?'House':'Senate'} District ${esc(l.district)} (${esc(l.counties||'')}).</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}</div>`;
+   ${a?`<div class="lg-fb ${a===l.party?'ok':'no'}">${a===l.party?'Right!':'Not this time.'} ${esc(legTitle(l))} is a ${l.party==='R'?'Republican':'Democrat'} representing ${l.house==='H'?'House':'Senate'} District ${esc(l.district)}${legWhere(l)?` (${esc(legWhere(l))})`:''}.</div><p style="text-align:center"><button class="btn primary" id="lgNext">Next →</button></p>`:''}</div>`;
 }
 // ---------- fun facts (job, hometown counties, years in office, committees, and facts an admin added)
 let LEGFACTS=null;
@@ -145,28 +169,32 @@ function gameFacts(){
 }
 
 // ---------- Capitol quirks: fun facts, odd bills and how Utah's short session compares
-const REDO_QUOTES=[
- ['“In the legislature, promptitude of decision is oftener an evil than a benefit.”','Alexander Hamilton, Federalist No. 70 (1788)',''],
- ['“It appears that the act was conceived and passed in haste, on March 9, 1961, in the compulsory closing hours of an overtaxed legislature, producing an unconstitutional pregnancy, resulting in a birth in which its legislative pains could not be anaesthetized by any proper judicial ministration.”','Utah Supreme Court (1962)','https://law.justia.com/cases/utah/supreme-court/1962/9697-0.html'],
-];
-// [question, answer, wrong answers, what to know, source link, which quote to show: 'h' Hamilton, 'c' the 1962 court]
+const REDO_QUOTES={
+ h:['“In the legislature, promptitude of decision is oftener an evil than a benefit.”','Alexander Hamilton, Federalist No. 70 (1788)','https://avalon.law.yale.edu/18th_century/fed70.asp'],
+ c:['“It appears that the act was conceived and passed in haste, on March 9, 1961, in the compulsory closing hours of an overtaxed legislature, producing an unconstitutional pregnancy, resulting in a birth in which its legislative pains could not be anaesthetized by any proper judicial ministration.”','Utah Supreme Court (1962)','https://law.justia.com/cases/utah/supreme-court/1962/9697-0.html'],
+ m:['“It will be of little avail to the people, that the laws are made by men of their own choice, if the laws be so voluminous that they cannot be read, or so incoherent that they cannot be understood.”','James Madison, Federalist No. 62 (1788)','https://avalon.law.yale.edu/18th_century/fed62.asp'],
+ t:['“No man’s life, liberty, or property are safe while the Legislature is in session.”','Judge Gideon J. Tucker, New York Surrogate’s Court (1866)',''],
+ b:['“Laws, like sausages, cease to inspire respect in proportion as we know how they are made.”','Often credited to Otto von Bismarck, but probably first said by the poet John Godfrey Saxe (1869)',''],
+ j:['“There’s always room for Jell-O.”','Jell-O’s long-running advertising slogan',''],
+ u:['“Industry”','Utah’s state motto, adopted in 1959 along with the beehive emblem','']};
+// [question, answer, wrong answers, what to know, source link, which quote to show (a key of REDO_QUOTES)]
 const QUIRKS=[
  ['Utah’s general session lasts 45 days. In 2025, which was the only other state with a regular session that short?','Virginia',['Texas','California','Montana'],'Most legislatures meet for four months or more, and some meet all year. Only 11 states put no limit on session length at all. A short session packs hundreds of final votes into the last few nights, which is when mistakes slip in.',''],
  ['Before Utah settled on a 45-day session in the early 1980s, what did it have?','A 60-day session one year and a 20-day budget session the next',['A 90-day session every year','No time limit','A 10-day session'],'The 45-day general session replaced the old pattern. Even then, people worried that a short session forces lawmakers to rush.',''],
  ['In 1962, the Utah Supreme Court looked at an act passed in the “compulsory closing hours” of the 1961 session. What did it find?','It was unconstitutional',['It was the best law of the year','It had never been voted on','It belonged to another state'],'The court blamed the haste of the last night of session. Its full sentence is one of the most colorful lines in a Utah opinion (see below).','https://law.justia.com/cases/utah/supreme-court/1962/9697-0.html','c'],
  ['Texas’s legislature meets for how long?','140 days, every other year',['45 days a year','All year round','Two weeks a year'],'A few states still meet only every other year. Utah meets every year, but for fewer days than almost anyone. Alexander Hamilton might have approved of taking it slow (see below).','','h'],
- ['In 2001, the Utah Senate passed a resolution recognizing which food as “a favorite snack food of Utah”?','Jell-O',['Fry sauce','Funeral potatoes','Snelgrove’s ice cream'],'S.R. 5 followed a BYU student campaign with more than 14,000 signatures. During debate a few senators joked that the state snack should come from Utah, like Snelgrove’s ice cream.','https://le.utah.gov/~2001/bills/sbillenr/SR0005.pdf'],
+ ['In 2001, the Utah Senate passed a resolution recognizing which food as “a favorite snack food of Utah”?','Jell-O',['Fry sauce','Funeral potatoes','Snelgrove’s ice cream'],'S.R. 5 followed a BYU student campaign with more than 14,000 signatures. During debate a few senators joked that the state snack should come from Utah, like Snelgrove’s ice cream.','https://le.utah.gov/~2001/bills/sbillenr/SR0005.pdf','j'],
  ['Who talked Sen. Curt Bramble into sponsoring the 2018 bill that made the Utahraptor the state dinosaur?','A 10-year-old boy',['A museum lobbyist','The governor','A paleontology professor'],'Kenyon Roberts first wanted the Utahraptor to replace the Allosaurus as the state fossil. The compromise kept the Allosaurus and added a brand-new symbol: state dinosaur.','https://onlinelibrary.utah.gov/state-symbol/dinosaur/'],
  ['The bill making the Gila monster Utah’s state reptile in 2019 was pushed by whom?','Students at Lava Ridge Intermediate School in Santa Clara',['A reptile breeders’ group','The Division of Wildlife Resources','A Utah Jazz player'],'H.B. 144 passed the Senate unanimously in the closing minutes of the 2019 session. It was the last thing the Legislature did that year.','https://www.stgeorgeutah.com/news/archive/2019/03/18/lgl19-jmr-lava-ridge-students-persuade-lawmakers-to-make-gila-monster-utahs-state-reptile/'],
  ['In 2011, Utah named an official state firearm. Which one?','The Browning M1911 pistol',['The Winchester rifle','The Colt Peacemaker','The Remington shotgun'],'John Browning was born in Ogden. Utah is often credited as the first state to name an official firearm.','https://sltrib.com/news/politics/2019/01/19/utahs-state-reptile-gila'],
  ['Utah’s official state cooking pot is the…','Dutch oven',['Crock-Pot','Cast-iron skillet','Pressure cooker'],'The Legislature named it in 1997. It sits in the same section of code as the state bird (the California gull) and the state animal (the elk).',''],
  ['A Daybreak Elementary-backed bill to name a state dog fell short. Which breed was it?','Golden retriever',['Border collie','German shepherd','Labrador retriever'],'Student-backed state symbols are a session tradition, but not all of them make it.','https://sltrib.com/news/politics/2019/01/19/utahs-state-reptile-gila'],
  ['Which work of land art in the Great Salt Lake became Utah’s state work of art in 2016?','The Spiral Jetty',['Sun Tunnels','The Tree of Utah','Gilgal Garden'],'H.B. 134 (2016) designated it. Robert Smithson built the 1,500-foot coil of rock in 1970.','https://le.utah.gov/~2016/bills/hbillint/HB0134.pdf'],
- ['What was the very first state symbol the Utah Legislature adopted, on April 3, 1896?','The Great Seal',['The beehive','The sego lily','The state flag'],'It came in the Legislature’s first regular session after statehood. The beehive emblem wasn’t made official until 1959.',''],
+ ['What was the very first state symbol the Utah Legislature adopted, on April 3, 1896?','The Great Seal',['The beehive','The sego lily','The state flag'],'It came in the Legislature’s first regular session after statehood. The beehive emblem wasn’t made official until 1959.','','u'],
  ['Utah adopted a new state flag in 2023. About how many designs did people submit?','More than 7,000',['About 50','About 400','More than 100,000'],'An earlier bill for a new flag in 2019 didn’t make it out of the Legislature.',''],
- ['In 2026, a lawmaker proposed limiting how many bills each legislator could introduce. What happened?','It went nowhere, and lawmakers introduced a record number of bills',['It passed unanimously','The governor vetoed it','It was struck down in court'],'The governor had even endorsed the idea in his State of the State address.','https://www.fox13now.com/news/politics/2026-utah-legislature-miscellaneous'],
- ['In the final hour of the 2018 session, the House raced through a bill lowering the penalty for keeping which animals in captivity?','Raccoons and coyotes',['Pet skunks','Bison','Gila monsters'],'Late-night bills often pass with little introduction and no debate.','https://www.ksl.com/article/46278350'],
- ['A law passed last year cites the wrong section of code. How does it usually get fixed?','A cleanup bill the next session',['The governor edits it','It fixes itself on the effective date','A court rewrites it'],'Bills that only fix errors, outdated references and typos are often called technical corrections bills. Many of them trace back to the last-night rush.',''],
+ ['In 2026, a lawmaker proposed limiting how many bills each legislator could introduce. What happened?','It went nowhere, and lawmakers introduced a record number of bills',['It passed unanimously','The governor vetoed it','It was struck down in court'],'The governor had even endorsed the idea in his State of the State address.','https://www.fox13now.com/news/politics/2026-utah-legislature-miscellaneous','m'],
+ ['In the final hour of the 2018 session, the House raced through a bill lowering the penalty for keeping which animals in captivity?','Raccoons and coyotes',['Pet skunks','Bison','Gila monsters'],'Late-night bills often pass with little introduction and no debate.','https://www.ksl.com/article/46278350','t'],
+ ['A law passed last year cites the wrong section of code. How does it usually get fixed?','A cleanup bill the next session',['The governor edits it','It fixes itself on the effective date','A court rewrites it'],'Bills that only fix errors, outdated references and typos are often called technical corrections bills. Many of them trace back to the last-night rush.','','b'],
 ];
 // A shuffled deck per game, so nothing repeats until every question has been seen.
 function deckNext(key,n){
@@ -177,7 +205,7 @@ function deckNext(key,n){
 function gameRedo(){
   if(!LG.q||LG.q.kind!=='quirk'){const t=QUIRKS[deckNext('quirks',QUIRKS.length)];LG.q={kind:'quirk',t,opts:shuffle([t[1],...t[2]])};LG.answered=null}
   const {t,opts}=LG.q,a=LG.answered,ok=a===t[1];
-  const quotes=`<div class="redo-q">${REDO_QUOTES.filter((q,i)=>t[5]===(i?'c':'h')).map(q=>`<figure><blockquote>${esc(q[0])}</blockquote><figcaption>${q[2]?`<a href="${q[2]}" target="_blank" rel="noopener">${esc(q[1])}</a>`:esc(q[1])}</figcaption></figure>`).join('')}</div>`;
+  const quotes=`<div class="redo-q">${[REDO_QUOTES[t[5]]].filter(Boolean).map(q=>`<figure><blockquote>${esc(q[0])}</blockquote><figcaption>${q[2]?`<a href="${q[2]}" target="_blank" rel="noopener">${esc(q[1])}</a>`:esc(q[1])}</figcaption></figure>`).join('')}</div>`;
   const seen=QUIRKS.length-((LG.decks.quirks||{left:[]}).left.length);
   return `<div class="card lg"><div class="lg-top"><h2>Capitol quirks</h2><div class="lg-score">Score <b>${LG.score}</b> · Streak <b>${LG.streak}</b> · Best <b>${LG.best.redo||0}</b></div></div>
    <p class="lg-name" style="font-size:21px">${esc(t[0])}</p><div class="lg-opts col">${opts.map((o,i)=>`<button class="btn lg-opt ${a?(o===t[1]?'right':o===a?'wrong':''):''}" data-lgquirk="${esc(o)}" ${a?'disabled':''}><span class="kn">${i+1}</span>${esc(o)}</button>`).join('')}</div>
@@ -234,12 +262,7 @@ function gameQuotes(){
    ${wsForm()}</div>`;
 }
 
-// ---------- process guide and ordering game
-function guideProcess(){
-  return `<div class="card"><h2>How a bill becomes law in Utah</h2><p class="desc">Tap a step to read more. The general session runs 45 days, starting in late January and ending at midnight on sine die in early March.</p>
-   <ol class="flow">${STEPS.map((s,i)=>`<li><details ${i===0?'open':''}><summary><span class="fi">${s[2]}</span><span class="fnum">${i+1}</span><b>${esc(s[0])}</b></summary><p>${esc(s[1])}</p></details></li>`).join('')}</ol>
-   <div class="alertbox warnbox"><b>Where bills quietly die:</b> sitting in Rules, being held in committee, being circled and never uncircled, or running out of time before sine die.</div></div>`;
-}
+// ---------- floor vocabulary (the bill process guide lives in guides.js)
 function gameTerms(){
   if(!LG.q||LG.q.kind!=='term'){const t=TERMS[deckNext('terms',TERMS.length)];LG.q={kind:'term',t,opts:shuffle([t[1],...t[2]])};LG.answered=null}
   const {t,opts}=LG.q,a=LG.answered;
@@ -266,4 +289,5 @@ function learnBind(){
   app.querySelectorAll('[data-lgflag],[data-lgunflag]').forEach(b=>b.onclick=async()=>{const qid=b.dataset.lgflag||b.dataset.lgunflag;try{const j=await api('lgflags',{qid,undo:!!b.dataset.lgunflag});LGF=j.flags||{};
     if(isHidden(qid)){toast('Thanks. That question has two flags now, so it’s been removed.');LG.q=null}else if(!b.dataset.lgunflag)toast('Thanks for flagging it. One more flag removes it.');route(true)}catch(err){toast(err.message)}});
   app.querySelectorAll('[data-lgb]').forEach(b=>b.onclick=()=>{LGBGAME=b.dataset.lgb;route(true)});
+  if(typeof mapBind==='function')mapBind();if(typeof agBind==='function')agBind();if(typeof guideBind==='function')guideBind();
 }

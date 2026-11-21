@@ -81,7 +81,7 @@ function pageFiscal(){
   else if(FHVIEW==='board') body=fhBoard();
   else body=fhSettings();
   return shell('fiscal',`
-   <div class="card fh-head"><div class="fh-title"><div><h2>Fiscal Hive</h2><p class="desc">Route each new bill and substitute to the divisions that should estimate its cost. Divisions answer by email; their answers land here.</p></div>${fhAccuracy()}</div>
+   <div class="card fh-head"><div class="fh-title"><div><h2>Fiscal Hive</h2><p class="desc">Route each new bill and substitute to the divisions that should estimate its cost. Divisions answer by email; their answers land here.</p><button type="button" class="btn sm demo-btn" data-demo="fiscal">▶ See how it works, start to finish</button></div>${fhAccuracy()}</div>
     ${q.length?`<div class="fh-queue" role="status"><b>${plural(qBills,'bill')} queued for ${plural(qDivs,'division')}.</b> <span>One email per division goes out when you leave the Fiscal Hive, sign out, or after 10 idle minutes.</span><button class="btn sm primary" id="fhSend">Send now</button></div>`:''}
     ${FH.mailReady?'':`<div class="fh-note">Email isn’t connected yet, so messages are saved to the <a href="#fiscal" data-fhview="settings">Outbox</a> instead of being sent. Everything else works, including the answer links.</div>`}
     <nav class="fh-tabs" aria-label="Fiscal Hive views">${views.map(([k,l,n])=>`<button type="button" data-fhview="${k}" class="${FHVIEW===k?'on':''}" aria-pressed="${FHVIEW===k}">${l}${n!==''?` <span class="n">${n}</span>`:''}</button>`).join('')}</nav></div>
@@ -155,6 +155,41 @@ function fhBoard(){
    <div class="card"><h2>By department</h2><p class="desc">Typical response time across each department’s divisions.</p>
    ${Object.keys(dep).length?Object.entries(dep).map(([d,l])=>({d,m:median(l)})).sort((a,b)=>a.m-b.m).map((x,i,a)=>`<div class="fh-dep"><span><b>${esc(deptName(x.d))}</b></span><div class="bar" style="--c:${deptColor(x.d)}"><i style="width:${Math.max(6,100-(x.m/Math.max(...a.map(y=>y.m))*85)).toFixed(0)}%"></i></div><span class="small">${hrs(x.m)}</span></div>`).join(''):'<p class="empty">No answers yet.</p>'}</div></div>`;
 }
+// ---------- staff list upload: a spreadsheet of staff emails and what each person covers
+let FHSTAFF=null;
+function fhMatchDivs(txt){
+  const parts=String(txt||'').split(/\s*(?:[;,/|\n]|\band\b|&)\s*/i).map(x=>x.trim()).filter(Boolean);
+  const norm=x=>x.toLowerCase().replace(/\(.*?\)/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const out=new Set();
+  for(const p of parts){const n=norm(p);if(!n)continue;
+    let d=CONFIG.divisions.find(x=>x.id===p||norm(x.name)===n)||CONFIG.divisions.find(x=>norm(x.name).includes(n)&&n.length>=4)||CONFIG.divisions.find(x=>n.includes(norm(x.name)))
+      ||CONFIG.divisions.find(x=>(x.name.match(/\(([^)]+)\)/)||[])[1]&&norm(x.name.match(/\(([^)]+)\)/)[1])===n)
+      ||CONFIG.divisions.find(x=>(x.keywords||[]).some(k=>norm(k)===n));
+    if(d)out.add(d.id)}
+  return [...out];
+}
+function fhStaffParse(rows){
+  if(!rows.length)return {err:'That file is empty.'};
+  const hdr=rows[0].map(x=>x.toLowerCase());const hasHdr=hdr.some(h=>/mail|name|cover|division|section|area|topic/.test(h));
+  const body=hasHdr?rows.slice(1):rows;
+  const col=re=>hdr.findIndex(h=>re.test(h));
+  let ec=hasHdr?col(/mail/):-1;if(ec<0)ec=(body[0]||[]).findIndex(x=>/@/.test(x));
+  if(ec<0)return {err:'No email column found. Include a column of email addresses.'};
+  let nc=hasHdr?col(/name/):-1;let cc=hasHdr?col(/cover|division|section|area|topic|practice|responsib/):-1;
+  if(cc<0)cc=(body[0]||[]).findIndex((x,i)=>i!==ec&&i!==nc&&x);
+  const people=body.map(r=>({email:(r[ec]||'').trim(),name:nc>=0?r[nc]||'':'',cover:cc>=0?r[cc]||'':''})).filter(p=>/@/.test(p.email)).map(p=>({...p,divs:fhMatchDivs(p.cover)}));
+  return {people};
+}
+function fhStaffCard(){
+  const P=FHSTAFF&&FHSTAFF.people;
+  return `<div class="card"><h2>Staff list upload</h2><p class="desc">Upload a spreadsheet of staff with their email and what they cover (one row per person). Columns can be in any order; the site looks for an email column, a name column and a “covers” column (division names, separated by commas). You’ll see a preview before anything changes.</p>
+   <div class="filters"><div class="field"><label for="fhStaffFile">Excel or CSV file</label><input type="file" id="fhStaffFile" accept=".xlsx,.xls,.csv,.txt"></div></div>
+   ${FHSTAFF&&FHSTAFF.err?`<p class="small" style="color:var(--maroon)">${esc(FHSTAFF.err)}</p>`:''}
+   ${P?`<p class="small"><b>${plural(P.length,'person')}</b> found · ${P.filter(p=>p.divs.length).length} matched to a division. Fix any row before adding.</p>
+    <div class="tablewrap"><table class="compact"><thead><tr><th>Name</th><th>Email</th><th>Covers (from the sheet)</th><th>Gets requests for</th></tr></thead><tbody>${P.map((p,i)=>`<tr><td>${esc(p.name)}</td><td class="small">${esc(p.email)}</td><td class="small">${esc(p.cover)}</td><td>${p.divs.map(d=>`<span class="chip">${esc(divName(d))} <button type="button" class="linkbtn tiny" data-fhsrm="${i}|${esc(d)}" aria-label="Remove">✕</button></span>`).join(' ')}<select data-fhsadd="${i}" aria-label="Add a division"><option value="">${p.divs.length?'+ Add…':'Pick a division…'}</option>${CONFIG.divisions.filter(d=>!p.divs.includes(d.id)).map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+    <p style="margin-top:10px"><button class="btn primary" id="fhStaffApply">Add these people to “Who gets requests” and save</button> <button class="btn" id="fhStaffCancel">Cancel</button></p>
+    <p class="tiny muted">Adding keeps the addresses already listed for each division.</p>`:''}</div>`;
+}
 let FHOUT=null;
 function fhSettings(){
   if(!FHOUT){api('fn/outbox').then(j=>{FHOUT=j;route(true)}).catch(()=>{FHOUT={outbox:[]}})}
@@ -164,6 +199,7 @@ function fhSettings(){
     <form id="fhThr" class="filters"><div class="field"><label for="fhThrIn">Threshold (dollars)</label><input id="fhThrIn" inputmode="numeric" value="${FH.threshold}"></div><button class="btn primary">Save</button></form><p class="small muted">Default is $20,000.</p></div>
    <div class="card"><h2>Outbox</h2><p class="desc">${FH.mailReady?'Every email the site has sent, newest first.':'Email isn’t connected yet (it needs RESEND_API_KEY and MAIL_FROM), so emails wait here. Open one to see exactly what a division would get, and use its links to test answering.'}</p>
     ${FHOUT&&FHOUT.outbox.length?`<div class="rows">${FHOUT.outbox.slice(0,30).map(m=>`<div class="row" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="small">${fmtMD(new Date(m.at))} ${fmtTime(new Date(m.at))}</span><div class="what" style="font-size:14.5px">${esc(m.subject)}<span class="sub">to ${esc(m.to_addr)}</span></div><div class="r">${m.sent?'<span class="pill pass">Sent</span>':m.error?`<span class="pill warn" title="${esc(m.error)}">Failed</span>`:'<span class="pill muted">Waiting</span>'}<button class="btn sm" data-fhmail="${m.id}">Open</button></div></div>`).join('')}</div>`:'<p class="empty">No emails yet.</p>'}</div></div>
+   ${fhStaffCard()}
    <div class="card"><h2>Who gets requests</h2><p class="desc">Email addresses for each division, separated by commas. If a division is blank, requests go to approved accounts that work in that section.</p>${groups}<p><button class="btn primary" id="fhSaveCt">Save contacts</button></p></div>`;
 }
 
@@ -186,6 +222,13 @@ function fhBind(){
   app.querySelectorAll('[data-fhmiss]').forEach(b=>b.onclick=()=>{const miss=(FH.cards||[]).filter(c=>c.status!=='cleared'&&(c.ai.divs||[]).length&&(!c.kept_ai||reqsOf(c.id).some(r=>r.status==='wrong'||r.status==='rerouted')));
     fhOpenDlg(`<h2>Where the suggestion missed</h2>${miss.length?`<table class="compact"><thead><tr><th>Bill</th><th>Suggested</th><th>Sent to</th><th>Why</th></tr></thead><tbody>${miss.map(c=>`<tr><td>${esc(shortNum(c.num))}</td><td>${esc((c.ai.divs||[]).map(divName).join(', '))}</td><td>${esc((c.divisions||[]).map(divName).join(', '))}</td><td class="small">${!c.kept_ai?'POC changed it':'Division said wrong section'}</td></tr>`).join('')}</tbody></table>`:'<p>No misses yet.</p>'}`)});
   on('fhThr','onsubmit',async e=>{e.preventDefault();const v=+$('fhThrIn').value.replace(/[$,\s]/g,'');await fhAct('fn/threshold',{amount:v},`Threshold set to ${money(v)}`)});
+  on('fhStaffFile','onchange',async e=>{const f=e.target.files[0];if(!f)return;try{FHSTAFF=fhStaffParse(await readSheetFile(f))}catch(err){FHSTAFF={err:err.message}}route(true)});
+  app.querySelectorAll('[data-fhsrm]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.fhsrm.split('|');const p=FHSTAFF.people[+i];p.divs=p.divs.filter(x=>x!==d);route(true)});
+  app.querySelectorAll('[data-fhsadd]').forEach(sel=>sel.onchange=()=>{if(!sel.value)return;FHSTAFF.people[+sel.dataset.fhsadd].divs.push(sel.value);route(true)});
+  on('fhStaffCancel','onclick',()=>{FHSTAFF=null;route(true)});
+  on('fhStaffApply','onclick',async()=>{const c={};app.querySelectorAll('[data-ct]').forEach(i=>c[i.dataset.ct]=i.value);
+    for(const p of FHSTAFF.people)for(const d of p.divs){const cur=(c[d]||'').split(/\s*,\s*/).filter(Boolean);if(!cur.map(x=>x.toLowerCase()).includes(p.email.toLowerCase()))cur.push(p.email);c[d]=cur.join(', ')}
+    const n=FHSTAFF.people.filter(p=>p.divs.length).length;const r=await fhAct('fn/contacts',{contacts:c},`Added ${plural(n,'person','people')} to the contacts`);if(r)FHSTAFF=null;route(true)});
   on('fhSaveCt','onclick',async()=>{const c={};app.querySelectorAll('[data-ct]').forEach(i=>c[i.dataset.ct]=i.value);await fhAct('fn/contacts',{contacts:c},'Contacts saved')});
   app.querySelectorAll('[data-fhmail]').forEach(b=>b.onclick=async()=>{try{const j=await api('fn/outbox-one?id='+b.dataset.fhmail);const m=j.mail;fhOpenDlg(`<h2 style="font-size:17px">${esc(m.subject)}</h2><p class="small muted">To ${esc(m.to_addr)} · ${fmtLong(new Date(m.at))}${m.error?` · <span style="color:var(--maroon)">${esc(m.error)}</span>`:''}</p><iframe sandbox="allow-popups allow-popups-to-escape-sandbox" style="width:100%;height:60vh;border:1px solid var(--line);border-radius:8px" srcdoc="${esc(m.html.replace(/<a /g,'<a target="_blank" '))}"></iframe>`)}catch(e){toast(e.message)}});
 }
