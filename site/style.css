@@ -1071,3 +1071,10 @@ dialog.demo-dlg::backdrop{background:rgba(0,33,71,.45)}
 .dc-bills a:nth-child(even){background:var(--row-alt)}.dc-bills a:hover{background:#dcecf3}
 .dc-bills .billnum{font-size:13px}.dc-a{color:var(--live);font-weight:700}
 .infocard{width:340px!important}
+/* Fiscal Hive: Send and CC contacts, rules */
+.fh-contact2{display:grid;grid-template-columns:minmax(160px,230px) 1fr 1fr;gap:10px;align-items:end;padding:8px;border-bottom:1px solid var(--line)}
+.fh-contact2:nth-child(even){background:var(--row-alt)}
+.fh-contact2 .field{margin:0}.fh-contact2 input{width:100%}
+.fh-conf{display:inline-block;background:var(--gold-bg,#fbf3dc);color:#7a5a00;border:1px solid var(--goldc);border-radius:999px;padding:0 7px;font-weight:600}
+.fh-chip .tiny.muted{font-weight:400}
+@media (max-width:760px){.fh-contact2{grid-template-columns:1fr}}

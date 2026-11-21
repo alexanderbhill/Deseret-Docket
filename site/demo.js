@@ -9,8 +9,9 @@ function demoBill(){
   const b=pool.find(b=>nb(b)&&b.agm&&(b.sug||[]).length&&b.fn&&!b.fn.none)||pool.find(b=>nb(b)&&(b.sug||[]).length&&b.fn)||pool.find(b=>(b.sug||[]).length)||pool[0];
   return b||{num:'HB0101',title:'Crime Victim Restitution Amendments',sponsor:'Rep. Example',session:UI.session,sug:['cr-victims'],key:''};
 }
-const demoDiv=b=>divName((b.sug||[])[0]||'cr-victims');
-const dmail=(from,to,subj,body)=>`<div class="dmail"><div class="dmail-hd"><div><span class="tiny muted">From</span> ${esc(from)}</div><div><span class="tiny muted">To</span> ${esc(to)}</div><div><span class="tiny muted">Subject</span> <b>${esc(subj)}</b></div></div><div class="dmail-body">${body}</div></div>`;
+const demoDiv=b=>{const r=typeof fhRoute==='function'?fhRoute(b):[];return r.length?fuName(r[0].id):divName((b.sug||[])[0]||'cr-victims')};
+const demoWhy=b=>{const r=typeof fhRoute==='function'?fhRoute(b):[];return r.length?r[0].why.slice(0,2).join('; '):''};
+const dmail=(from,to,subj,body,cc)=>`<div class="dmail"><div class="dmail-hd"><div><span class="tiny muted">From</span> ${esc(from)}</div><div><span class="tiny muted">To</span> ${esc(to)}</div>${cc?`<div><span class="tiny muted">CC</span> ${esc(cc)}</div>`:''}<div><span class="tiny muted">Subject</span> <b>${esc(subj)}</b></div></div><div class="dmail-body">${body}</div></div>`;
 const dbtn=(l,bg,fg)=>`<span style="display:inline-block;margin:4px 6px 4px 0;padding:9px 14px;border-radius:6px;background:${bg};color:${fg};font-weight:600;font-size:14px">${l}</span>`;
 function fhEmailHTML(b,div,reminder){
   return `<div style="font:15px/1.5 -apple-system,Segoe UI,Arial,sans-serif;color:#333">
@@ -23,7 +24,7 @@ function fhEmailHTML(b,div,reminder){
     <div style="background:#ebf4f8;border-left:3px solid #3c5a78;padding:8px 12px;margin:8px 0;font-size:14px"><b>Automatic assessment:</b> Likely has a fiscal impact. It adds duties for ${esc(div)}.</div>
     <div style="font-size:14px;margin-bottom:6px;color:#2e4d6d;text-decoration:underline">Read the bill on le.utah.gov</div>
     ${dbtn('No impact','#3c5a78','#fff')}${dbtn('Probable fiscal impact','#002147','#fff')}${dbtn('Wrong section','#e9d8a6','#002147')}</div>
-   <p style="color:#5b6672;font-size:13px">Sent for ${esc((ME&&(ME.display||ME.user))||'the office')}. Unanswered requests get one reminder after 24 hours. These links only work for you; please don't forward this email.</p>
+   <p style="color:#5b6672;font-size:13px">Sent for ${esc((ME&&(ME.display||ME.user))||'the office')}. Anyone in the To line can answer for the section; people on CC are copied so they know it’s coming. Unanswered requests get one reminder after 24 hours. Please don't forward this email outside the office.</p>
    <p style="color:#8a929b;font-size:11px;text-align:center">Attorney Work Product / Attorney-Client Communication</p></div></div>`;
 }
 function fiscalDemo(){
@@ -31,18 +32,18 @@ function fiscalDemo(){
   return [
    ['A new bill shows up','The system',`<p>Four times every weekday the site checks the Legislature for new bills and new substitutes. Each one becomes a card in the Fiscal Hive <b>Inbox</b>. A new substitute always gets its own card, even if the earlier version was cleared, because changes can change the cost.</p>
      <div class="demo-card"><div class="kicker">New bill · ${esc(sessName(b.session))}</div><b class="serif">${esc(shortNum(b.num))}: ${esc(b.title)}</b><div class="small muted">${esc(b.sponsor)}</div>
-      <div class="demo-ai"><b>Suggested division:</b> <span class="chip">${esc(div)}</span> <span class="tiny muted">High confidence</span><br><b>Fiscal note likely needed?</b> Likely: it adds duties for the office.</div></div>`],
+      <div class="demo-ai"><b>Suggested section:</b> <span class="chip">${esc(div)}</span> <span class="tiny muted">${esc(demoWhy(b)||'from the Utah Code sections it amends')}</span><br><b>Fiscal note likely needed?</b> Likely: it adds duties for the office.</div></div>`],
    ['The POC confirms where it goes',poc,`<p>The point of contact reads the card, keeps or changes the suggested division, and presses <kbd>Enter</kbd> (or <kbd>N</kbd> if no request is needed). The next card slides in.</p>
      <div class="demo-card"><b class="serif">${esc(shortNum(b.num))}</b> → <span class="chip">${esc(div)}</span> <span class="pill pass">Queued</span></div>
      <div class="fh-queue" style="margin-top:12px"><b>1 bill queued for 1 division.</b> <span>One email per division goes out when you leave the Fiscal Hive, sign out, or after 10 idle minutes.</span><span class="btn sm primary">Send now</span></div>`],
-   ['One email per division','The system',`<p>Everything routed in one sitting is bundled: <b>one email per division</b>, listing every bill that division needs to look at. It goes to the addresses under Settings → Who gets requests (or the approved accounts in that section).</p>
+   ['One email per division','The system',`<p>Everything routed in one sitting is bundled: <b>one email per section</b>, listing every bill that section needs to look at. The section’s <b>Send</b> people are on the To line and can answer; its <b>CC</b> people are copied so they know it’s coming. Both come from the routing workbook (Settings → Routing workbook).</p>
      <div class="demo-flow"><span>${ic('hive')}Fiscal Hive</span><span class="arr">→</span><span>${ic('mail')}${esc(div)}</span></div>`],
-   ['What the division sees',`${div} staff`,`<p>This is the email. Every button is a private link tied to that person and that bill, so nobody has to sign in.</p>${dmail('Deseret Docket <alerts@…>',`${div} staff`,`Fiscal impact check: 1 bill for ${div}`,fhEmailHTML(b,div,false))}`],
+   ['What the division sees',`${div} staff`,`<p>This is the email. Every button is a private link tied to that person and that bill, so nobody has to sign in.</p>${dmail('Deseret Docket <alerts@…>',`${div}: Send contacts`,`Fiscal impact check: 1 bill for ${div}`,fhEmailHTML(b,div,false),`${div}: CC contacts`)}`],
    ['They answer with one click',`${div} staff`,`<div class="demo-3">
       <div><b>No impact</b><p class="small">Recorded the moment they click. A confirmation page says thanks; nothing else to do.</p><div class="demo-page"><b>Thanks!</b><span class="small">Recorded: no fiscal impact for ${esc(shortNum(b.num))}.</span></div></div>
       <div><b>Probable fiscal impact</b><p class="small">A short form, no sign-in:</p><div class="demo-page"><label class="tiny">Estimated amount</label><span class="demo-in">$45,000</span><label class="tiny">What it would pay for</label><span class="demo-in">0.5 FTE investigator</span><label class="tiny">Ongoing or one-time</label><span class="demo-in">Ongoing</span></div></div>
       <div><b>Wrong section</b><p class="small">They pick who should get it instead:</p><div class="demo-page"><label class="tiny">Should go to</label><span class="demo-in">Financial Crimes ▾</span><span class="small">The POC confirms before it’s re-sent.</span></div></div></div>`],
-   ['No answer? A reminder','The system',`<p>If a division hasn’t answered within <b>24 hours</b> (weekends count), it gets one automatic reminder. The POC can also press the 🔔 bell on any card to send one right away; the card shows when the last reminder went out.</p>${dmail('Deseret Docket <alerts@…>',`${div} staff`,`Reminder: fiscal impact check for ${div}`,fhEmailHTML(b,div,true))}`],
+   ['No answer? A reminder','The system',`<p>If a section hasn’t answered within <b>24 hours</b> (weekends count), it gets one automatic reminder, with the same To and CC people. The POC can also press the 🔔 bell on any card to send one right away; the card shows when the last reminder went out.</p>${dmail('Deseret Docket <alerts@…>',`${div}: Send contacts`,`Reminder: fiscal impact check for ${div}`,fhEmailHTML(b,div,true),`${div}: CC contacts`)}`],
    ['Answers land on the dashboard',poc,`<p>Each answer moves the card along: <b>Waiting</b> → <b>Answered</b>. Estimates from every division are added up per bill. If the total is more than the Appropriations threshold (${money((typeof FH!=='undefined'&&FH&&FH.threshold)||20000)} by default), the bill is flagged <b>Needs Appropriations</b> and listed on its own tab. A “wrong section” reply lands in <b>Needs attention</b>.</p>
      <div class="demo-card"><b class="serif">${esc(shortNum(b.num))}</b> <span class="pill pass">Answered</span> <span class="pill warn">Needs Appropriations</span><div class="small">${esc(div)}: $45,000 ongoing · 0.5 FTE investigator</div></div>
      <p class="small">Every step (routed, emailed, reminded, answered) is in the card’s history. The leaderboard ranks the fastest divisions, and the accuracy bar tracks how often the suggested division was right.</p>`],

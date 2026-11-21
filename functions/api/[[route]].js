@@ -20,7 +20,7 @@
 // The email job (GitHub Actions, header X-Cron-Key):
 //   GET  /api/cron/subs          confirmed subscriptions and the bills each one covers
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
-import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, threshold, logFn, rand as frand, settleCard, mailReady } from "../../lib/fiscal.js";
+import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, routing as fnRouting, threshold, logFn, rand as frand, settleCard, mailReady } from "../../lib/fiscal.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
 
 const DEPTS = new Set(["criminal", "civil", "pp", "appellate", "admin"]);
@@ -506,8 +506,8 @@ export async function onRequest(context) {
         await touch().run();
         return json({
           cards: cards.map((c) => ({ ...c, ai: obj(c.ai), divisions: arr(c.divisions) })),
-          requests: reqs.map((r) => ({ ...r, emails: arr(r.emails), answer: obj(r.answer), token: undefined })),
-          stats: allReqs, contacts: Object.fromEntries(crow.map((r) => [r.division, arr(r.emails)])),
+          requests: reqs.map((r) => { let e; try { e = JSON.parse(r.emails || "[]"); } catch { e = []; } return { ...r, emails: Array.isArray(e) ? e : [...(e.to || []), ...(e.cc || [])], answer: obj(r.answer), token: undefined }; }),
+          stats: allReqs, contacts: Object.fromEntries(crow.map((r) => [r.division, contactSet(r.emails)])), routing: await fnRouting(db),
           sectionEmails: users.reduce((m, u) => { (m[u.section] = m[u.section] || []).push(u.email); return m; }, {}),
           threshold: await threshold(db), mailReady: mailReady(env), me: user.name,
         });
@@ -570,14 +570,43 @@ export async function onRequest(context) {
         return json({ ok: true, ...r });
       }
       if (route === "fn/contacts" && method === "POST") {
+        // Each unit: { send: [{n, e}], cc: [{n, e}] }. A plain list or comma-separated string still works (all Send).
         const EMAIL_ONE = /^[^\s@<>()",;:]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}$/;
+        const clean = (l) => {
+          const items = Array.isArray(l) ? l : String(l || "").split(/[,;\s]+/);
+          const seen = new Set(), out = [];
+          for (const x of items) {
+            const e = String(typeof x === "object" && x ? x.e : x).trim().toLowerCase(), n = String((typeof x === "object" && x && x.n) || "").trim().slice(0, 80);
+            if (EMAIL_ONE.test(e) && !seen.has(e)) { seen.add(e); out.push({ n, e }); }
+          }
+          return out.slice(0, 15);
+        };
         const stmts = [];
-        for (const [div, list] of Object.entries(body.contacts || {}).slice(0, 200)) {
+        const replace = !!body.replace;
+        if (replace) stmts.push(db.prepare("DELETE FROM fn_contacts"));
+        for (const [div, v] of Object.entries(body.contacts || {}).slice(0, 200)) {
           if (!DIV_RE.test(div)) continue;
-          const emails = [...new Set((Array.isArray(list) ? list : String(list).split(/[,;\s]+/)).map((e) => String(e).trim().toLowerCase()).filter((e) => EMAIL_ONE.test(e)))].slice(0, 10);
-          stmts.push(db.prepare("INSERT INTO fn_contacts (division, emails, by, at) VALUES (?, ?, ?, ?) ON CONFLICT(division) DO UPDATE SET emails=excluded.emails, by=excluded.by, at=excluded.at").bind(div, JSON.stringify(emails), user.name, t));
+          const val = v && typeof v === "object" && !Array.isArray(v) ? { send: clean(v.send), cc: clean(v.cc) } : { send: clean(v), cc: [] };
+          stmts.push(db.prepare("INSERT INTO fn_contacts (division, emails, by, at) VALUES (?, ?, ?, ?) ON CONFLICT(division) DO UPDATE SET emails=excluded.emails, by=excluded.by, at=excluded.at").bind(div, JSON.stringify(val), user.name, t));
         }
         if (stmts.length) await db.batch(stmts);
+        return json({ ok: true });
+      }
+      if (route === "fn/routing" && method === "POST") {
+        // The routing workbook's units and rules (Code to Division). Send {reset:true} to go back to config.json.
+        if (body.reset) { await db.prepare("DELETE FROM settings WHERE k = 'fn_routing'").run(); return json({ ok: true, routing: null }); }
+        const str = (v, n) => String(v ?? "").slice(0, n);
+        const units = (Array.isArray(body.units) ? body.units : []).filter((u) => u && DIV_RE.test(u.id)).slice(0, 60)
+          .map((u) => ({ id: u.id, code: str(u.code, 20), name: str(u.name, 80), dept: str(u.dept, 20) }));
+        const TYPES = ["title", "chapter", "keyword", "agency", "combo", "fallback"];
+        const rules = (Array.isArray(body.rules) ? body.rules : []).filter((r) => r && TYPES.includes(r.type)).slice(0, 400).map((r) => ({
+          id: str(r.id, 20), type: r.type, about: str(r.about, 200), confirm: !!r.confirm,
+          units: (Array.isArray(r.units) ? r.units : []).filter((u) => DIV_RE.test(u)).slice(0, 6),
+          match: (Array.isArray(r.match) ? r.match : []).slice(0, 20).map((m) => (Array.isArray(m) ? m.slice(0, 20).map((x) => str(x, 80)) : str(m, 120))),
+        }));
+        if (!units.length || !rules.length) return bad("No units or rules found in that file.");
+        const v = JSON.stringify({ units, rules, at: t, by: user.name });
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('fn_routing', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(v, user.name, t).run();
         return json({ ok: true });
       }
       if (route === "fn/threshold" && method === "POST") {
