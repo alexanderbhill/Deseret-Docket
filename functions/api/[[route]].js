@@ -20,7 +20,7 @@
 // The email job (GitHub Actions, header X-Cron-Key):
 //   GET  /api/cron/subs          confirmed subscriptions and the bills each one covers
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
-import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, routing as fnRouting, threshold, logFn, rand as frand, settleCard, mailReady } from "../../lib/fiscal.js";
+import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady } from "../../lib/fiscal.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
 
 const DEPTS = new Set(["criminal", "civil", "pp", "appellate", "admin"]);
@@ -467,6 +467,7 @@ export async function onRequest(context) {
       if (Array.isArray(body.cols)) { next.cols = cols; next.hidden = hidden; next.v = Number.isInteger(body.v) ? body.v : 1; }
       if ("tourDone" in body) next.tourDone = !!body.tourDone;
       if ("fav" in body) next.fav = String(body.fav || "").slice(0, 40);
+      if ("session" in body) { const v = String(body.session || ""); if (/^\d{4}[A-Z0-9]{2,4}$/.test(v)) next.session = v; else delete next.session; }
       if (body.pred && typeof body.pred === "object" && KEY_RE.test(String(body.pred.key || ""))) {
         next.pred = { ...(next.pred || {}) };
         if (["pass", "fail"].includes(body.pred.v)) next.pred[body.pred.key] = body.pred.v; else delete next.pred[body.pred.key];
@@ -507,7 +508,7 @@ export async function onRequest(context) {
         return json({
           cards: cards.map((c) => ({ ...c, ai: obj(c.ai), divisions: arr(c.divisions) })),
           requests: reqs.map((r) => { let e; try { e = JSON.parse(r.emails || "[]"); } catch { e = []; } return { ...r, emails: Array.isArray(e) ? e : [...(e.to || []), ...(e.cc || [])], answer: obj(r.answer), token: undefined }; }),
-          stats: allReqs, contacts: Object.fromEntries(crow.map((r) => [r.division, contactSet(r.emails)])), routing: await fnRouting(db),
+          stats: allReqs, contacts: Object.fromEntries(crow.map((r) => [r.division, contactSet(r.emails)])),
           sectionEmails: users.reduce((m, u) => { (m[u.section] = m[u.section] || []).push(u.email); return m; }, {}),
           threshold: await threshold(db), mailReady: mailReady(env), me: user.name,
         });
@@ -590,23 +591,6 @@ export async function onRequest(context) {
           stmts.push(db.prepare("INSERT INTO fn_contacts (division, emails, by, at) VALUES (?, ?, ?, ?) ON CONFLICT(division) DO UPDATE SET emails=excluded.emails, by=excluded.by, at=excluded.at").bind(div, JSON.stringify(val), user.name, t));
         }
         if (stmts.length) await db.batch(stmts);
-        return json({ ok: true });
-      }
-      if (route === "fn/routing" && method === "POST") {
-        // The routing workbook's units and rules (Code to Division). Send {reset:true} to go back to config.json.
-        if (body.reset) { await db.prepare("DELETE FROM settings WHERE k = 'fn_routing'").run(); return json({ ok: true, routing: null }); }
-        const str = (v, n) => String(v ?? "").slice(0, n);
-        const units = (Array.isArray(body.units) ? body.units : []).filter((u) => u && DIV_RE.test(u.id)).slice(0, 60)
-          .map((u) => ({ id: u.id, code: str(u.code, 20), name: str(u.name, 80), dept: str(u.dept, 20) }));
-        const TYPES = ["title", "chapter", "keyword", "agency", "combo", "fallback"];
-        const rules = (Array.isArray(body.rules) ? body.rules : []).filter((r) => r && TYPES.includes(r.type)).slice(0, 400).map((r) => ({
-          id: str(r.id, 20), type: r.type, about: str(r.about, 200), confirm: !!r.confirm,
-          units: (Array.isArray(r.units) ? r.units : []).filter((u) => DIV_RE.test(u)).slice(0, 6),
-          match: (Array.isArray(r.match) ? r.match : []).slice(0, 20).map((m) => (Array.isArray(m) ? m.slice(0, 20).map((x) => str(x, 80)) : str(m, 120))),
-        }));
-        if (!units.length || !rules.length) return bad("No units or rules found in that file.");
-        const v = JSON.stringify({ units, rules, at: t, by: user.name });
-        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('fn_routing', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(v, user.name, t).run();
         return json({ ok: true });
       }
       if (route === "fn/threshold" && method === "POST") {

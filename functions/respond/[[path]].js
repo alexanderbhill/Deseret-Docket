@@ -3,7 +3,7 @@
 //   /respond/<token>?a=none     records "no impact" (confirms with one tap if the browser blocks scripts)
 //   /respond/<token>?a=impact   form: amount, what it would pay for, one-time or ongoing, notes
 //   /respond/<token>?a=wrong    form: which division should get it instead
-import { ensureFiscal, unitNamer, logFn, settleCard } from "../../lib/fiscal.js";
+import { ensureFiscal, siteConfig, logFn, settleCard } from "../../lib/fiscal.js";
 import { BEE, BEE_CSS } from "../../lib/logo.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -39,8 +39,8 @@ export async function onRequest({ request, env, params }) {
   if (req.sent_at && Date.now() - new Date(req.sent_at) > TOKEN_DAYS * 864e5) return page("Link expired", "<h1>This link has expired</h1><p>Contact the person who sent the request for a new one.</p>", 410);
   if (req.status === "rerouted") return page("Sent elsewhere", "<h1>This request went to another section</h1><p>Thanks for pointing it the right way. Nothing more is needed from you.</p>");
   const card = await db.prepare("SELECT * FROM fn_cards WHERE id = ?").bind(req.card_id).first();
-  const { cfg, units, name: divName } = await unitNamer(env, db, url.origin);
-  const choices = units.length ? units : (cfg.divisions || []);
+  const cfg = await siteConfig(env, url.origin);
+  const divName = (id) => ((cfg.divisions || []).find((d) => d.id === id) || {}).name || id;
   const billBox = `<div class="bill"><b>${esc(shortNum(card.num))}${card.version ? ` (${esc(card.version)})` : ""}</b>: ${esc(card.title)}<div class="muted">Asked of ${esc(divName(req.division))} · <a href="https://le.utah.gov/~${esc(String(card.session).slice(0, 4))}/bills/static/${esc(card.num)}.html" target="_blank" rel="noopener">Read the bill</a></div></div>`;
   const prior = obj(req.answer);
   const already = req.answered_at ? `<p class="muted">Already answered ${req.status === "no_impact" ? "“no impact”" : req.status === "impact" ? "“probable fiscal impact”" : "“wrong section”"} on ${new Date(req.answered_at).toLocaleDateString("en-US", { timeZone: "America/Denver" })}. Submitting again replaces that answer.</p>` : "";
@@ -59,7 +59,7 @@ export async function onRequest({ request, env, params }) {
       msg = `Recorded: <b>about $${amount.toLocaleString("en-US")}</b> (${esc(answer.kind)}). Thank you! The office will follow up if they have questions.`;
     } else if (a === "wrong") {
       const sugg = String(f.get("suggest") || "");
-      if (!choices.some((d) => d.id === sugg) && sugg !== "unknown") return page("Pick a section", `<h1>Pick who should get it</h1>${billBox}<p>Please go back and choose a section from the list.</p>`, 400);
+      if (!(cfg.divisions || []).some((d) => d.id === sugg) && sugg !== "unknown") return page("Pick a section", `<h1>Pick who should get it</h1>${billBox}<p>Please go back and choose a section from the list.</p>`, 400);
       status = "wrong"; answer = { suggest: sugg, note: String(f.get("note") || "").trim().slice(0, 1000), by: String(f.get("by") || "").slice(0, 80) };
       msg = `Thanks. We’ve told the office this should go to <b>${esc(sugg === "unknown" ? "another section" : divName(sugg))}</b>. They’ll send it on.`;
     } else return page("Unknown answer", "<h1>Something went wrong</h1>", 400);
@@ -90,7 +90,7 @@ export async function onRequest({ request, env, params }) {
   if (a === "wrong") {
     const groups = {};
     const dept = Object.fromEntries((cfg.departments || []).map((d) => [d.id, d.name]));
-    for (const d of choices) if (d.id !== req.division) (groups[dept[d.dept] || "Other"] = groups[dept[d.dept] || "Other"] || []).push(d);
+    for (const d of cfg.divisions || []) if (d.id !== req.division) (groups[dept[d.dept] || "Other"] = groups[dept[d.dept] || "Other"] || []).push(d);
     return page("Wrong section", `<h1>Wrong section?</h1>${billBox}${already}<p>Tell us who should get this instead. The office will check and send it on.</p><form method="post"><input type="hidden" name="a" value="wrong">
       <label for="suggest">Who should receive it</label><select id="suggest" name="suggest" required><option value="">Choose a section…</option>${Object.entries(groups).map(([g, l]) => `<optgroup label="${esc(g)}">${l.map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join("")}</optgroup>`).join("")}<option value="unknown">Not sure, but not us</option></select>
       <label for="note">Note for the office (optional)</label><textarea id="note" name="note"></textarea>${byField}<button>Send back to the office</button></form>`);

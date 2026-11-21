@@ -168,6 +168,14 @@ function nextUpdate(){
 /* ===================== STATE (per browser, not office data) ===================== */
 const UI=lsGet('docket-ui-v5',{session:null});
 const saveUI=()=>lsSet('docket-ui-v5',UI);
+function defaultSession(){
+  const yr=+new Intl.DateTimeFormat('en-US',{timeZone:'America/Denver',year:'numeric'}).format(new Date());
+  const ss=INDEX.sessions, ids=ss.map(x=>x.id);
+  if(ids.includes(yr+'GS'))return yr+'GS';
+  const past=ss.filter(x=>+x.id.slice(0,4)<=yr&&/GS$/.test(x.id)).sort((a,b)=>b.id.localeCompare(a.id))[0];
+  return (past||ss.find(x=>x.count>0||x.files>0)||ss[0]).id}
+// Remember a session someone chose: on their account when signed in, in this browser for guests.
+function pickSession(id){UI.session=id;UI.picked=true;saveUI();if(ME){ME.prefs=ME.prefs||{};ME.prefs.session=id;api('prefs',{session:id}).catch(()=>{})}}
 const sessName=id=>{const m=String(id||'').match(/^(\d{4})(GS|S(\d))$/);if(!m)return id;if(m[2]==='GS')return `${m[1]} General Session`;const n=['','First','Second','Third','Fourth','Fifth','Sixth'][+m[3]]||m[3];return `${m[1]} ${n} Special Session`};
 
 /* ===================== COLUMNS ===================== */
@@ -1139,7 +1147,7 @@ const on=(id,ev,fn)=>{const el=$(id);if(el)el[ev]=fn};
 function bind(){
   bindMS(app);
 
-  on('sessSel','onchange',async e=>{UI.session=e.target.value;saveUI();PAGE=1;await loadSession(UI.session);if(location.hash.startsWith('#bill-'))location.hash='#bills';else route()});
+  on('sessSel','onchange',async e=>{pickSession(e.target.value);PAGE=1;await loadSession(UI.session);if(location.hash.startsWith('#bill-'))location.hash='#bills';else route()});
   // bills
   on('fShow','onchange',e=>{FLT.show=e.target.value;PAGE=1;saveFLT();route()});
   on('fPri','onchange',e=>{FLT.pri=e.target.value?[e.target.value]:[];PAGE=1;saveFLT();route()});
@@ -1258,7 +1266,10 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     loadCols();
     Promise.all([getJSON('data/legislators.json'),getJSON('geo/where.json').catch(()=>null)]).then(([l,w])=>{WHERE=w;LEGS=l;if(booted&&/^#(legislators|learn)/.test(location.hash))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);
-    if(!UI.session||!ids.includes(UI.session)) UI.session=(INDEX.sessions.find(s=>s.count>0||s.files>0)||INDEX.sessions[0]).id;
+    // A session someone picked themselves (saved to their account, or this browser for guests) wins;
+    // otherwise this calendar year's general session: 2026 through Dec. 31, 2027 from Jan. 1.
+    const picked=ME?(ME.prefs||{}).session:(UI.picked?UI.session:'');
+    UI.session=picked&&ids.includes(picked)?picked:defaultSession();saveUI();
     const off=ME?pullOffice(false):null;
     await loadSession(UI.session);
     if(ME){await off;setInterval(()=>pullOffice(true),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)pullOffice(true)})}
