@@ -1107,7 +1107,7 @@ function billSecs(b,m,hs){
   add('overview','ag','What the AG office will have to do',agSection(b));
   add('overview','fiscal','Fiscal note',fiscalSection(b));
   add('overview','changed','What has changed',`<section><h2>What has changed</h2>${b.ch.length?`<table class="compact"><tbody>${b.ch.slice().reverse().slice(0,12).map(x=>{const d=pd(x[0]);return `<tr><td style="white-space:nowrap">${d?fmtMDY(d)+' '+fmtTime(d):''}</td><td><b>${esc(x[1])}</b>: ${esc(x[2])}</td></tr>`}).join('')}</tbody></table>${b.ch.length>12?`<p class="small muted">Showing the latest 12 of ${b.ch.length}.</p>`:''}`:'<p class="small muted">No changes recorded since Deseret Docket started tracking this bill.</p>'}</section>`);
-  if(b.file) return out;
+  if(b.file){add('overview','review','Draft review',typeof outBillHTML==='function'?outBillHTML(b):'');return out}
   add('hearings','hearings','Committee hearings',`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight hcard" style="margin-bottom:8px"><div><b>${comInfo(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>${h.d>=TODAY?calBtn(h,b.session):''}</div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>`);
   add('hearings','floor','Floor calendar',X.floor);
   add('hearings','discussed','What was discussed',discussionSection(b));

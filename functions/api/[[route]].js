@@ -20,8 +20,9 @@
 // The email job (GitHub Actions, header X-Cron-Key):
 //   GET  /api/cron/subs          confirmed subscriptions and the bills each one covers
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
-import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady, customUnits } from "../../lib/fiscal.js";
+import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady, customUnits, unitNamer } from "../../lib/fiscal.js";
 import { KINDS as OUT_KINDS, cleanItem, listOutreach, ensureOutreach, outreachTick } from "../../lib/outreach.js";
+import { keepServer, addLog, sendRequests, sendReviewReminders, ensureReview } from "../../lib/review.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
 
 const DEPTS = new Set(["criminal", "civil", "pp", "appellate", "admin"]);
@@ -433,6 +434,55 @@ export async function onRequest(context) {
         await db.prepare("DELETE FROM outreach WHERE id = ?").bind(id0).run();
         return json({ ok: true, items: await listOutreach(db) });
       }
+      if (String(body.action || "").startsWith("review-")) {
+        // Draft review steps: send to divisions, remind, record an answer or a reply, mark it sent back, start the next version.
+        await ensureReview(db);
+        const row = /^[0-9a-f]{16}$/.test(id0) ? await db.prepare("SELECT id, kind, data FROM outreach WHERE id = ?").bind(id0).first() : null;
+        if (!row || row.kind !== "review") return bad("That draft review is gone.", 404);
+        const d = obj(row.data), who = user.display || user.name, a = body.action;
+        const divs = (Array.isArray(body.divisions) ? body.divisions : []).map(String).filter((x) => DIV_RE.test(x));
+        let info = {};
+        if (a === "review-send") {
+          if (!(d.divisions || []).length) return bad("Pick the divisions first (Edit).");
+          info = await sendRequests(env, db, url.origin, row.id, d, who, divs);
+          if (!info.sent && !info.outbox && !info.none.length) return bad("Every division on this review has already been asked.");
+        } else if (a === "review-remind") {
+          info = { reminded: await sendReviewReminders(env, db, url.origin, d, who, divs.length ? divs : null) };
+        } else if (a === "review-answer") {
+          // A division answered some other way (a call, a reply email, the hallway): the POC records it.
+          const v = divs[0]; const st = ["none", "comments", "waiting"].includes(body.status) ? body.status : "";
+          if (!v || !st || !(d.divisions || []).includes(v)) return bad("Pick the division and the answer.");
+          const prev = (d.reqs || {})[v] || {}; const vn = (await unitNamer(env, db, url.origin)).name(v);
+          d.reqs = { ...(d.reqs || {}), [v]: { ...prev, status: st, comments: String(body.comments || "").trim().slice(0, 6000), lang: String(body.lang || "").trim().slice(0, 6000), by: String(body.by || who).slice(0, 80), at: new Date().toISOString(), sent: prev.sent || "" } };
+          addLog(d, who, st === "waiting" ? `Reopened ${vn}` : `Recorded ${vn}: ${st === "none" ? "no concerns" : "comments"}${body.by ? " (from " + String(body.by).slice(0, 80) + ")" : ""}`);
+        } else if (a === "review-sent") {
+          const summary = String(body.summary || "").trim().slice(0, 20000);
+          const to = String(body.to || "").trim().slice(0, 600);
+          d.sent = { at: new Date().toISOString(), by: who, to, summary, via: ["outlook", "web", "copy", "graph"].includes(body.via) ? body.via : "outlook" };
+          addLog(d, who, `Sent the office's feedback back${to ? " to " + to : ""}`);
+        } else if (a === "review-unsend") {
+          delete d.sent; addLog(d, who, "Marked not sent back yet");
+        } else if (a === "review-log") {
+          const text = String(body.text || "").trim();
+          if (!text) return bad("Write what happened.");
+          addLog(d, who, text);
+        } else if (a === "review-close") {
+          d.closed = !!body.closed; addLog(d, who, d.closed ? "Closed" : "Reopened");
+        } else if (a === "review-next") {
+          // A new version came in: close this round and start the next one with the same people and divisions.
+          const t = new Date().toISOString();
+          const nd = { bill: d.bill || "", label: d.label || "", title: d.title || "", version: String(body.version || "").trim().slice(0, 60), from: d.from || "", fromRole: d.fromRole || "drafter",
+            fromEmail: d.fromEmail || "", legs: d.legs || [], received: /^\d{4}-\d{2}-\d{2}$/.test(body.received || "") ? body.received : t.slice(0, 10),
+            link: /^https:\/\/[^\s"<>]{4,600}$/.test(String(body.link || "")) ? String(body.link) : "", owner: d.owner || "", divisions: d.divisions || [], due: "", backBy: "", notes: "", closed: false, prev: row.id, log: [] };
+          addLog(nd, who, `New version received${nd.version ? " (" + nd.version + ")" : ""}${nd.from ? " from " + nd.from : ""}`);
+          d.closed = true; addLog(d, who, `New version received${nd.version ? " (" + nd.version + ")" : ""}; this round is closed`);
+          const nid = frand(8);
+          await db.prepare("INSERT INTO outreach (id, kind, data, by, created_at, updated_by, updated_at) VALUES (?, 'review', ?, ?, ?, ?, ?)").bind(nid, JSON.stringify(nd), user.name, t, user.name, t).run();
+          info = { next: nid };
+        } else return bad("Unknown step.");
+        await db.prepare("UPDATE outreach SET data = ?, updated_by = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(d), user.name, new Date().toISOString(), row.id).run();
+        return json({ ok: true, info, items: await listOutreach(db) });
+      }
       const kind = String(body.kind || "");
       if (!OUT_KINDS[kind]) return bad("Unknown kind.");
       const d = cleanItem(kind, body.item || {});
@@ -441,8 +491,13 @@ export async function onRequest(context) {
       if (kind === "testimony" && !d.bill) return bad("Pick the bill.");
       if (kind === "amend" && (!d.bill || !d.change)) return bad("Pick the bill and describe the change.");
       if (kind === "interim" && (!d.com || !d.topic)) return bad("Pick the interim committee and the topic.");
-      const cur = /^[0-9a-f]{16}$/.test(id0) ? await db.prepare("SELECT id, kind FROM outreach WHERE id = ?").bind(id0).first() : null;
+      if (kind === "review" && !d.bill && !d.title) return bad("Pick the bill or bill file, or name the draft.");
+      const cur = /^[0-9a-f]{16}$/.test(id0) ? await db.prepare("SELECT id, kind, data FROM outreach WHERE id = ?").bind(id0).first() : null;
       if (cur && cur.kind !== kind) return bad("That item is a different kind.");
+      if (kind === "review") {
+        if (cur) keepServer(d, obj(cur.data));
+        else { if (!d.received) d.received = t.slice(0, 10); addLog(d, user.display || user.name, `Draft received${d.version ? " (" + d.version + ")" : ""}${d.from ? " from " + d.from : ""}`); }
+      }
       if (cur) await db.prepare("UPDATE outreach SET data = ?, updated_by = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(d), user.name, t, cur.id).run();
       else await db.prepare("INSERT INTO outreach (id, kind, data, by, created_at, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(frand(8), kind, JSON.stringify(d), user.name, t, user.name, t).run();
       return json({ ok: true, items: await listOutreach(db) });

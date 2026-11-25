@@ -30,7 +30,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   `fiscal.js` (Fiscal Hive), `office.js` (association-position and budget uploads), `intel.js` (floor watch,
   collisions, run-before, media, follow the money), `legis.js` (legislator profiles), `learn.js`
   (Learn the Legislature: games, Capitol quirks, the sponsor ranking under “Members and their bills”, a
-  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Office Showdown, a timed quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `outreach.js` (the Outreach tab), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive and the email alerts)
+  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Office Showdown, a timed quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `outreach.js` (the Outreach tab), `review.js` (Outreach → Draft review), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive, the email alerts and Draft review with Outlook connected)
 - `site/config.json` – departments, divisions (with the keywords used to suggest a division),
   designations and priorities. Edit and commit to change the lists.
 - `site/data/` – bill, budget and legislator data; rewritten by the weekday update, don't edit by hand
@@ -39,7 +39,8 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
 - `functions/api/[[route]].js` – office information, accounts, the watch list and email sign-ups,
   stored in the Cloudflare D1 database bound to the Pages project as `DB`
 - `functions/respond/` – the no-sign-in pages division staff open from Fiscal Hive emails
-- `lib/` – shared sign-in code, the landing page, Fiscal Hive email logic, Outreach storage and follow-up reminders (`outreach.js`) and the honeybee logo
+- `functions/review/` – the no-sign-in pages divisions open from Draft review emails
+- `lib/` – shared sign-in code, the landing page, Fiscal Hive email logic, Outreach storage and follow-up reminders (`outreach.js`), Draft review emails and reminders (`review.js`) and the honeybee logo
 - `intel_update.py` – newspaper mentions and sentiment, plus `data/ag.json` (the AG's office in the news, its press releases and AG Brown's op-eds); runs after each data update
 - `media_avail.py` – transcribes and summarizes House/Senate media availabilities (`.github/workflows/media.yml`)
 - `update_docket.py` – downloads bills, bill files, fiscal notes, text changes, transcripts, COBI budget
@@ -119,6 +120,22 @@ units (a name and Send/CC emails) stored in the `fn_customdivs` setting.
 
 The relationship side of the session, for admins and anyone with Admin → Edit → **Can use Outreach**:
 
+- **Draft review:** every draft out for the office's review, in three columns by whose turn it is: **Waiting on us**, **Waiting on
+  divisions** and **Waiting on the drafter**, each with how long it's been there.
+  1. **Log a draft** when one comes in from the drafter (LRGC), a sponsor or a stakeholder: the bill or bill file, version, who it's from
+     and their email, the legislators to copy, a link to the draft, the point of contact (Dan or Katie), the divisions and the due dates.
+  2. **Send to divisions** emails each division (its people under Fiscal Hive → Settings → Who gets requests) with **No concerns** and
+     **Send comments** buttons. They answer without signing in; comments can include suggested language. A division that answered some
+     other way can be recorded with **Record answer**.
+  3. One reminder goes out by itself on the due date (or two days after the request with no due date); **Remind** sends one any time.
+     When the last division answers, the point of contact gets an email with every answer.
+  4. **Send feedback back** drafts the email to the drafter from the divisions' comments (with or without division names). Open it in
+     Outlook or Outlook on the web, send it, then press **Yes, mark it sent back**.
+  5. **Log a reply or call** adds to the draft's trail; **New version came in** closes the round and starts the next one with the same
+     people and divisions. The bill page (or the bill file's page) shows its draft review too.
+  Until email is connected, the division emails wait in Fiscal Hive → Settings → Outbox. **See it with email connected** walks through how
+  it works once Outlook is hooked up (spotting drafts in the POC's inbox, sending from their own mailbox in the drafter's thread, and
+  logging replies automatically), which would need Microsoft Graph Mail.Send and Mail.Read permissions on Dan's and Katie's mailboxes.
 - **Meetings:** who the office met with (legislators, staff, stakeholders), who from the office went, bills discussed, notes and a follow-up date.
 - **Asks:** what the office asked each legislator for, what they said or committed to, status, owner and follow-up date.
 - **Testimony:** pick a bill and get a two-minute draft built from the office position, what the bill does, the divisions it touches,

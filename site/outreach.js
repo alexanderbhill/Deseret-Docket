@@ -3,6 +3,7 @@
    Overview · Meetings (who we met, about what, follow-up) · Asks (what we asked each legislator for and what
    they committed to) · Testimony (a two-minute draft built from the bill's office information, with a
    rehearsal timer) · Amendments (language requests tied to bill lines) · Interim (study items by committee).
+   Draft review (review.js): a draft out to the divisions for comments and back to the drafter.
    Follow-up dates show as a badge on the tab and are emailed to the owner by the 15-minute email job. */
 'use strict';
 let OUT=null, OUTMINE=false, OUTOPEN=true, TESTI=null;
@@ -19,21 +20,23 @@ function outBill(key){if(!key)return '';const b=BYKEY[key];const [ses,num]=key.s
 const outMe=()=>[ME.user,ME.display].filter(Boolean).map(x=>x.toLowerCase());
 function outMine(it){const me=outMe();const ow=String(it.kind==='meet'?(it.who||[])[0]||'':it.owner||'').toLowerCase();
   return me.includes(ow)||(it.kind==='meet'&&(it.who||[]).some(w=>me.includes(String(w).toLowerCase())))||(!ow&&it.by===ME.user)}
-function outIsOpen(it){return it.kind==='ask'?['open','committed'].includes(it.status):it.kind==='amend'?!['adopted','dropped'].includes(it.status):it.kind==='meet'?!!it.followup&&!it.done:it.kind==='interim'?it.status!=='done':it.status!=='given'}
-const outDue=it=>it.kind==='meet'?it.followup:it.kind==='interim'?it.date:it.due||'';
-function outDueCount(){const l=outLoad();if(!l)return 0;return l.filter(it=>['ask','amend','meet'].includes(it.kind)&&outIsOpen(it)&&outDue(it)&&outDue(it)<=todayStr&&outMine(it)).length}
+function outIsOpen(it){return it.kind==='review'?revTurn(it)!=='closed':it.kind==='ask'?['open','committed'].includes(it.status):it.kind==='amend'?!['adopted','dropped'].includes(it.status):it.kind==='meet'?!!it.followup&&!it.done:it.kind==='interim'?it.status!=='done':it.status!=='given'}
+const outDue=it=>it.kind==='review'?it.due||'':it.kind==='meet'?it.followup:it.kind==='interim'?it.date:it.due||'';
+function outDueCount(){const l=outLoad();if(!l)return 0;return l.filter(it=>['ask','amend','meet'].includes(it.kind)&&outIsOpen(it)&&outDue(it)&&outDue(it)<=todayStr&&outMine(it)).length+l.filter(it=>it.kind==='review'&&revTurn(it)==='us'&&outMine(it)).length}
 const outDate=s=>s?fmtLong(pd(s+'T00:00')):'';
 function outDueTag(it){const d=outDue(it);if(!d||!outIsOpen(it))return d?`<span class="small muted">${esc(outDate(d))}</span>`:'';
   return `<span class="pill ${d<todayStr?'warn':d===todayStr?'pass':'muted'}">${d<todayStr?'Overdue · ':d===todayStr?'Today · ':''}${esc(outDate(d))}</span>`}
 
 // ---------- the form for each kind
-const OUT_LABEL={meet:'meeting',ask:'ask',amend:'amendment request',interim:'interim study item',testimony:'testimony'};
+const OUT_LABEL={review:'draft for review',meet:'meeting',ask:'ask',amend:'amendment request',interim:'interim study item',testimony:'testimony'};
 const OUT_OPTS={
   askType:[['amendment','Amend the bill'],['hold','Hold or circle it'],['sponsor','Run or sponsor a bill'],['vote','Vote a certain way'],['meeting','Meet with us'],['other','Something else']],
   askStatus:[['open','Open'],['committed','They committed'],['done','Done'],['declined','Declined']],
   amendStatus:[['idea','Idea'],['requested','Requested'],['drafted','Drafted'],['adopted','Adopted'],['dropped','Dropped']],
-  interimStatus:[['watch','Watching'],['prepping','Preparing'],['presented','Presented'],['done','Done']]};
+  interimStatus:[['watch','Watching'],['prepping','Preparing'],['presented','Presented'],['done','Done']],
+  role:[['drafter','Drafting attorney (LRGC)'],['sponsor','Sponsor'],['stakeholder','Stakeholder']]};
 const OUT_FIELDS={
+  review:[['bill','Bill or bill file','billfile'],['version','Version','text'],['title','Draft title (if it isn’t a bill or bill file yet)','text'],['received','Received','date'],['from','From (name)','text'],['fromRole','They are the','select','role'],['fromEmail','Their email (for sending the feedback back)','text'],['legs','Sponsor and legislators to copy on the feedback','legs'],['link','Link to the draft','text'],['owner','Point of contact','person'],['divisions','Divisions to review it','divisions'],['due','Comments due from divisions','date'],['backBy','Needs to go back by','date'],['notes','What the divisions should look for (goes in their email)','area']],
   meet:[['date','Date','date'],['legs','Legislators','legs'],['others','Others there (staff, stakeholders)','text'],['who','From the office','people'],['bills','Bills discussed','bills'],['topic','Topic','text'],['notes','What was said','area'],['followup','Follow up by','date'],['done','Follow-up is done','check']],
   ask:[['leg','Legislator','leg'],['bill','Bill (optional)','bill'],['type','Kind of ask','select','askType'],['ask','What we asked for','area'],['status','Status','select','askStatus'],['committed','What they said or committed to','area'],['due','Follow up by','date'],['owner','Owner','person'],['notes','Notes','area']],
   amend:[['bill','Bill','bill'],['lines','Where (page and lines)','text'],['change','Proposed change','area'],['why','Why the office wants it','area'],['from','Asked of (sponsor, drafting attorney…)','text'],['status','Status','select','amendStatus'],['owner','Owner','person'],['due','Needed by','date']],
@@ -53,18 +56,21 @@ function outField([f,label,type,opt],v){
   else if(type==='person')input=`<select id="${id}"><option value="">—</option>${[...new Set([...PEOPLE,...(v?[v]:[])])].map(p=>`<option ${v===p?'selected':''}>${esc(p)}</option>`).join('')}</select>`;
   else if(type==='bill')input=`<input id="${id}" list="outBillDL" placeholder="HB 101" value="${esc(v?outBillText(v):'')}">`;
   else if(type==='bills')input=`<input id="${id}" list="outBillDL" placeholder="HB 101, SB 20" value="${esc((v||[]).map(outBillText).join(', '))}">`;
+  else if(type==='billfile')input=`<input id="${id}" list="revBillDL" placeholder="HB 101, or start typing a bill file’s title" value="${esc(v?outBillText(v)||'':'')}"><datalist id="revBillDL">${allRows(UI.session).sort((a,b)=>a.file-b.file||SORTS.num(a,b)).map(b=>`<option value="${esc(b.file?b.title:billLabel(b))}">${esc(b.file?`Bill file · ${b.sponsor||''}`:b.title)}</option>`).join('')}</datalist>`;
+  else if(type==='divisions')input=`<div class="out-checks" id="${id}">${CONFIG.departments.map(d=>{const xs=CONFIG.divisions.filter(x=>x.dept===d.id);return xs.length?`<div class="rev-dgrp"><b class="tiny muted">${esc(d.name)}</b>${xs.map(x=>`<label><input type="checkbox" value="${x.id}" ${(v||[]).includes(x.id)?'checked':''}>${esc(x.name)}</label>`).join('')}</div>`:''}).join('')}</div><p class="tiny muted" style="margin:4px 0 0">Requests go to each division’s people under Fiscal Hive → Settings → Who gets requests.</p>`;
   else if(type==='com')input=`<select id="${id}"><option value="">Choose…</option>${outInterims().map(c=>`<option value="${esc(c.id)}" ${v===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
   else if(type==='division')input=`<select id="${id}"><option value="">—</option>${CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id).map(x=>`<option value="${x.id}" ${v===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select>`;
   else input=`<input id="${id}" value="${esc(v||'')}">`;
-  return `<div class="field ${['area','legs','people'].includes(type)?'wide':''}"><label for="${id}">${label}</label>${input}</div>`;
+  return `<div class="field ${['area','legs','people','divisions'].includes(type)?'wide':''}"><label for="${id}">${label}</label>${input}</div>`;
 }
-const outBillText=key=>{const b=BYKEY[key];return b?`${billLabel(b)}`:shortNum(String(key).split('/')[1]||key)};
+const outBillText=key=>{const b=BYKEY[key];return b?(b.file?b.title:`${billLabel(b)}`):shortNum(String(key).split('/')[1]||key)};
 const outParseBills=t=>[...new Set(String(t||'').split(/[,;]+/).map(x=>typeof normBill==='function'?normBill(x.trim(),UI.session):'').filter(Boolean))];
 function outDialog(kind,it,pre){
   const cur={...(pre||{}),...(it||{})};
   if(kind==='meet'&&!cur.date)cur.date=todayStr;
   if(kind==='meet'&&!cur.who)cur.who=PEOPLE.filter(p=>outMe().includes(p.toLowerCase())).slice(0,1);
-  if(['ask','amend','interim'].includes(kind)&&!cur.owner)cur.owner=PEOPLE.find(p=>outMe().includes(p.toLowerCase()))||'';
+  if(kind==='review'&&!cur.received)cur.received=todayStr;
+  if(['ask','amend','interim','review'].includes(kind)&&!cur.owner)cur.owner=PEOPLE.find(p=>outMe().includes(p.toLowerCase()))||'';
   let dlg=$('outDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='outDlg';document.body.appendChild(dlg)}
   dlg.innerHTML=`<form method="dialog" id="outForm"><h2>${it?'Edit':'Add'} ${OUT_LABEL[kind]}</h2>
    <datalist id="outBillDL">${allRows(UI.session).filter(b=>!b.file).sort(SORTS.num).map(b=>`<option value="${esc(billLabel(b))}">${esc(b.title)}</option>`).join('')}</datalist>
@@ -76,23 +82,25 @@ function outDialog(kind,it,pre){
   if($('outDel'))$('outDel').onclick=async()=>{if(!confirm(`Delete this ${OUT_LABEL[kind]}?`))return;try{const j=await api('outreach',{action:'delete',id:it.id});OUT=j.items;dlg.close();toast('Deleted');route(true)}catch(e){toast(e.message)}};
   $('outForm').onsubmit=async e=>{e.preventDefault();const item={};
     for(const [f,,type] of OUT_FIELDS[kind]){const el=$('of-'+f);
-      item[f]=type==='check'?el.checked:type==='legs'||type==='people'?[...el.querySelectorAll('input:checked')].map(x=>x.value):type==='bills'?outParseBills(el.value):type==='bill'?(outParseBills(el.value)[0]||''):el.value}
+      item[f]=type==='check'?el.checked:type==='billfile'?revParseBill(el.value):type==='legs'||type==='people'||type==='divisions'?[...el.querySelectorAll('input:checked')].map(x=>x.value):type==='bills'?outParseBills(el.value):type==='bill'?(outParseBills(el.value)[0]||''):el.value}
+    if(kind==='review'){const raw=$('of-bill').value.trim();if(raw&&!item.bill&&!item.title)item.title=raw;const b=BYKEY[item.bill];item.label=b&&!b.file?billLabel(b):'';if(b&&!item.title)item.title=b.title;if(b&&b.file&&!item.title)item.title=b.title;
+      if(b&&!item.legs.length&&b.spId)item.legs=[b.spId];if(!item.bill&&!item.title){toast('Pick the bill or bill file, or name the draft.');return}}
     if(['bill','bills'].some(t=>OUT_FIELDS[kind].some(f=>f[2]===t))){const raw=(dlg.querySelector('[list=outBillDL]')||{}).value||'';if(raw.trim()&&!outParseBills(raw).length){toast('Write bills like “HB 101” or “SB 20”.');return}}
-    try{const j=await api('outreach',{kind,id:it?it.id:'',item});OUT=j.items;dlg.close();toast(`${OUT_LABEL[kind][0].toUpperCase()+OUT_LABEL[kind].slice(1)} saved`);route(true)}catch(err){toast(err.message)}};
+    try{const j=await api('outreach',{kind,id:it?it.id:'',item});OUT=j.items;dlg.close();const rd=$('revDlg');if(rd&&rd.open&&it&&typeof revOpen==='function')revOpen(it.id);toast(`${OUT_LABEL[kind][0].toUpperCase()+OUT_LABEL[kind].slice(1)} saved`);route(true)}catch(err){toast(err.message)}};
 }
 
 // ---------- page
-const OUT_TABS=[['','Overview'],['meetings','Meetings'],['asks','Asks'],['testimony','Testimony'],['amendments','Amendments'],['interim','Interim']];
+const OUT_TABS=[['','Overview'],['drafts','Draft review'],['meetings','Meetings'],['asks','Asks'],['testimony','Testimony'],['amendments','Amendments'],['interim','Interim']];
 function pageOutreach(sub){
   if(!canOutreach())return shell('',`<div class="card"><h2>Outreach</h2><p class="desc">Ask an admin to turn on Outreach for your account.</p></div>`);
   const L=outLoad();
   const view=(sub||'').split('-')[0], arg=(sub||'').slice(view.length+1);
-  const head=`<div class="card out-head"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div><h2>Outreach</h2><p class="desc">Meetings with legislators, what the office asked for, testimony, amendment requests and interim work, in one place. Follow-up dates you own show as a badge on the tab and arrive by email.</p></div>
-    <div class="out-add"><button class="btn primary" data-outnew="meet">${ic('users')}Log a meeting</button><button class="btn" data-outnew="ask">Add an ask</button><button class="btn" data-outnew="amend">Request an amendment</button></div></div>
+  const head=`<div class="card out-head"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div><h2>Outreach</h2><p class="desc">Drafts out for the divisions’ review, meetings with legislators, what the office asked for, testimony, amendment requests and interim work, in one place. Follow-up dates you own show as a badge on the tab and arrive by email.</p></div>
+    <div class="out-add"><button class="btn primary" data-outnew="review">${ic('file')}Log a draft</button><button class="btn" data-outnew="meet">${ic('users')}Log a meeting</button><button class="btn" data-outnew="ask">Add an ask</button><button class="btn" data-outnew="amend">Request an amendment</button></div></div>
    <nav class="out-nav" aria-label="Outreach">${OUT_TABS.map(([k,l])=>`<a href="#outreach${k?'-'+k:''}" class="${view===k?'on':''}" ${view===k?'aria-current="page"':''}>${l}</a>`).join('')}</nav>
    ${['meetings','asks','amendments','interim'].includes(view)?`<div class="out-filt"><label class="check"><input type="checkbox" id="outMine" ${OUTMINE?'checked':''}><span>Only mine</span></label><label class="check"><input type="checkbox" id="outOpen" ${OUTOPEN?'checked':''}><span>Hide finished</span></label></div>`:''}</div>`;
   if(!L)return shell('outreach',head+`<div class="card"><p>${OUT&&OUT.error?esc(OUT.error):'Loading…'}</p></div>`);
-  const body=view==='meetings'?outMeetings():view==='asks'?outAsks():view==='testimony'?outTestimony(arg):view==='amendments'?outAmends():view==='interim'?outInterim():outOverview();
+  const body=view==='drafts'?revPage():view==='meetings'?outMeetings():view==='asks'?outAsks():view==='testimony'?outTestimony(arg):view==='amendments'?outAmends():view==='interim'?outInterim():outOverview();
   return shell('outreach',head+body);
 }
 const outFilt=l=>l.filter(it=>(!OUTMINE||outMine(it))&&(!OUTOPEN||outIsOpen(it)||(it.kind==='meet')));
@@ -109,7 +117,7 @@ function outOverview(){
   const spons={};for(const b of office)if(b.spId)(spons[b.spId]=spons[b.spId]||[]).push(b);
   const gaps=Object.entries(spons).filter(([id])=>!lastMet[id]).sort((a,b)=>b[1].length-a[1].length);
   const metN=Object.keys(lastMet).length, legN=(LEGS||[]).filter(l=>l.id).length;
-  return `<div class="grid2" style="align-items:start">
+  return revOverview()+`<div class="grid2" style="align-items:start">
    <div class="card"><h2>Due this week</h2>${due.length?`<div class="rows">${due.map(it=>`<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><div class="what" style="font-size:14.5px">${esc(it.kind==='ask'?it.ask:it.kind==='amend'?`Amendment: ${it.change}`:`Follow up: ${it.topic||'meeting'}`)}<span class="sub">${it.kind==='meet'?(it.legs||[]).map(outLegName).map(esc).join(', '):it.leg?esc(outLegName(it.leg)):''}${it.bill?' · '+outBill(it.bill):''}${it.owner?' · '+esc(it.owner):''}</span></div><div class="r">${outDueTag(it)}${outEdit(it)}</div></div>`).join('')}</div>`:'<p class="empty">Nothing due in the next week.</p>'}</div>
    <div class="card"><h2>Hearings coming up</h2><p class="desc">Bills the office has a position on with a hearing in the next two weeks.</p>${upcoming.length?`<div class="rows">${upcoming.map(({b,h})=>{const t=tests.find(x=>x.bill===b.key);return `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><div class="what" style="font-size:14.5px">${outBill(b.key)} ${esc(b.title)}<span class="sub">${esc(posName(posOf(b)))} · ${esc(h.committee)} · ${fmtMD(h.d)} ${fmtTime(h.d)}</span></div><div class="r">${t?`<span class="pill ${t.status==='final'?'pass':'muted'}">${t.status==='final'?'Testimony ready':'Draft'}</span>`:''}<a class="btn sm ${t?'':'primary'}" href="#outreach-testimony-${esc(b.key)}">${t?'Open':'Build testimony'}</a></div></div>`}).join('')}</div>`:'<p class="empty">No hearings in the next two weeks for bills with an office position.</p>'}</div></div>
   <div class="grid2" style="align-items:start">
@@ -202,7 +210,8 @@ function outTestimony(arg){
 
 // ---------- on the bill page and legislator profiles
 function outBillHTML(b){
-  if(!canOutreach()||b.file)return '';const L=outLoad();if(!L)return '';
+  if(!canOutreach())return '';const L=outLoad();if(!L)return '';
+  if(b.file)return revBillBox(b)?`<section><h2>Draft review</h2>${revBillBox(b)}</section>`:'';
   const mt=outOf('meet').filter(m=>(m.bills||[]).includes(b.key)).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
   const as=outOf('ask').filter(a=>a.bill===b.key), am=outOf('amend').filter(a=>a.bill===b.key), t=outOf('testimony').find(x=>x.bill===b.key);
   const pre=esc(JSON.stringify({bills:[b.key],bill:b.key,legs:b.spId?[b.spId]:[],leg:b.spId||''}));
@@ -210,6 +219,7 @@ function outBillHTML(b){
    <div class="out-billbox"><div><b>Testimony</b><div class="small">${t?`${esc({draft:'Draft',final:'Final',given:'Given'}[t.status])}${t.testifier?' · '+esc(t.testifier):''}`:'<span class="muted">None yet</span>'}</div><a class="btn sm ${t?'':'primary'}" href="#outreach-testimony-${esc(b.key)}">${t?'Open testimony':'Build testimony'}</a></div>
     <div><b>Meetings</b><div class="small">${mt.length?`${plural(mt.length,'meeting')}, last ${esc(outDate(mt[0].date))} with ${esc((mt[0].legs||[]).map(outLegName).join(', ')||mt[0].others||'—')}`:'<span class="muted">None logged</span>'}</div><button class="btn sm" data-outnew="meet" data-outpre="${pre}">Log a meeting</button></div>
     <div><b>Asks</b><div class="small">${as.length?as.slice(0,3).map(a=>`${esc(outLegName(a.leg))}: ${esc(a.ask.slice(0,70))} <span class="tiny muted">(${esc(a.status)})</span>`).join('<br>'):'<span class="muted">None</span>'}</div><button class="btn sm" data-outnew="ask" data-outpre="${pre}">Add an ask</button></div>
+    ${revBillBox(b)}
     <div><b>Amendments</b><div class="small">${am.length?am.slice(0,3).map(a=>`${esc(a.lines||'')} ${esc(a.change.slice(0,60))} <span class="tiny muted">(${esc(a.status)})</span>`).join('<br>'):'<span class="muted">None</span>'}</div><button class="btn sm" data-outnew="amend" data-outpre="${pre}">Request an amendment</button></div></div></section>`;
 }
 function outLegHTML(id){
@@ -228,6 +238,7 @@ document.addEventListener('click',e=>{
 });
 function outStopTimer(){if(OUTTIMER){clearInterval(OUTTIMER.iv);OUTTIMER=null}}
 function outBind(){
+  if(typeof revBind==='function')revBind();
   if(!location.hash.startsWith('#outreach')){outStopTimer();return}
   on('outMine','onchange',e=>{OUTMINE=e.target.checked;route(true)});
   on('outOpen','onchange',e=>{OUTOPEN=e.target.checked;route(true)});
