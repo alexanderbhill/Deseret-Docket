@@ -50,3 +50,16 @@ jobs:
           git add -A site/data
           git commit -m "Data update $(date -u +%Y-%m-%dT%H:%MZ)" || echo "No changes"
           for i in 1 2 3; do git pull --rebase -q -X theirs && git push && break; sleep 5; done
+
+      # Right after the new data is live: write the office list into the shared Excel tracker
+      # (the sheet the admin chose) and send the Updates page its preview. Without the MS_* secrets
+      # it only sends the preview.
+      - name: Update the shared bill tracker workbook
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://deseret-docket.pages.dev' }}
+          CRON_KEY: ${{ secrets.CRON_KEY || secrets.CRON_SECRET }}
+          MS_TENANT_ID: ${{ secrets.MS_TENANT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MS_CLIENT_SECRET: ${{ secrets.MS_CLIENT_SECRET }}
+        run: |
+          python3 -I sync_tracker.py site/data || echo "Tracker sync failed; the site data still published."

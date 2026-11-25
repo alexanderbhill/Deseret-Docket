@@ -5,7 +5,7 @@
 let LG={score:0,streak:0,best:lsGet('docket-learn-best',{}),q:null,answered:null};
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const legTitle=l=>`${l.house==='H'?'Rep.':'Sen.'} ${l.name}`;
-const GAMES=[['faces','🧑‍⚖️ Face match'],['map','🗺️ District map'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['terms','📖 Floor vocabulary']];
+const GAMES=[['faces','🧑‍⚖️ Face match'],['map','🗺️ District map'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['terms','📖 Floor vocabulary'],['agquiz','⚖️ AG Showdown']];
 function lgBest(k,v){if(v>(LG.best[k]||0)){LG.best[k]=v;lsSet('docket-learn-best',LG.best)}
   // Post to the shared leaderboard when it beats what the board has for you.
   if(ME&&LGB&&v>(((LGB.board[ME.user]||{}).s||{})[k]||0))api('lgboard',{game:k,score:v}).then(j=>{LGB=j}).catch(()=>{})}
@@ -82,6 +82,7 @@ const LEARN_PLAY=[['faces','🧑‍⚖️','Face match','See a photo, pick the l
  ['quotes','💬','Who said it?','A real line from a committee hearing. Guess which legislator said it.'],
  ['redo','🏛️','Capitol quirks','Jell-O, the state dinosaur, a 45-day session: odd bills and fun facts from Utah’s Legislature.'],
  ['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],
+ ['agquiz','⚖️','AG Showdown','A fast, Kahoot-style quiz on the Attorney General’s Office: history, leaders, big cases and priorities, with talking points.'],
  ['board','🏆','Leaderboard','See who in the office has the longest streak in each game.']];
 const LEARN_READ=[['process','🛤️','How a bill becomes law','Where bill ideas come from, who drafts and prices them, every step to the governor, and how the budget gets built.'],
  ['ag','⚖️','The AG’s Office, explained','Counselors, protectors and stewards: the org chart, what each division does, the office in the news, and fun facts.'],
@@ -99,7 +100,7 @@ function pageLearn(sub,extra=''){
    <nav class="learn-nav" aria-label="Learn"><a href="#learn" class="${cur===''?'on':''}">🏠 Start</a></nav>
    <div class="learn-navs"><nav class="learn-nav" aria-label="Games"><span class="nav-l">Play</span>${LEARN_PLAY.map(chip).join('')}</nav>
    <nav class="learn-nav" aria-label="Guides"><span class="nav-l">Learn</span>${LEARN_READ.map(chip).join('')}</nav></div></div>`;
-  const pick={faces:gameFaces,party:gameParty,redo:gameRedo,facts:gameFacts,quotes:gameQuotes,terms:gameTerms,map:()=>typeof gameMap==='function'?gameMap():''};
+  const pick={faces:gameFaces,party:gameParty,redo:gameRedo,facts:gameFacts,quotes:gameQuotes,terms:gameTerms,map:()=>typeof gameMap==='function'?gameMap():'',agquiz:()=>typeof gameAG==='function'?gameAG():''};
   let body='';
   if(pick[sub])body=pick[sub]();else if(sub==='process')body=guideProcess();else if(sub==='members')body=memberGrid();else if(sub==='board')body=boardHTML();
   else if(sub==='districts')body=typeof refMap==='function'?refMap():'';else if(sub==='ag')body=typeof pageAGGuide==='function'?pageAGGuide():'';

@@ -54,7 +54,7 @@ const queued=()=>(FH.requests||[]).filter(r=>r.status==='queued'&&r.poc===ME.use
 async function fhLoad(force){
   const S=UI.session;
   if(FH&&FH.session===S&&!force) return;
-  try{const j=await api('fn/state?session='+encodeURIComponent(S));FH={...j,session:S};}catch(e){FH={error:e.message,session:S}}
+  try{const j=await api('fn/state?session='+encodeURIComponent(S));FH={...j,session:S};FH_CUSTOM=(j.customDivs||[]).map(d=>({...d,dept:'custom'}));}catch(e){FH={error:e.message,session:S}}
   if(location.hash.startsWith('#fiscal'))route(true);
 }
 async function fhAct(path,body,msg){try{const r=await api(path,body);if(msg)toast(msg);await fhLoad(true);return r}catch(e){toast(e.message);return null}}
@@ -94,8 +94,12 @@ function fhAccuracy(){
   const hits=routed.filter(c=>!miss(c)).length, pct=Math.round(hits/routed.length*100);
   return `<div class="acc" title="A bill counts as a miss if the POC changed the suggested divisions before sending, or a division answered “wrong section.”"><div class="acc-l">Suggestion accuracy</div><div class="acc-n">${pct}%</div><div class="bar acc-bar" style="--c:${pct>=80?'var(--green)':pct>=60?'var(--steel)':'var(--maroon)'}"><i style="width:${pct}%"></i></div><div class="small muted">${hits} of ${routed.length} sent to the right place the first time · <button class="linkbtn small" data-fhmiss>see misses</button></div></div>`;
 }
+// Every unit the Fiscal Hive can send to: the office's divisions (Executive included) plus custom ones.
+const fhDivs=()=>[...CONFIG.divisions,...FH_CUSTOM];
+const fhGroups=()=>[...CONFIG.departments,...(FH_CUSTOM.length?[{id:'custom',name:'Custom'}]:[])];
+function fhOpts(skip,cur){return fhGroups().map(d=>`<optgroup label="${esc(d.name)}">${fhDivs().filter(x=>x.dept===d.id&&!(skip||[]).includes(x.id)).map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}
 function divChips(sel,ai){
-  const opts=CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id&&!sel.includes(x.id)).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('');
+  const opts=fhOpts(sel);
   return `<div class="fh-divs">${sel.map(d=>`<span class="chip fh-chip" data-full="${esc((c=>c.send.length?`To: ${c.send.map(x=>x.n||x.e).join(', ')}${c.cc.length?' · CC: '+c.cc.map(x=>x.n||x.e).join(', '):''}`:'No contacts yet: add them under Settings')(fhContact(d)))}"><span class="dot" style="--c:${msColor('divisions',d)}"></span>${esc(divName(d))}${(ai.divs||[]).includes(d)?' <span class="tiny muted">suggested</span>':''}<button type="button" data-fhrm="${esc(d)}" aria-label="Remove ${esc(divName(d))}">×</button></span>`).join('')||'<span class="small muted">No division chosen yet.</span>'}
    <select id="fhAdd" aria-label="Add a division"><option value="">+ Add a division</option>${opts}</select></div>`;
 }
@@ -135,7 +139,7 @@ function fhAttention(cards){
     return rs.map(r=>{const sug=r.answer&&r.answer.suggest&&r.answer.suggest!=='unknown'?r.answer.suggest:'';
      return `<div class="fh-row attn"><div><b>${esc(shortNum(c.num))}</b> <span class="pill ink">${esc(c.version)}</span><div class="serif">${esc(c.title)}</div></div>
       <div>${r.status==='wrong'?`<div><b>${esc(divName(r.division))}</b> says it was sent to the wrong place${sug?` and should go to <b>${esc(divName(sug))}</b>`:''}.</div>${r.answer.note?`<div class="small">“${esc(r.answer.note)}”${r.answer.by?` (${esc(r.answer.by)})`:''}</div>`:''}`:`<div><b>${esc(divName(r.division))}</b> has nobody to email. <button class="linkbtn" data-fhview="settings">Add a contact</button>, then resend.</div>`}</div>
-      <div class="fh-rbtns"><select data-fhto="${esc(r.id)}" aria-label="Send to">${CONFIG.divisions.map(d=>`<option value="${d.id}" ${(sug||r.division)===d.id?'selected':''}>${esc(d.name)}</option>`).join('')}</select><button class="btn sm primary" data-fhreroute="${esc(c.id)}|${esc(r.id)}">Send</button></div></div>`}).join('')}).join('')}</div></div>`;
+      <div class="fh-rbtns"><select data-fhto="${esc(r.id)}" aria-label="Send to">${fhOpts([],sug||r.division)}</select><button class="btn sm primary" data-fhreroute="${esc(c.id)}|${esc(r.id)}">Send</button></div></div>`}).join('')}).join('')}</div></div>`;
 }
 function median(a){if(!a.length)return null;const s=a.slice().sort((x,y)=>x-y);const m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2}
 function fhBoard(){
@@ -186,7 +190,7 @@ function fhStaffCard(){
    <div class="filters"><div class="field"><label for="fhStaffFile">Excel or CSV file</label><input type="file" id="fhStaffFile" accept=".xlsx,.xls,.csv,.txt"></div></div>
    ${FHSTAFF&&FHSTAFF.err?`<p class="small" style="color:var(--maroon)">${esc(FHSTAFF.err)}</p>`:''}
    ${P?`<p class="small"><b>${plural(P.length,'person')}</b> found · ${P.filter(p=>p.divs.length).length} matched to a division. Fix any row before adding.</p>
-    <div class="tablewrap"><table class="compact"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Covers (from the sheet)</th><th>Gets requests for</th></tr></thead><tbody>${P.map((p,i)=>`<tr><td>${esc(p.name)}</td><td class="small">${esc(p.email)}</td><td><select data-fhsrole="${i}" aria-label="Role"><option value="send" ${p.role==='send'?'selected':''}>Send</option><option value="cc" ${p.role==='cc'?'selected':''}>CC</option></select></td><td class="small">${esc(p.cover)}</td><td>${p.divs.map(d=>`<span class="chip">${esc(divName(d))} <button type="button" class="linkbtn tiny" data-fhsrm="${i}|${esc(d)}" aria-label="Remove">✕</button></span>`).join(' ')}<select data-fhsadd="${i}" aria-label="Add a division"><option value="">${p.divs.length?'+ Add…':'Pick a division…'}</option>${CONFIG.divisions.filter(d=>!p.divs.includes(d.id)).map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+    <div class="tablewrap"><table class="compact"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Covers (from the sheet)</th><th>Gets requests for</th></tr></thead><tbody>${P.map((p,i)=>`<tr><td>${esc(p.name)}</td><td class="small">${esc(p.email)}</td><td><select data-fhsrole="${i}" aria-label="Role"><option value="send" ${p.role==='send'?'selected':''}>Send</option><option value="cc" ${p.role==='cc'?'selected':''}>CC</option></select></td><td class="small">${esc(p.cover)}</td><td>${p.divs.map(d=>`<span class="chip">${esc(divName(d))} <button type="button" class="linkbtn tiny" data-fhsrm="${i}|${esc(d)}" aria-label="Remove">✕</button></span>`).join(' ')}<select data-fhsadd="${i}" aria-label="Add a division"><option value="">${p.divs.length?'+ Add…':'Pick a division…'}</option>${fhOpts(p.divs)}</select></td></tr>`).join('')}</tbody></table></div>
     <p style="margin-top:10px"><button class="btn primary" id="fhStaffApply">Add these people to “Who gets requests” and save</button> <button class="btn" id="fhStaffCancel">Cancel</button></p>
     <p class="tiny muted">Adding keeps the addresses already listed for each division.</p>`:''}</div>`;
 }
@@ -197,13 +201,19 @@ const fhPeopleParse=t=>String(t||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Bo
 let FHOUT=null;
 function fhSettings(){
   if(!FHOUT){api('fn/outbox').then(j=>{FHOUT=j;route(true)}).catch(()=>{FHOUT={outbox:[]}})}
-  const groups=CONFIG.departments.map(d=>`<h4 style="margin:16px 0 4px">${esc(d.name)}</h4>${CONFIG.divisions.filter(x=>x.dept===d.id).map(x=>{const c=fhContact(x.id);const fb=(FH.sectionEmails||{})[x.id]||[];
+  const groups=fhGroups().map(d=>`<h4 style="margin:16px 0 4px">${esc(d.name)}</h4>${fhDivs().filter(x=>x.dept===d.id).map(x=>{const c=fhContact(x.id);const fb=(FH.sectionEmails||{})[x.id]||[];
     return `<div class="fh-contact2"><b>${esc(x.name)}</b><div class="field"><label for="ct-${x.id}" class="tiny">Send (To)</label><input id="ct-${x.id}" data-ct="${x.id}" value="${esc(fhPeopleStr(c.send))}" placeholder="${fb.length?esc('Using accounts in this section: '+fb.join(', ')):'Name <name@agutah.gov>, …'}"></div><div class="field"><label for="cc-${x.id}" class="tiny">CC</label><input id="cc-${x.id}" data-cc="${x.id}" value="${esc(fhPeopleStr(c.cc))}" placeholder="Copied on every request"></div></div>`}).join('')}`).join('');
   return `<div class="grid2" style="align-items:start"><div class="card"><h2>Appropriations threshold</h2><p class="desc">When a bill’s estimated impact (all divisions added together) is more than this, it’s flagged as needing the Appropriations committee.</p>
     <form id="fhThr" class="filters"><div class="field"><label for="fhThrIn">Threshold (dollars)</label><input id="fhThrIn" inputmode="numeric" value="${FH.threshold}"></div><button class="btn primary">Save</button></form><p class="small muted">Default is $20,000.</p></div>
    <div class="card"><h2>Outbox</h2><p class="desc">${FH.mailReady?'Every email the site has sent, newest first.':'Email isn’t connected yet (it needs RESEND_API_KEY and MAIL_FROM), so emails wait here. Open one to see exactly what a division would get, and use its links to test answering.'}</p>
     ${FHOUT&&FHOUT.outbox.length?`<div class="rows">${FHOUT.outbox.slice(0,30).map(m=>`<div class="row" style="grid-template-columns:110px minmax(0,1fr) auto"><span class="small">${fmtMD(new Date(m.at))} ${fmtTime(new Date(m.at))}</span><div class="what" style="font-size:14.5px">${esc(m.subject)}<span class="sub">to ${esc(m.to_addr)}</span></div><div class="r">${m.sent?'<span class="pill pass">Sent</span>':m.error?`<span class="pill warn" title="${esc(m.error)}">Failed</span>`:'<span class="pill muted">Waiting</span>'}<button class="btn sm" data-fhmail="${m.id}">Open</button></div></div>`).join('')}</div>`:'<p class="empty">No emails yet.</p>'}</div></div>
    ${fhStaffCard()}
+   <div class="card"><h2>Custom divisions</h2><p class="desc">For a team that isn’t on the office’s list: a task force, a working group, one person who handles a topic. Give it a name and the emails that get its requests. It shows up in the <b>+ Add a division</b> menu on every card, and divisions answer from the email the same way.</p>
+    ${FH_CUSTOM.length?`<div class="rows">${FH_CUSTOM.map(d=>{const c=fhContact(d.id);return `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><div class="what" style="font-size:14.5px">${esc(d.name)}<span class="sub">To: ${esc(fhPeopleStr(c.send)||'nobody yet')}${c.cc.length?' · CC: '+esc(fhPeopleStr(c.cc)):''}</span></div><div class="r"><button class="btn sm" data-fhcuedit="${esc(d.id)}">Edit</button><button class="btn sm" data-fhcudel="${esc(d.id)}">Remove</button></div></div>`}).join('')}</div>`:'<p class="empty">No custom divisions yet.</p>'}
+    <form id="fhCuForm" class="fh-cuform"><input type="hidden" id="fhCuId" value=""><div class="field"><label for="fhCuName">Division name</label><input id="fhCuName" maxlength="80" placeholder="e.g. Opioid Settlement Team" required></div>
+     <div class="field"><label for="fhCuSend">Send (To)</label><input id="fhCuSend" placeholder="Name &lt;name@agutah.gov&gt;, …" required></div>
+     <div class="field"><label for="fhCuCc">CC <span class="tiny muted">(optional)</span></label><input id="fhCuCc" placeholder="Copied on every request"></div>
+     <p><button class="btn primary" id="fhCuSave">Add custom division</button> <button type="button" class="btn" id="fhCuCancel" style="display:none">Cancel</button></p></form></div>
    <div class="card"><h2>Who gets requests</h2><p class="desc">For each division: <b>Send</b> people are on the To line and can answer; <b>CC</b> people are copied on the request and its reminder. Separate people with commas; “Name &lt;email&gt;” keeps their name. If Send is blank, requests go to approved accounts that work in that section.</p>${groups}<p><button class="btn primary" id="fhSaveCt">Save contacts</button></p></div>`;
 }
 
@@ -231,9 +241,16 @@ function fhBind(){
   app.querySelectorAll('[data-fhsadd]').forEach(sel=>sel.onchange=()=>{if(!sel.value)return;FHSTAFF.people[+sel.dataset.fhsadd].divs.push(sel.value);route(true)});
   on('fhStaffCancel','onclick',()=>{FHSTAFF=null;route(true)});
   app.querySelectorAll('[data-fhsrole]').forEach(sel=>sel.onchange=()=>{FHSTAFF.people[+sel.dataset.fhsrole].role=sel.value});
-  on('fhStaffApply','onclick',async()=>{const c={};for(const d of CONFIG.divisions){const x=fhContact(d.id);c[d.id]={send:x.send.slice(),cc:x.cc.slice()}}
+  on('fhStaffApply','onclick',async()=>{const c={};for(const d of fhDivs()){const x=fhContact(d.id);c[d.id]={send:x.send.slice(),cc:x.cc.slice()}}
     for(const p of FHSTAFF.people)for(const d of p.divs){const k=c[d]=c[d]||{send:[],cc:[]};const l=k[p.role||'send'];if(![...k.send,...k.cc].some(x=>x.e.toLowerCase()===p.email.toLowerCase()))l.push({n:p.name,e:p.email})}
     const n=FHSTAFF.people.filter(p=>p.divs.length).length;const r=await fhAct('fn/contacts',{contacts:c},`Added ${plural(n,'person','people')} to the contacts`);if(r)FHSTAFF=null;route(true)});
+  on('fhCuForm','onsubmit',async e=>{e.preventDefault();const send=fhPeopleParse($('fhCuSend').value),cc=fhPeopleParse($('fhCuCc').value),id=$('fhCuId').value;
+    if(!send.length){toast('Add at least one email address for Send');return}
+    const r=await fhAct('fn/customdiv',{id,name:$('fhCuName').value,send,cc},id?'Custom division saved':`Added ${$('fhCuName').value.trim()}`);if(r)route(true)});
+  app.querySelectorAll('[data-fhcuedit]').forEach(b=>b.onclick=()=>{const d=FH_CUSTOM.find(x=>x.id===b.dataset.fhcuedit);if(!d)return;const c=fhContact(d.id);
+    $('fhCuId').value=d.id;$('fhCuName').value=d.name;$('fhCuSend').value=fhPeopleStr(c.send);$('fhCuCc').value=fhPeopleStr(c.cc);$('fhCuSave').textContent='Save changes';$('fhCuCancel').style.display='';$('fhCuName').focus()});
+  on('fhCuCancel','onclick',()=>route(true));
+  app.querySelectorAll('[data-fhcudel]').forEach(b=>b.onclick=async()=>{const d=FH_CUSTOM.find(x=>x.id===b.dataset.fhcudel);if(!d||!confirm(`Remove ${d.name}? Requests already sent keep their answers.`))return;await fhAct('fn/customdiv',{action:'delete',id:d.id},`Removed ${d.name}`)});
   on('fhSaveCt','onclick',async()=>{const c={};app.querySelectorAll('[data-ct]').forEach(i=>{c[i.dataset.ct]={send:fhPeopleParse(i.value),cc:fhPeopleParse((app.querySelector(`[data-cc="${CSS.escape(i.dataset.ct)}"]`)||{}).value)}});await fhAct('fn/contacts',{contacts:c},'Contacts saved')});
   app.querySelectorAll('[data-fhmail]').forEach(b=>b.onclick=async()=>{try{const j=await api('fn/outbox-one?id='+b.dataset.fhmail);const m=j.mail;fhOpenDlg(`<h2 style="font-size:17px">${esc(m.subject)}</h2><p class="small muted">To ${esc(m.to_addr)} · ${fmtLong(new Date(m.at))}${m.error?` · <span style="color:var(--maroon)">${esc(m.error)}</span>`:''}</p><iframe sandbox="allow-popups allow-popups-to-escape-sandbox" style="width:100%;height:60vh;border:1px solid var(--line);border-radius:8px" srcdoc="${esc(m.html.replace(/<a /g,'<a target="_blank" '))}"></iframe>`)}catch(e){toast(e.message)}});
 }

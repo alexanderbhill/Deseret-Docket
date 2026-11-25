@@ -48,7 +48,7 @@ let infoEl=null, infoT=null;
 function closeInfo(){clearTimeout(infoT);if(infoEl){infoEl.remove();infoEl=null}}
 function openInfo(t){
   const [kind,...rest]=t.dataset.info.split(':');const id=rest.join(':');
-  const html=kind==='leg'?legCard(id):kind==='com'?comCard(id):kind==='div'?divCard(id):kind==='html'?t.dataset.infohtml:'';
+  const html=kind==='leg'?legCard(id):kind==='com'?comCard(id):kind==='div'?divCard(id):kind==='agp'&&typeof agPersonCard==='function'?agPersonCard(id):kind==='html'?t.dataset.infohtml:'';
   if(!html)return;
   closeInfo();infoEl=document.createElement('div');infoEl.className='spcard infocard';infoEl.setAttribute('role','dialog');infoEl.innerHTML=html;infoEl.dataset.for=t.dataset.info;
   document.body.appendChild(infoEl);

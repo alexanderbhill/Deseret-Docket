@@ -3,6 +3,13 @@
  "_about": "Office lists used by the website and the nightly update. Edit names or keywords here and commit; both pick up the change. Keywords match whole words in a bill's title, summary, subjects and transcripts. Codes are Utah Code title/chapter prefixes the bill amends.",
  "departments": [
   {
+   "id": "executive",
+   "name": "Executive",
+   "color": "#1f3a5f",
+   "designate": false,
+   "_about": "The Attorney General and the Executive Team. Used for accounts, Fiscal Hive and the org chart; never offered as a bill department or division."
+  },
+  {
    "id": "criminal",
    "name": "Criminal",
    "color": "#9e3a34"
@@ -29,6 +36,27 @@
   }
  ],
  "divisions": [
+  {
+   "id": "ex-office",
+   "dept": "executive",
+   "name": "Executive Office",
+   "keywords": [],
+   "codes": []
+  },
+  {
+   "id": "ex-external",
+   "dept": "executive",
+   "name": "External Relations and Government Affairs",
+   "keywords": [],
+   "codes": []
+  },
+  {
+   "id": "ex-communications",
+   "dept": "executive",
+   "name": "Communications",
+   "keywords": [],
+   "codes": []
+  },
   {
    "id": "cr-investigations",
    "dept": "criminal",

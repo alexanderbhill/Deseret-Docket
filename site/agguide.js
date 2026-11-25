@@ -4,6 +4,44 @@
 'use strict';
 const AG_LEADS={appellate:['Stanford Purser','Solicitor General'],civil:['Mark E. Burns','Civil Deputy Attorney General'],criminal:['Stewart Young','Criminal Deputy Attorney General'],pp:['Douglas Crapo','Public Protection Deputy Attorney General'],admin:['John Dougall','Administrator']};
 const AG_SITE='https://attorneygeneral.utah.gov';
+// The Executive Team, for the org chart's hover cards. Bios are summarized from the office's staff pages.
+// Photos are uploaded by an admin (hover a name → Change photo or bio) and kept with any bio edits.
+const AG_PEOPLE={
+ brown:['Derek Brown','Attorney General','Utah’s 22nd Attorney General, in office since January 2025. A Pepperdine Law graduate, he clerked for a former chief judge of the U.S. Court of Appeals for the Third Circuit, practiced constitutional and appellate law at Mayer Brown and Sidley Austin, and was legal counsel to U.S. Sens. Bob Bennett and Orrin Hatch. He represented House District 49 in the Utah Legislature, taught communications law at BYU, was deputy chief of staff and state director for Sen. Mike Lee, and chaired the Utah Republican Party. He and his wife, Emilie, have four children and live in Cottonwood Heights.','/attorney-general-derek-brown/'],
+ burton:['Daniel Burton','Chief Deputy Attorney General and General Counsel','The office’s senior executive. He oversees its legal, legislative, administrative and communications work, advises the Attorney General on hard legal and policy questions, and directs the office’s engagement with the Legislature. His portfolio runs from protecting children online and defending Utah’s interests in federal public lands to consumer protection, privacy, antitrust, public safety, natural resources and energy. He joined the office in 2015 from Woodbury Corporation, where he was senior corporate counsel. B.A., BYU; J.D., University of Utah S.J. Quinney College of Law.','/staff/daniel-burton/'],
+ hass:['Katie Hass','Deputy General Counsel and Director of External Relations','Advises on legal and policy matters and leads the office’s work with the Utah Legislature, government agencies, business leaders and advocacy groups. She previously directed the Utah Division of Consumer Protection, leading a team of 30+ investigators and attorneys, and before that led state and federal policy work as associate general counsel for government relations at Melaleuca. She began her career as a litigation associate at Dechert LLP. J.D., cum laude, BYU Law; B.A. in economics and political science, University of Vermont. Admitted in Utah, Idaho and D.C.','/staff/katie-hass/'],
+ purser:['Stanford Purser','Solicitor General','Leads the Appellate Department, which handles the state’s appeals and defends Utah’s laws and constitution in court, including through Constitutional Defense and Special Litigation.','/appeals/'],
+ burns:['Mark E. Burns','Civil Deputy Attorney General','Leads the Civil Department, the state’s law firm for its agencies: it counsels and defends departments, boards and commissions on everything from water and public lands to schools, transportation and health care.','/civil/'],
+ crapo:['Douglas Crapo','Public Protection Deputy Attorney General','Leads the Public Protection Department, which enforces consumer protection, securities, antitrust and data-privacy laws and represents the state’s licensing and real estate regulators.','/public-protection/'],
+ young:['Stewart Young','Criminal Deputy Attorney General','Leads the Criminal Department: prosecutors and investigators who take on crimes that cross county lines or need special skills, such as internet crimes against children, human trafficking, Medicaid fraud and financial crimes.','/criminal/'],
+ dougall:['John Dougall','Administrator','Leads the Administration Department, which runs the office’s budget, people, technology and operations. He served as Utah’s State Auditor from 2013 to 2025.','/executive-team/']};
+const AG_LEAD_ID={appellate:'purser',civil:'burns',criminal:'young',pp:'crapo',admin:'dougall'};
+let AGPX=null; // admin-uploaded photos and bio edits: {id:{photo,bio}}
+function loadAGPX(){if(AGPX===null){AGPX={};if(ME)api('agpeople').then(j=>{AGPX=j.people||{};if(location.hash==='#learn-ag')route(true)}).catch(()=>{})}return AGPX}
+const agInitials=n=>{const w=n.split(' ').filter(x=>/^[A-Z]/.test(x));return (w[0][0]+(w.length>1?w[w.length-1][0]:'')).toUpperCase()};
+function agFace(id,cls=''){const p=AG_PEOPLE[id],x=(loadAGPX()[id])||{};return x.photo?`<img class="agface ${cls}" src="${esc(x.photo)}" alt="">`:`<span class="agface ini ${cls}" aria-hidden="true">${esc(agInitials(p[0]))}</span>`}
+// The org chart name that opens the photo-and-bio card.
+const agName=id=>`<b class="agp" tabindex="0" data-info="agp:${id}">${esc(AG_PEOPLE[id][0])}</b>`;
+function agPersonCard(id){const p=AG_PEOPLE[id];if(!p)return '';const x=(loadAGPX()[id])||{};
+  return `<div class="agp-card">${x.photo?`<img class="agp-photo" src="${esc(x.photo)}" alt="Photo of ${esc(p[0])}">`:`<span class="agp-photo ini" aria-hidden="true">${esc(agInitials(p[0]))}</span>`}
+   <div class="nm">${esc(p[0])}</div><div class="tiny muted">${esc(p[1])}</div><p class="small" style="margin:8px 0">${esc(x.bio||p[2])}</p>
+   <a class="tiny" href="${AG_SITE}${p[3]}" target="_blank" rel="noopener">More on the AG’s website ${typeof ic==='function'?ic('external'):''}</a>
+   ${isAdmin()?`<div style="margin-top:8px"><button type="button" class="btn sm" data-agpedit="${id}">Change photo or bio</button></div>`:''}</div>`}
+async function agPhotoData(file){const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('That file isn’t an image.'));i.src=URL.createObjectURL(file)});
+  const S=240,c=document.createElement('canvas');c.width=c.height=S;const k=Math.max(S/img.width,S/img.height),w=img.width*k,h=img.height*k;c.getContext('2d').drawImage(img,(S-w)/2,(S-h)/2.6,w,h);return c.toDataURL('image/jpeg',.82)}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-agpedit]');if(!b||!isAdmin())return;e.preventDefault();if(typeof closeInfo==='function')closeInfo();
+  const id=b.dataset.agpedit,p=AG_PEOPLE[id],x=(loadAGPX()[id])||{};
+  let dlg=$('agpDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='agpDlg';document.body.appendChild(dlg)}
+  dlg.innerHTML=`<form method="dialog" id="agpForm"><h2>${esc(p[0])}</h2><p class="small muted">${esc(p[1])}. Use an official headshot the office is fine sharing internally; it’s resized to a small square.</p>
+   <div style="display:flex;gap:14px;align-items:center;margin:10px 0"><span id="agpPrev">${agFace(id,'lg')}</span><div class="field"><label for="agpFile">Photo</label><input type="file" id="agpFile" accept="image/*">${x.photo?'<label class="check" style="margin-top:6px"><input type="checkbox" id="agpNoPhoto"><span>Remove the photo</span></label>':''}</div></div>
+   <div class="field"><label for="agpBio">Bio</label><textarea id="agpBio" style="width:100%;min-height:150px">${esc(x.bio||p[2])}</textarea></div>
+   <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="agpCancel">Cancel</button><button class="btn primary" id="agpSave">Save</button></div></form>`;
+  dlg.showModal();let photo=null;
+  $('agpCancel').onclick=()=>dlg.close();
+  $('agpFile').onchange=async ev=>{try{photo=await agPhotoData(ev.target.files[0]);$('agpPrev').innerHTML=`<img class="agface lg" src="${photo}" alt="">`}catch(err){toast(err.message)}};
+  $('agpForm').onsubmit=async ev=>{ev.preventDefault();const bio=$('agpBio').value.trim();
+    try{const j=await api('agpeople',{id,bio:bio===p[2]?'':bio,...(photo?{photo}:{}),...($('agpNoPhoto')&&$('agpNoPhoto').checked?{photo:''}:{})});AGPX=j.people||{};dlg.close();toast(`${p[0]}: saved`);route(true)}catch(err){toast(err.message)}};
+});
 const AG_DEPT_URL={appellate:'/appeals/',civil:'/civil/',criminal:'/criminal/',pp:'/public-protection/',admin:'/executive-team/'};
 const STEWARD_DIVS=['cv-water','cv-forestry','cv-ogm','cv-parks-wildlife','cv-public-lands','cv-agriculture','cv-environment','ap-cdsl','ad-administration'];
 const AG_ROLES=[
@@ -22,9 +60,11 @@ const AG_FACTS=[
  ['2️⃣2️⃣','Number 22','Derek Brown, who took office in 2025, is Utah’s 22nd Attorney General.'],
  ['👩‍⚖️','First woman','Jan Graham, elected in 1992, was the first woman to serve as Utah’s Attorney General.'],
  ['⏳','Longest tenure','Mark Shurtleff served 12 years (2001–2013), the longest of anyone.'],
- ['🏛️','Not the U.S. AG','The U.S. Attorney General runs the federal Justice Department. Each state elects (or appoints) its own.'],
  ['🚓','What it doesn’t run','The office doesn’t oversee local police, the courts or the Division of Child and Family Services, though its attorneys represent children’s interests in DCFS cases.'],
- ['🏢','The address','The office’s main home is 350 N. State Street: the Utah State Capitol.']];
+ ['🎲','Calling Kalshi’s bet','In October 2026 the office sued the prediction market Kalshi, saying its sports and election bets break Utah’s gambling ban, which dates to statehood.'],
+ ['🎟️','Beating Ticketmaster','In April 2026, Utah and 33 other states won a jury verdict that Live Nation and Ticketmaster ran an illegal monopoly, after the U.S. Justice Department settled mid-trial.'],
+ ['📱','Kids online come first','The office has sued TikTok (twice) and Snap over harm to children, and ICAC prosecutions more than doubled in 2025.'],
+ ['🎯','Where the focus is','AG Brown’s stated priorities: violent crime, protecting kids and consumers, defending Utah against federal overreach (including on public lands), and transparency.']]
 const AG_WINS=[['2025','ICAC prosecutions more than doubled compared with 2024.'],['Nov. 2025','A $700 million Google Play settlement, from a complaint Utah led with 52 other attorneys general.'],['Nov. 2025','A bipartisan AI task force launched with North Carolina’s attorney general.'],['Sept. 2025','A consent order requiring Aylo to remove child sexual abuse material and pay a $5 million penalty.'],['July 2025','Kane County v. United States: the court found the state and counties own key rights-of-way to public lands.']];
 
 let AGNEWS=null, AGTAB='news', AGDEPT=null;
@@ -39,16 +79,16 @@ function pageAGGuide(){
   const item=x=>{const d=pd(x.date);return `<a class="agnews" href="${esc(x.u)}" target="_blank" rel="noopener">${x.img?`<img src="${esc(x.img)}" alt="" loading="lazy">`:`<span class="agn-ph">${AGTAB==='oped'?'✍️':AGTAB==='press'?'⚖️':'📰'}</span>`}<span><b>${esc(x.t)}</b><span class="tiny muted">${esc(x.src||'')}${d?' · '+fmtLong(d):''}</span>${x.d?`<span class="small">${esc(x.d.slice(0,170))}${x.d.length>170?'…':''}</span>`:''}</span></a>`};
   return `<div class="card ag-hero"><div class="ag-hero-t"><div class="kicker">A beginner’s guide</div><h2>How the Utah Attorney General’s Office works</h2>
     <p class="desc">The Attorney General is one of Utah’s five statewide elected officials and the state’s chief lawyer. The office’s own motto for its work: <b>counselors, protectors and stewards</b>. Here’s who does what, how it’s organized, and what it’s been up to lately.</p></div>
-    <div class="ag-stats"><div><b>1850</b><span>Year the office began</span></div><div><b>22nd</b><span>Attorney General: Derek Brown</span></div><div><b>~60</b><span>State agencies and boards it represents</span></div><div><b>${depts.length}</b><span>Departments</span></div><div><b>${divs.length}</b><span>Divisions and practice areas we track</span></div></div></div>
+    <div class="ag-stats"><div><b>1850</b><span>Year the office began</span></div><div><b>22nd</b><span>Attorney General: Derek Brown</span></div><div><b>~60</b><span>State agencies and boards it represents</span></div><div><b>${depts.filter(d=>d.designate!==false).length}</b><span>Departments, plus the Executive Team</span></div><div><b>${divs.filter(d=>d.dept!=='executive').length}</b><span>Divisions and practice areas we track</span></div></div></div>
 
    <div class="card"><h2>Counselors, protectors, stewards</h2><p class="desc">The three hats the office wears. Hover any division for what it handles and how many of this session’s bills look like its work. (The grouping of divisions under each hat is ours, for learning.)</p>
     <div class="ag-roles">${AG_ROLES.map(([k,i,t,d,f])=>{const ds=divs.filter(f);return `<div class="ag-role ${k}"><div class="ag-role-hd"><span class="ico">${i}</span><h3>${t}</h3></div><p class="small">${esc(d)}</p><div class="tiny muted" style="margin:6px 0">${plural(ds.length,'division')}</div><div class="chips">${ds.map(divChip).join('')}</div></div>`}).join('')}</div></div>
 
-   <div class="card"><h2>The org chart</h2><p class="desc">Click a department to see its divisions. Hover a leader or a division for more.</p>
+   <div class="card"><h2>The org chart</h2><p class="desc">Hover (or tap) a name for their photo and bio. Click a department to see its divisions.</p>
     <div class="agorg">
-     <div class="agorg-top"><div class="agorg-box ag"><span class="tiny">Attorney General</span><b>Derek Brown</b><a class="tiny" href="${AG_SITE}/attorney-general-derek-brown/" target="_blank" rel="noopener">Meet AG Brown</a></div></div>
-     <div class="agorg-mid"><div class="agorg-box"><span class="tiny">Chief Deputy Attorney General and General Counsel</span><b>Daniel Burton</b></div><div class="agorg-box"><span class="tiny">Deputy General Counsel and Director of External Relations</span><b>Katie Hass</b></div></div>
-     <div class="agorg-depts">${depts.map(d=>{const L=AG_LEADS[d.id];const ds=divs.filter(x=>x.dept===d.id);return `<button type="button" class="agorg-box dept ${AGDEPT===d.id?'on':''}" data-agdept="${esc(d.id)}" style="--c:${d.color}" aria-expanded="${AGDEPT===d.id}"><span class="tiny">${esc(d.name)}</span>${L?`<b>${esc(L[0])}</b><span class="tiny muted">${esc(L[1])}</span>`:''}<span class="tiny agorg-n">${plural(ds.length,'division')} ${AGDEPT===d.id?'▴':'▾'}</span></button>`}).join('')}</div>
+     <div class="agorg-top"><div class="agorg-box ag">${agFace('brown')}<span class="tiny">Attorney General</span>${agName('brown')}<a class="tiny" href="${AG_SITE}/attorney-general-derek-brown/" target="_blank" rel="noopener">Meet AG Brown</a></div></div>
+     <div class="agorg-mid"><span class="agorg-lbl tiny">Executive</span><div class="agorg-box">${agFace('burton')}<span class="tiny">Chief Deputy Attorney General and General Counsel</span>${agName('burton')}</div><div class="agorg-box">${agFace('hass')}<span class="tiny">Deputy General Counsel and Director of External Relations</span>${agName('hass')}</div></div>
+     <div class="agorg-depts">${depts.filter(d=>d.designate!==false).map(d=>{const L=AG_LEADS[d.id];const ds=divs.filter(x=>x.dept===d.id);return `<button type="button" class="agorg-box dept ${AGDEPT===d.id?'on':''}" data-agdept="${esc(d.id)}" style="--c:${d.color}" aria-expanded="${AGDEPT===d.id}">${AG_LEAD_ID[d.id]?agFace(AG_LEAD_ID[d.id],'sm'):''}<span class="tiny">${esc(d.name)}</span>${L?`${AG_LEAD_ID[d.id]?agName(AG_LEAD_ID[d.id]):`<b>${esc(L[0])}</b>`}<span class="tiny muted">${esc(L[1])}</span>`:''}<span class="tiny agorg-n">${plural(ds.length,'division')} ${AGDEPT===d.id?'▴':'▾'}</span></button>`}).join('')}</div>
      ${AGDEPT?`<div class="agorg-divs" style="--c:${deptColor(AGDEPT)}"><div class="chips">${divs.filter(x=>x.dept===AGDEPT).map(divChip).join('')}</div>${AG_DEPT_URL[AGDEPT]?`<a class="small" href="${AG_SITE}${AG_DEPT_URL[AGDEPT]}" target="_blank" rel="noopener">${esc(deptName(AGDEPT))} on the AG’s website →</a>`:''}</div>`:''}
     </div>
     <p class="tiny muted" style="margin-top:10px">Leaders from the office’s Executive Team and Our Departments pages. Divisions are the practice areas this site uses to route bills, which can be finer-grained than the office’s official divisions.</p></div>
@@ -61,7 +101,7 @@ function pageAGGuide(){
     <div class="card"><h2>Recent highlights</h2><p class="desc">A few results from the office’s <a href="${AG_SITE}/2025-impact/" target="_blank" rel="noopener">2025 Impact</a> report.</p>
      <ol class="ag-wins">${AG_WINS.map(([d,t])=>`<li><span class="tiny muted">${esc(d)}</span><span>${esc(t)}</span></li>`).join('')}</ol></div></div>
 
-   <div class="card"><h2>Fun facts</h2><p class="desc">Tap a card to flip it.</p>
+   <div class="card"><h2>Fun facts</h2><p class="desc">Tap a card to flip it. Ready to test yourself? <a href="#learn-agquiz">Play AG Showdown →</a></p>
     <div class="flipgrid">${AG_FACTS.map(([i,t,d])=>`<button type="button" class="flip" aria-label="${esc(t)}"><span class="f-front"><span class="ico">${i}</span><b>${esc(t)}</b></span><span class="f-back">${esc(d)}</span></button>`).join('')}</div></div>
 
    <div class="card"><h2>Every Attorney General since statehood</h2><p class="desc">Hover a name for their years in office.</p>

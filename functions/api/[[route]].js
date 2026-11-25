@@ -20,7 +20,7 @@
 // The email job (GitHub Actions, header X-Cron-Key):
 //   GET  /api/cron/subs          confirmed subscriptions and the bills each one covers
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
-import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady } from "../../lib/fiscal.js";
+import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady, customUnits } from "../../lib/fiscal.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
 
 const DEPTS = new Set(["criminal", "civil", "pp", "appellate", "admin"]);
@@ -36,6 +36,18 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, 
 const bad = (msg, status = 400) => json({ error: msg }, status);
 const arr = (v) => { try { const a = JSON.parse(v || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } };
 const obj = (v) => { try { const o = JSON.parse(v || "{}"); return o && typeof o === "object" ? o : {}; } catch { return {}; } };
+
+// The shared bill tracker workbook (admin sets the link; the data update writes to it four times a day).
+const TRACKER_DEFAULT = { url: "", name: "2027 Bill Tracker (Draft)", sheet: "Deseret Docket", scope: "office", session: "" };
+async function trackerCfg(db) {
+  const s = await db.prepare("SELECT v, by, at FROM settings WHERE k = 'tracker'").first();
+  return { ...TRACKER_DEFAULT, ...(s ? obj(s.v) : {}), by: s ? s.by : "", at: s ? s.at : "" };
+}
+async function trackerSync(db) {
+  const s = await db.prepare("SELECT v FROM settings WHERE k = 'tracker_sync'").first();
+  return s ? obj(s.v) : null;
+}
+const canTracker = (user) => !!user && (user.role === "admin" || !!(user.perms && user.perms.tracker));
 
 async function ensureSchema(db) {
   if (ready) return;
@@ -141,7 +153,7 @@ async function setBill(db, user, body, peopleAll) {
     }
   };
   listField("departments", (d) => DEPTS.has(d), 5);
-  listField("divisions", (d) => DIV_RE.test(d), 12);
+  listField("divisions", (d) => DIV_RE.test(d) && !/^(ex|cu)-/.test(d), 12); // Executive and Fiscal Hive custom units are never bill designations
   listField("designations", (d) => DESIGNATIONS.has(d), 6);
   listField("assignees", (a) => NAME_RE.test(a) && peopleAll.includes(a), 10);
   if ("priority" in body) {
@@ -169,7 +181,7 @@ async function setBill(db, user, body, peopleAll) {
       if (!DESIGNATIONS.has(c)) continue;
       if (v === null || v === "" || v === "none") { delete nextC[c]; continue; }
       const val = String(v);
-      if (val !== "tagged" && !POSITIONS.has(val)) throw new Error("bad association position");
+      if (val !== "tagged" && val !== "hold" && !POSITIONS.has(val)) throw new Error("bad association position");
       if (!curC[c] || curC[c].pos !== val) nextC[c] = { pos: val, by: user.name, at: now, src: "manual" };
     }
     if (JSON.stringify(nextC) !== JSON.stringify(curC)) {
@@ -285,6 +297,20 @@ export async function onRequest(context) {
       const key = request.headers.get("X-Cron-Key") || "";
       const want = env.CRON_KEY || env.CRON_SECRET || "";
       if (!want || key.length < 20 || key !== want) return bad("Not allowed", 403);
+      if (route === "cron/tracker" && method === "GET") {
+        // Everything the workbook sync needs: where to write and the office's information on each bill.
+        const rows = (await db.prepare("SELECT key, departments, divisions, designations, priority, note, assignees, position, ag_action, cpos FROM bills").all()).results || [];
+        return json({ cfg: await trackerCfg(db), office: rows.map((r) => ({ key: r.key, departments: arr(r.departments), divisions: arr(r.divisions), designations: arr(r.designations),
+          note: r.note || "", assignees: arr(r.assignees), position: r.position || null, agAction: r.ag_action || "", cpos: obj(r.cpos), priority: r.priority || null })) });
+      }
+      if (route === "cron/tracker-status" && method === "POST") {
+        const v = { at: new Date().toISOString(), ok: !!body.ok, connected: !!body.connected, rows: Math.max(0, +body.rows || 0), error: String(body.error || "").slice(0, 400),
+          session: String(body.session || "").slice(0, 12), head: (Array.isArray(body.head) ? body.head : []).slice(0, 30).map((x) => String(x).slice(0, 60)),
+          preview: (Array.isArray(body.preview) ? body.preview : []).slice(0, 8).map((r) => (Array.isArray(r) ? r : []).slice(0, 30).map((x) => String(x ?? "").slice(0, 160))),
+          counts: body.counts && typeof body.counts === "object" ? Object.fromEntries(Object.entries(body.counts).slice(0, 12).map(([k, n]) => [String(k).slice(0, 40), +n || 0])) : {} };
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('tracker_sync', ?, 'job', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(v), v.at).run();
+        return json({ ok: true });
+      }
       if (route === "cron/subs" && method === "GET") {
         const subs = (await db.prepare("SELECT * FROM email_subs WHERE confirmed = 1").all()).results || [];
         const rows = (await db.prepare("SELECT key, departments, divisions, designations, priority, assignees FROM bills").all()).results || [];
@@ -382,12 +408,28 @@ export async function onRequest(context) {
       if (!user) return json({ user: null });
       const pr = await db.prepare("SELECT v FROM prefs WHERE username = ?").bind(user.name).first();
       const fw = await db.prepare("SELECT v FROM settings WHERE k = 'wrap_on'").first();
-      return json({ flags: { wrap: !!(fw && fw.v === "1") }, user: user.name, display: user.display || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
+      const tc = canTracker(user) ? await trackerCfg(db) : null;
+      return json({ flags: { wrap: !!(fw && fw.v === "1") }, tracker: tc && tc.url ? { url: tc.url, name: tc.name } : null, user: user.name, display: user.display || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
     }
     if (!user) return bad("Sign in required", 401);
 
     if (route === "state" && method === "GET") {
       return json({ me: user.name, role: user.role, perms: user.perms, people: (await allPeople(env, db)).all, ...(await readState(db, user)) });
+    }
+    if (route === "tracker") {
+      if (method === "GET") {
+        if (!canTracker(user)) return bad("Ask an admin for access to the bill tracker.", 403);
+        const cfg = await trackerCfg(db);
+        return json({ cfg: user.role === "admin" ? cfg : { url: cfg.url, name: cfg.name, sheet: cfg.sheet }, sync: await trackerSync(db) });
+      }
+      if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+      const url0 = String(body.url || "").trim();
+      if (url0 && !/^https:\/\/([a-z0-9-]+\.)*(sharepoint\.com|onedrive\.live\.com|1drv\.ms|office\.com)\//i.test(url0)) return bad("Paste the Share link to the Excel workbook (a sharepoint.com or OneDrive link).");
+      const v = { url: url0.slice(0, 600), name: String(body.name || TRACKER_DEFAULT.name).trim().slice(0, 80) || TRACKER_DEFAULT.name,
+        sheet: String(body.sheet || TRACKER_DEFAULT.sheet).replace(/[\\/?*\[\]:]/g, "").trim().slice(0, 31) || TRACKER_DEFAULT.sheet,
+        scope: body.scope === "all" ? "all" : "office", session: /^\d{4}[A-Z0-9]{2,4}$/.test(String(body.session || "")) ? body.session : "" };
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('tracker', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(v), user.name, new Date().toISOString()).run();
+      return json({ ok: true });
     }
     if (route === "bill" && method === "POST") {
       const r = await setBill(db, user, body, (await allPeople(env, db)).all);
@@ -510,7 +552,7 @@ export async function onRequest(context) {
           requests: reqs.map((r) => { let e; try { e = JSON.parse(r.emails || "[]"); } catch { e = []; } return { ...r, emails: Array.isArray(e) ? e : [...(e.to || []), ...(e.cc || [])], answer: obj(r.answer), token: undefined }; }),
           stats: allReqs, contacts: Object.fromEntries(crow.map((r) => [r.division, contactSet(r.emails)])),
           sectionEmails: users.reduce((m, u) => { (m[u.section] = m[u.section] || []).push(u.email); return m; }, {}),
-          threshold: await threshold(db), mailReady: mailReady(env), me: user.name,
+          threshold: await threshold(db), mailReady: mailReady(env), me: user.name, customDivs: await customUnits(db),
         });
       }
       if (route === "fn/ping" && method === "POST") { await touch().run(); return json({ ok: true }); }
@@ -593,6 +635,34 @@ export async function onRequest(context) {
         if (stmts.length) await db.batch(stmts);
         return json({ ok: true });
       }
+      if (route === "fn/customdiv" && method === "POST") {
+        // Custom divisions: a name plus who gets its requests. Stored in settings; contacts in fn_contacts like any division.
+        const list = await customUnits(db);
+        const EMAIL_ONE = /^[^\s@<>()",;:]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}$/;
+        const people = (l) => { const seen = new Set(), out = []; for (const x of Array.isArray(l) ? l : []) { const e = String((x && x.e) || "").trim().toLowerCase(), n = String((x && x.n) || "").trim().slice(0, 80); if (EMAIL_ONE.test(e) && !seen.has(e)) { seen.add(e); out.push({ n, e }); } } return out.slice(0, 15); };
+        const save = (l) => db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('fn_customdivs', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(l.map(({ id, name }) => ({ id, name }))), user.name, t);
+        if (body.action === "delete") {
+          const id = String(body.id || "");
+          if (!list.some((d) => d.id === id)) return bad("That division is already gone.", 404);
+          await db.batch([save(list.filter((d) => d.id !== id)), db.prepare("DELETE FROM fn_contacts WHERE division = ?").bind(id)]);
+          return json({ ok: true });
+        }
+        const name = String(body.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
+        if (!name) return bad("Give the division a name.");
+        const send = people(body.send), cc = people(body.cc);
+        let id = String(body.id || "");
+        const cur = list.find((d) => d.id === id);
+        if (!cur) {
+          if (list.length >= 40) return bad("That's the most custom divisions the Fiscal Hive holds (40).");
+          if (list.some((d) => d.name.toLowerCase() === name.toLowerCase())) return bad("There's already a custom division with that name.");
+          if (!send.length) return bad("Add at least one email address to send requests to.");
+          const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 28) || "unit";
+          id = `cu-${slug}-${frand(2)}`;
+          list.push({ id, name });
+        } else cur.name = name;
+        await db.batch([save(list), db.prepare("INSERT INTO fn_contacts (division, emails, by, at) VALUES (?, ?, ?, ?) ON CONFLICT(division) DO UPDATE SET emails=excluded.emails, by=excluded.by, at=excluded.at").bind(id, JSON.stringify({ send, cc }), user.name, t)]);
+        return json({ ok: true, id });
+      }
       if (route === "fn/threshold" && method === "POST") {
         const v = Math.round(+body.amount);
         if (!Number.isFinite(v) || v < 0 || v > 1e10) return bad("Enter a dollar amount.");
@@ -616,6 +686,26 @@ export async function onRequest(context) {
       return bad("Not found", 404);
     }
 
+    if (route === "agpeople") {
+      // Org chart photos and bio edits (Learn → the AG's Office): { id: { photo: "data:image/jpeg;base64,…", bio } }
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'agpeople'").first();
+      const people = f ? obj(f.v) : {};
+      if (method === "POST") {
+        if (user.role !== "admin") return bad("Only an admin can do that.", 403);
+        const id = String(body.id || "");
+        if (!/^[a-z]{2,20}$/.test(id)) return bad("Unknown person.");
+        const cur = people[id] || {};
+        if ("photo" in body) {
+          const ph = String(body.photo || "");
+          if (ph && (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(ph) || ph.length > 120000)) return bad("That photo is too big or isn't an image.");
+          if (ph) cur.photo = ph; else delete cur.photo;
+        }
+        if ("bio" in body) { const b = String(body.bio || "").trim().slice(0, 1500); if (b) cur.bio = b; else delete cur.bio; }
+        if (Object.keys(cur).length) people[id] = cur; else delete people[id];
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('agpeople', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(people), user.name, new Date().toISOString()).run();
+      }
+      return json({ people });
+    }
     if (route === "legfacts") {
       const f = await db.prepare("SELECT v FROM settings WHERE k = 'legfacts'").first();
       const facts = f ? obj(f.v) : {};
@@ -689,8 +779,10 @@ export async function onRequest(context) {
       const byKey = {};
       for (const r of rows) {
         const key = String(r.key || ""), c = String(r.committee || ""), pos = String(r.pos || "");
-        if (!KEY_RE.test(key) || !DESIGNATIONS.has(c) || !(POSITIONS.has(pos) || pos === "tagged")) continue;
-        (byKey[key] = byKey[key] || {})[c] = { pos, by: user.name, at: t, src };
+        if (!KEY_RE.test(key) || !DESIGNATIONS.has(c) || !(POSITIONS.has(pos) || pos === "tagged" || pos === "hold")) continue;
+        // raw: the association's own wording ("Support in Concept"); note: its notes and follow-up columns
+        const raw = String(r.raw || "").trim().slice(0, 80), note = String(r.note || "").trim().slice(0, 600);
+        (byKey[key] = byKey[key] || {})[c] = { pos, by: user.name, at: t, src, ...(raw ? { raw } : {}), ...(note ? { note } : {}) };
       }
       const keys = Object.keys(byKey);
       const stmts = [];
@@ -708,10 +800,22 @@ export async function onRequest(context) {
     }
     if (route === "cpos/sheet" && method === "POST") {
       // A Google Sheet shared as "anyone with the link can view": read it as CSV.
+      // An Excel workbook on OneDrive or SharePoint: download it (works when the link lets anyone open it).
       if (user.role !== "admin") return bad("Only an admin can do that.", 403);
-      const m = String(body.url || "").match(/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/);
-      if (!m) return bad("Paste the link to a Google Sheet (docs.google.com/spreadsheets/…).");
-      const gid = (String(body.url).match(/[#&?]gid=(\d+)/) || [])[1];
+      const u0 = String(body.url || "").trim();
+      if (/^https:\/\/([a-z0-9-]+\.)*(sharepoint\.com|onedrive\.live\.com|1drv\.ms)\//i.test(u0)) {
+        const dl = new URL(u0); dl.searchParams.set("download", "1");
+        let r; try { r = await fetch(dl.toString(), { redirect: "follow" }); } catch { r = null; }
+        const type = r ? r.headers.get("Content-Type") || "" : "";
+        if (!r || !r.ok || /text\/html/i.test(type)) return bad("Couldn't open that Excel link from here: it probably needs an office sign-in. In Excel choose File → Save a copy (or Download), then upload the file instead.");
+        const buf = new Uint8Array(await r.arrayBuffer());
+        if (buf.length > 8e6) return bad("That workbook is too big to read from a link. Upload the file instead.");
+        let bin = ""; for (let i = 0; i < buf.length; i += 32768) bin += String.fromCharCode(...buf.subarray(i, i + 32768));
+        return json({ xlsx: btoa(bin) });
+      }
+      const m = u0.match(/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/);
+      if (!m) return bad("Paste a link to a Google Sheet (docs.google.com/spreadsheets/…) or an Excel workbook on OneDrive or SharePoint.");
+      const gid = (u0.match(/[#&?]gid=(\d+)/) || [])[1];
       const r = await fetch(`https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${gid ? "&gid=" + gid : ""}`, { redirect: "follow" });
       const text = await r.text();
       if (!r.ok || /^\s*<!doctype html|<html/i.test(text)) return bad("Couldn't read that sheet. In Google Sheets, choose Share → General access → Anyone with the link (Viewer), or download it as .csv or .xlsx and upload the file.");

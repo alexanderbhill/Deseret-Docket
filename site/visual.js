@@ -1,6 +1,7 @@
 /* Icons and visual pieces: line icons, the bill progress tracker and the at-a-glance chips. */
 'use strict';
 const ICONS={
+  share:'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4',
   flag:'M5 21V4M5 4h11l-2 4 2 4H5',
   priority:'M6 13l6-6 6 6M6 19l6-6 6 6',
   impact:'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 8v5M12 16.5v.01',

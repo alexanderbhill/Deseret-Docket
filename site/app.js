@@ -50,7 +50,12 @@ const textReady=s=>{const t=TEXTSTATE[s];return !t||t.loaded>=t.total};
 const allRows=s=>[...(BILLS[s]||[]),...(FILES[s]||[])];
 const deptName=id=>(CONFIG.departments.find(d=>d.id===id)||{}).name||id;
 const deptColor=id=>(CONFIG.departments.find(d=>d.id===id)||{}).color||'var(--muted)';
-const divById=id=>CONFIG.divisions.find(d=>d.id===id);
+// Executive (and any department with "designate": false) is used for accounts, Fiscal Hive and the org chart, never as a bill designation.
+const billDepts=()=>CONFIG.departments.filter(d=>d.designate!==false);
+const billDivs=()=>{const ok=new Set(billDepts().map(d=>d.id));return CONFIG.divisions.filter(d=>ok.has(d.dept))};
+// Fiscal Hive custom divisions (added under Fiscal Hive → Settings) are looked up here too.
+let FH_CUSTOM=[];
+const divById=id=>CONFIG.divisions.find(d=>d.id===id)||FH_CUSTOM.find(d=>d.id===id);
 const divName=id=>(divById(id)||{}).name||id;
 const priName=id=>(CONFIG.priorities.find(p=>p.id===id)||{}).name||'';
 const priColor=id=>(CONFIG.priorities.find(p=>p.id===id)||{}).color||'var(--muted)';
@@ -84,9 +89,9 @@ const desigOf=b=>(off(b)||{}).designations||[];
 // recorded position shows as "tagged".
 const cposOf=b=>{const o=off(b)||{};const c={...(o.cpos||{})};for(const d of (o.designations||[]))if(!c[d])c[d]={pos:'tagged'};return c};
 const desigName=id=>((CONFIG.designations||[]).find(d=>d.id===id)||{}).name||id;
-const cposLabel=p=>p==='tagged'?'Tagged, no position yet':posName(p)||p;
+const cposLabel=p=>p==='tagged'?'Tagged, no position yet':p==='hold'?'Hold':posName(p)||p;
 function cposChips(b){const c=cposOf(b);const ks=(CONFIG.designations||[]).map(d=>d.id).filter(k=>c[k]);
-  return ks.length?`<div class="cpos">${ks.map(k=>{const x=c[k];return `<span class="cp ${x.pos==='tagged'?'tg':''}" style="--c:${x.pos==='tagged'?'var(--line-2)':posColor(x.pos)}" title="${esc(((CONFIG.designations||[]).find(d=>d.id===k)||{}).full||k)}: ${esc(cposLabel(x.pos))}${x.src&&x.src!=='manual'?' (from '+esc(x.src)+')':''}"><b>${esc(desigName(k))}</b>${x.pos==='tagged'?'':' '+esc(posName(x.pos))}</span>`}).join('')}</div>`:''}
+  return ks.length?`<div class="cpos">${ks.map(k=>{const x=c[k];return `<span class="cp ${x.pos==='tagged'?'tg':''}" style="--c:${x.pos==='tagged'?'var(--line-2)':posColor(x.pos)}" title="${esc(((CONFIG.designations||[]).find(d=>d.id===k)||{}).full||k)}: ${esc(x.raw&&x.raw.toLowerCase()!==cposLabel(x.pos).toLowerCase()?`${x.raw} (${cposLabel(x.pos)})`:cposLabel(x.pos))}${x.src&&x.src!=='manual'?' (from '+esc(x.src)+')':''}${x.note?'\n'+esc(x.note):''}"><b>${esc(desigName(k))}</b>${x.pos==='tagged'?'':' '+esc(x.pos==='hold'?'Hold':posName(x.pos))}</span>`}).join('')}</div>`:''}
 const priOf=b=>canSee('priority')?((off(b)||{}).priority||null):null;
 const noteOf=b=>canSee('note')?((off(b)||{}).note||''):'';
 const assignOf=b=>(off(b)||{}).assignees||[];
@@ -202,12 +207,12 @@ const visibleCols=()=>COLS.order.filter(c=>colAllowed(c)&&!COLS.hidden.includes(
 /* ===================== MULTI-SELECT DROPDOWNS ===================== */
 // One component for departments, divisions, designations and people, in the table, on the bill page and in filters.
 function msOptions(field,b){
-  if(field==='departments') return CONFIG.departments.map(d=>({v:d.id,l:d.name,c:d.color}));
+  if(field==='departments') return billDepts().map(d=>({v:d.id,l:d.name,c:d.color}));
   if(field==='designations') return CONFIG.designations.map(d=>({v:d.id,l:d.name,t:d.full}));
   if(field==='assignees') return PEOPLE.map(p=>({v:p,l:p}));
   if(field==='divisions'){
     const depts=b?deptsOf(b):FLT.dept;
-    const list=depts&&depts.length?CONFIG.divisions.filter(d=>depts.includes(d.dept)):(b?[]:CONFIG.divisions);
+    const list=depts&&depts.length?billDivs().filter(d=>depts.includes(d.dept)):(b?[]:billDivs());
     return list.map(d=>({v:d.id,l:d.name,g:deptName(d.dept),c:deptColor(d.dept)}));
   }
   if(field==='priority') return CONFIG.priorities.map(p=>({v:p.id,l:p.name,c:p.color}));
@@ -544,7 +549,7 @@ function pageBills(){
     ${canSee('priority')?`<div class="field"><label for="fPri">${ic('priority')}Priority</label><select id="fPri"><option value="">Any</option>${CONFIG.priorities.map(p=>`<option value="${p.id}" ${FLT.pri[0]===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="none" ${FLT.pri[0]==='none'?'selected':''}>No priority</option></select></div>`:''}
     <div class="field grow"><label for="fFind">${ic('search')}Find</label><input type="search" id="fFind" value="${esc(FLT.find)}" placeholder="HB 101, title, sponsor, committee, note…"></div>
     ${colMenu()}
-    <button type="button" class="btn" id="csvBtn" title="Download the bills shown as a spreadsheet">Download .csv</button>
+    ${isAdmin()?`<button type="button" class="btn" id="csvBtn" title="Download the bills shown as “${esc(TRACKER_FILE)}.csv”">Download .csv</button>`:''}
     ${ME?`<button type="button" class="btn ${WATCHOPEN?'primary':''}" id="watchToggle" aria-expanded="${WATCHOPEN}">Watch list${W.terms.length+W.codes.length?` (${W.terms.filter(x=>x.on).length+W.codes.filter(x=>x.on).length})`:''}</button>`:''}
    </form>
    ${FLT.sug&&divById(FLT.sug)?`<p class="small">Showing bills for <b>${esc(divName(FLT.sug))}</b>: assigned to it by the office or suggested by the bill text. <button class="linkbtn" id="clearSug">Show all divisions</button></p>`:''}
@@ -569,7 +574,10 @@ function csvFor(rows){
       h?`${fmtMDY(h.d)} ${fmtTime(h.d)} ${h.committee}`:'',location.origin+'/'+billHref(b)].map(q).join(','))}
   return '﻿'+lines.join('\r\n');
 }
+// Only admins download the tracker; the file always carries this name.
+const TRACKER_FILE='2027 Bill Tracker Draft';
 function downloadCSV(rows,name){
+  if(!isAdmin())return;
   const blob=new Blob([csvFor(rows)],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
   toast(`Downloaded ${plural(rows.length,'bill')}`);
@@ -638,8 +646,8 @@ function pageUpdates(){
    <div class="grid2" style="align-items:start">
     <div>${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive. <button type="button" class="linkbtn demo-btn" data-demo="alerts">▶ See what the emails look like</button></p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours. <button type="button" class="linkbtn demo-btn" data-demo="alerts">▶ See what the emails look like</button></p></div>`}
      ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
-    <div><div class="card"><h2>Spreadsheet</h2><p class="desc">${ME?`Download the office list (${plural(csvRows.length,'bill')}) with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.`:`Download every bill and bill file (${csvRows.length.toLocaleString()}) with bill, title, summary, committee, House and Senate sponsors, last action, fiscal impact and next hearing. Sign in to include the office’s columns.`}</p>
-     <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>
+    <div>${typeof trackerHTML==='function'?trackerHTML():''}${isAdmin()?`<div class="card"><h2>Download the tracker</h2><p class="desc">Download the office list (${plural(csvRows.length,'bill')}) as <b>${esc(TRACKER_FILE)}.csv</b>, with the same columns as the office’s Excel tracker: bill, title, summary, department, division, committee, House and Senate sponsors, last action, fiscal impact, one column for each designation, office priority, assignments and notes.</p>
+     <button class="btn primary" id="csvAll">Download .csv</button><p class="small muted" style="margin-top:12px">Only admins see this button. Opens in Excel, Numbers or Google Sheets. To download a filtered set, use the Bills tab.</p></div>`:''}
      ${typeof legNewsHTML==='function'?legNewsHTML():''}</div>
    </div>`);
 }
@@ -910,6 +918,7 @@ function pageAdmin(){
      <td class="small">${u.role==='admin'?'Everything':u.perms.edit&&u.perms.fields.length?esc(u.perms.fields.map(f=>FIELD_LABEL[f]).join(', ')):'View only'}</td><td>${u.role==='admin'||u.perms.seePriority?'Visible':'Hidden'}</td><td>${u.role==='admin'||u.perms.fiscal?'Yes':'No'}</td><td class="small">${u.role==='admin'?'All bills':scopeTxt(u.perms)}</td>
      <td style="white-space:nowrap"><button class="btn sm" data-edituser="${esc(u.username)}">Edit</button> <button class="btn sm" data-useract="${u.disabled?'enable':'disable'}|${esc(u.username)}">${u.disabled?'Enable':'Disable'}</button> <button class="btn sm danger" data-useract="delete|${esc(u.username)}">Delete</button></td></tr>`).join('')}
    </tbody></table></div></div>
+   ${typeof adminTrackerHTML==='function'?adminTrackerHTML():''}
    ${typeof adminExtraHTML==='function'?adminExtraHTML():''}
    <div class="card"><h2>People for “Assigned to”</h2><p class="desc">Everyone with an account is already in the list (${esc(ADMIN.people.all.filter(n=>!ADMIN.people.extra.includes(n)).join(', ')||'nobody yet')}). Add anyone else here, one name per line.</p>
     <textarea id="peopleIn" aria-label="Extra people, one per line">${esc(ADMIN.people.extra.join('\n'))}</textarea><p><button class="btn primary" id="savePeople">Save names</button></p></div>
@@ -918,8 +927,8 @@ function pageAdmin(){
 const sectionName=id=>id==='other'?'Other / not listed':divName(id)||id||'';
 function sectionSelect(cur){return `<select id="uSection" style="width:100%"><option value="">—</option>${CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id).map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}<option value="other" ${cur==='other'?'selected':''}>Other / not listed</option></select>`}
 function userForm(u,req,inv){
-  const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,scope:'all',departments:[],bills:[]};
-  if(req&&req.section){const dv=divById(req.section);if(dv){p.scope='departments';p.departments=[dv.dept]}}
+  const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,tracker:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,scope:'all',departments:[],bills:[]};
+  if(req&&req.section){const dv=divById(req.section);if(dv&&billDepts().some(d=>d.id===dv.dept)){p.scope='departments';p.departments=[dv.dept]}}
   const val=(k)=>esc(u?u[k]||'':req?(k==='username'?req.username:k==='name'?`${req.first} ${req.last}`:k==='email'?req.email:''):'');
   if(inv)return `<form id="userForm" method="dialog"><h2>${ic('mail')}Invite someone</h2><p class="small muted">Choose what they can see and change now. Next you’ll get an email draft with their sign-up link; they choose their own username and password.</p>
    <div class="grid2" style="gap:12px;margin:12px 0"><div class="field"><label for="iFirst">First name</label><input id="iFirst" required maxlength="40" style="width:100%"></div><div class="field"><label for="iLast">Last name</label><input id="iLast" maxlength="40" style="width:100%"></div>
@@ -944,10 +953,11 @@ function permsHTML(p,u){
     <label class="check"><input type="checkbox" id="pNotes" ${p.seeNotes?'checked':''}><span>Can see notes</span></label>
     <label class="check"><input type="checkbox" id="pWatch" ${p.watch?'checked':''}><span>Can change the watch list</span></label>
     <label class="check"><input type="checkbox" id="pFiscal" ${p.fiscal?'checked':''}><span>Can open the Fiscal Hive (fiscal note dashboard)</span></label>
+    <label class="check"><input type="checkbox" id="pTracker" ${p.tracker?'checked':''}><span>Can see the shared bill tracker workbook (link and preview on the Updates page)</span></label>
     <span class="flabel" style="margin-top:10px">Bills they can see the office’s information for</span>
     <label class="check"><input type="radio" name="pScope" value="all" ${p.scope==='all'?'checked':''}><span>All bills</span></label>
     <label class="check"><input type="radio" name="pScope" value="departments" ${p.scope==='departments'?'checked':''}><span>Only bills in these departments</span></label>
-    <div class="daypick" style="margin:0 0 6px 26px">${CONFIG.departments.map(d=>`<label><input type="checkbox" data-pd="${d.id}" ${p.departments.includes(d.id)?'checked':''}>${esc(d.name)}</label>`).join('')}</div>
+    <div class="daypick" style="margin:0 0 6px 26px">${billDepts().map(d=>`<label><input type="checkbox" data-pd="${d.id}" ${p.departments.includes(d.id)?'checked':''}>${esc(d.name)}</label>`).join('')}</div>
     <label class="check"><input type="radio" name="pScope" value="assigned" ${p.scope==='assigned'?'checked':''}><span>Only bills assigned to them</span></label>
     <label class="check"><input type="radio" name="pScope" value="bills" ${p.scope==='bills'?'checked':''}><span>Only these bills (${esc(sessName(UI.session))})</span></label>
     <textarea id="pBills" style="min-height:60px;margin-left:26px;width:calc(100% - 26px)" placeholder="HB 20, SB 101">${esc(p.bills.filter(k=>k.startsWith(UI.session+'/')).map(k=>shortNum(k.split('/')[1])).join(', '))}</textarea></div>`;
@@ -961,12 +971,12 @@ function openUserDlg(u,req,inv){
   $('userForm').onsubmit=async e=>{e.preventDefault();
     const toKey=s=>{const m=s.trim().toUpperCase().replace(/\./g,'').match(/^([A-Z]{2,4})\s*0*(\d{1,4})$/);return m?`${UI.session}/${m[1]}${m[2].padStart(4,'0')}`:null};
     const keepOther=u&&u.perms?u.perms.bills.filter(k=>!k.startsWith(UI.session+'/')):[];
-    const perms={edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,
+    const perms={edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]};
     if(inv){const b={first:$('iFirst').value.trim(),last:$('iLast').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,role:document.querySelector('input[name=uRole]:checked').value,perms};
       try{const j=await api('invites',b);dlg.close();ADMIN=null;route(true);setTimeout(()=>inviteDraft({...b,token:j.token,expires_at:j.expires}),50)}catch(err){toast(err.message)}return}
     const body={action:req?'approve':'save',id:req?req.id:undefined,username:$('uName').value.trim().toLowerCase(),name:$('uDisp').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,password:$('uPw')?$('uPw').value:'',role:document.querySelector('input[name=uRole]:checked').value,
-      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,
+      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]}};
     try{await api(req?'requests':'users',body);dlg.close();toast(req?`Approved. ${body.name} can sign in as ${body.username}.`:body.password?`Saved. Give ${body.username} their password: ${body.password}`:'Saved');ADMIN=null;route(true)}catch(err){toast(err.message)}};
 }
@@ -1005,7 +1015,7 @@ function discussionSection(b){
   return `<section><h2>What was discussed</h2>${intro}${list.map(t=>{const d=pd(t.date);const mins=t.t1&&t.t0!=null?Math.max(1,Math.round((t.t1-t.t0)/60)):null;
     const status=t.status==='ok'?`${mins?mins+' min · ':''}${(t.words||0).toLocaleString()} words transcribed`:t.status==='nocap'?'Video found; captions aren’t ready yet.':'The meeting video doesn’t mark where this bill came up yet.';
     return `<div class="disc ${t.ag&&t.ag.length?'hasag':''}"><div class="kicker">${t.kind==='floor'?'Floor debate':'Committee hearing'} · ${d?fmtLong(d):''}</div><h4>${esc(t.label)}</h4>${t.item?`<div class="small">${esc(t.item)}</div>`:''}<div class="small muted">${status}</div>
-    <div class="links">${t.t0!=null&&t.video?`<a href="${esc(vAt(t,t.t0))}" target="_blank" rel="noopener">Watch from ${clock(t.t0)}</a>`:''}<a href="${esc(t.page)}" target="_blank" rel="noopener">Meeting page</a></div>
+    <div class="links">${t.t0!=null&&t.video?`<a href="${esc(vAt(t,t.t0))}" target="_blank" rel="noopener">Watch from ${clock(t.t0)}</a>`:''}<a href="${esc(t.page)}" target="_blank" rel="noopener">Meeting page</a><button type="button" class="linkbtn hshare" data-hs-bill="${esc(`${billLabel(b)} – ${b.title}`)}" data-hs-com="${esc(t.label)}" data-hs-date="${d?esc(fmtLong(d)):''}" data-hs-url="${esc(t.t0!=null&&t.video?vAt(t,t.t0):t.page)}" aria-label="Copy a summary of this ${t.kind==='floor'?'floor debate':'hearing'} to share">${ic('share')}Share</button></div>
     ${t.ag&&t.ag.length?`<div class="agbox"><b>Attorney General mentioned (${t.ag.length})</b><ul>${t.ag.map(a=>`<li><a class="ts" href="${esc(vAt(t,a[0]))}" target="_blank" rel="noopener">${clock(a[0])}</a><span>${markAG(a[1])}</span></li>`).join('')}</ul></div>`:''}
     ${t.notes&&t.notes.length?`<ul>${t.notes.map(n=>`<li><a class="ts" href="${esc(vAt(t,n[0]))}" target="_blank" rel="noopener">${clock(n[0])}</a><span>${esc(n[2])}</span></li>`).join('')}</ul>`:''}
     ${t.status==='ok'&&b.txc!=null?`<details data-tx="${esc(b.session)}|${b.txc}|${esc(b.num)}|${esc(t.key)}"><summary>Read the transcript</summary><div class="tx">Loading…</div></details>`:''}</div>`}).join('')}</section>`;
@@ -1060,7 +1070,7 @@ function officePanel(b){
    <div class="sidegroup"><span class="flabel">${ic('flag')}Position</span>${[['','No position','var(--line-2)'],...(CONFIG.positions||[]).map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(pos||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pos" value="${v}" ${(pos||'')===v?'checked':''} ${canEdit('position')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('position')}</div>
    <div class="sidegroup"><span class="flabel">${ic('building')}Department</span>${msHTML('departments',b.key,deptsOf(b),canEdit('departments'))}${by('departments')}</div>
    <div class="sidegroup"><span class="flabel">${ic('layers')}Division</span>${msHTML('divisions',b.key,divsOf(b),canEdit('divisions'),deptsOf(b).length?'Choose…':'Department first')}${suggHTML(b)}${by('divisions')}</div>
-   <div class="sidegroup"><span class="flabel">${ic('users')}Association positions</span>${(CONFIG.designations||[]).map(d=>{const x=cposOf(b)[d.id];return `<div class="cprow"><label for="cp-${d.id}" title="${esc(d.full)}">${esc(d.name)}</label><select id="cp-${d.id}" data-cpsel="${d.id}" ${canEdit('designations')?'':'disabled'} style="--c:${x&&x.pos!=='tagged'?posColor(x.pos):'var(--line-2)'}"><option value="">—</option><option value="tagged" ${x&&x.pos==='tagged'?'selected':''}>Tagged, no position yet</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${x&&x.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`}).join('')}${by('designations')}</div>
+   <div class="sidegroup"><span class="flabel">${ic('users')}Association positions</span>${(CONFIG.designations||[]).map(d=>{const x=cposOf(b)[d.id];return `<div class="cprow"><label for="cp-${d.id}" title="${esc(d.full)}">${esc(d.name)}</label><select id="cp-${d.id}" data-cpsel="${d.id}" ${canEdit('designations')?'':'disabled'} style="--c:${x&&x.pos!=='tagged'?posColor(x.pos):'var(--line-2)'}"><option value="">—</option><option value="tagged" ${x&&x.pos==='tagged'?'selected':''}>Tagged, no position yet</option><option value="hold" ${x&&x.pos==='hold'?'selected':''}>Hold</option>${(CONFIG.positions||[]).map(p=>`<option value="${p.id}" ${x&&x.pos===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`}).join('')}${by('designations')}</div>
    ${canSee('priority')?`<div class="sidegroup"><span class="flabel">${ic('priority')}Office priority</span>${[['','No priority','var(--line-2)'],...CONFIG.priorities.map(x=>[x.id,x.name,x.color])].map(([v,l,c])=>`<label class="radio ${(p||'')===v?'sel':''}" style="--c:${c}"><input type="radio" name="pri" value="${v}" ${(p||'')===v?'checked':''} ${canEdit('priority')?'':'disabled'}><span class="dot"></span>${esc(l)}</label>`).join('')}${by('priority')}</div>`:''}
    <div class="sidegroup"><span class="flabel">${ic('user')}Assigned to</span>${msHTML('assignees',b.key,assignOf(b),canEdit('assignees'),'Assign…')}${by('assignees')}</div>
    ${canSee('note')?`<div class="sidegroup"><label class="flabel" for="noteIn">${ic('pencil')}Notes</label><textarea id="noteIn" ${canEdit('note')?'':'readonly'}>${esc(noteOf(b))}</textarea>${by('note')}${canEdit('note')?'<button class="btn primary" id="saveNote" style="margin-top:8px">Save note</button>':''}</div>`:''}
@@ -1154,8 +1164,8 @@ function bind(){
   const ff=$('fFind'); if(ff){ff.onchange=()=>{FLT.find=ff.value;PAGE=1;saveFLT();route()};ff.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();ff.blur()}}}
   on('clearSp','onclick',()=>{FLT.sponsor='';saveFLT();route()});
   on('clearSug','onclick',()=>{FLT.sug='';saveFLT();route()});
-  on('csvBtn','onclick',()=>downloadCSV(filteredBills(),`deseret-docket-${UI.session}-${todayStr}.csv`));
-  on('csvAll','onclick',()=>downloadCSV(ME?allRows(UI.session).filter(onOffice).sort(SORTS.num):allRows(UI.session).sort(SORTS.num),`deseret-docket-${UI.session}-${ME?'office-list':'all-bills'}-${todayStr}.csv`));
+  on('csvBtn','onclick',()=>{if(isAdmin())downloadCSV(filteredBills(),TRACKER_FILE+'.csv')});
+  on('csvAll','onclick',()=>{if(isAdmin())downloadCSV(ME?allRows(UI.session).filter(onOffice).sort(SORTS.num):allRows(UI.session).sort(SORTS.num),TRACKER_FILE+'.csv')});
   app.querySelectorAll('[data-sort]').forEach(btn=>btn.onclick=()=>{const c=btn.dataset.sort;FLT.sort=FLT.sort.col===c?{col:c,dir:-FLT.sort.dir}:{col:c,dir:1};saveFLT();route(true)});
   app.querySelectorAll('[data-page]').forEach(btn=>btn.onclick=()=>{PAGE+=+btn.dataset.page;route();scrollTo(0,0)});
   // drag a column heading to move it
@@ -1250,7 +1260,7 @@ function bind(){
     try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':x.by)} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
     catch(e){$('teamLogBody').textContent='History didn’t load.';delete tl.dataset.done}});
   // page modules in their own files
-  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
+  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
 }
 const curKey=()=>{const p=decodeURIComponent(location.hash.slice(1)).split('-');return p[1]+'/'+p.slice(2).join('-')};
 let lastPull=0;
@@ -1262,7 +1272,7 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     const meP=fetch('/api/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():{user:null}).catch(()=>({user:null}));
     [INDEX,CONFIG]=await Promise.all([getJSON('data/index.json'),getJSON('config.json')]);
     const me=await meP;
-    if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{}};PEOPLE=me.people||[]}
+    if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{},tracker:me.tracker||null};PEOPLE=me.people||[]}
     loadCols();
     Promise.all([getJSON('data/legislators.json'),getJSON('geo/where.json').catch(()=>null)]).then(([l,w])=>{WHERE=w;LEGS=l;if(booted&&/^#(legislators|learn)/.test(location.hash))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);

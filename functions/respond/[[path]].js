@@ -3,7 +3,7 @@
 //   /respond/<token>?a=none     records "no impact" (confirms with one tap if the browser blocks scripts)
 //   /respond/<token>?a=impact   form: amount, what it would pay for, one-time or ongoing, notes
 //   /respond/<token>?a=wrong    form: which division should get it instead
-import { ensureFiscal, siteConfig, logFn, settleCard } from "../../lib/fiscal.js";
+import { ensureFiscal, unitConfig, logFn, settleCard } from "../../lib/fiscal.js";
 import { BEE, BEE_CSS } from "../../lib/logo.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -39,7 +39,7 @@ export async function onRequest({ request, env, params }) {
   if (req.sent_at && Date.now() - new Date(req.sent_at) > TOKEN_DAYS * 864e5) return page("Link expired", "<h1>This link has expired</h1><p>Contact the person who sent the request for a new one.</p>", 410);
   if (req.status === "rerouted") return page("Sent elsewhere", "<h1>This request went to another section</h1><p>Thanks for pointing it the right way. Nothing more is needed from you.</p>");
   const card = await db.prepare("SELECT * FROM fn_cards WHERE id = ?").bind(req.card_id).first();
-  const cfg = await siteConfig(env, url.origin);
+  const cfg = await unitConfig(env, db, url.origin);
   const divName = (id) => ((cfg.divisions || []).find((d) => d.id === id) || {}).name || id;
   const billBox = `<div class="bill"><b>${esc(shortNum(card.num))}${card.version ? ` (${esc(card.version)})` : ""}</b>: ${esc(card.title)}<div class="muted">Asked of ${esc(divName(req.division))} · <a href="https://le.utah.gov/~${esc(String(card.session).slice(0, 4))}/bills/static/${esc(card.num)}.html" target="_blank" rel="noopener">Read the bill</a></div></div>`;
   const prior = obj(req.answer);
