@@ -894,6 +894,15 @@ function pageAccount(){
    ${isAdmin()?'':`<dt>Can change</dt><dd>${p.edit&&p.fields.length?esc(p.fields.map(f=>({position:'position',agAction:'AG office action',departments:'departments',divisions:'divisions',designations:'designations',priority:'office priority',note:'notes',assignees:'assignments'}[f])).join(', ')):'Nothing (view only)'}</dd>
    <dt>Office priority</dt><dd>${p.seePriority?'Visible':'Hidden'}</dd><dt>Bills</dt><dd>${p.scope==='all'?'All bills':p.scope==='departments'?'Bills in '+esc(p.departments.map(deptName).join(', ')):p.scope==='assigned'?'Bills assigned to you':`${p.bills.length} chosen bills`}</dd>`}</dl>
    <p style="margin-top:18px"><a class="btn" href="/logout">Sign out</a></p></div>
+   <div class="card" id="profileCard"><h2>Your profile</h2><p class="desc">${ME.display?'':'<b>Add your name.</b> '}Emails you send from Deseret Docket (draft reviews, language requests, reminders) go out under this name and title, and replies come straight to this email address. Testimony drafts use them too.</p>
+    <form id="pfForm" class="grid2" style="gap:12px">
+     <div class="field"><label for="pfFirst">First name</label><input id="pfFirst" value="${esc(ME.first||(ME.display||'').split(' ')[0]||'')}" autocomplete="given-name" required style="width:100%"></div>
+     <div class="field"><label for="pfLast">Last name</label><input id="pfLast" value="${esc(ME.last||(ME.display||'').split(' ').slice(1).join(' ')||'')}" autocomplete="family-name" required style="width:100%"></div>
+     <div class="field"><label for="pfEmail">Work email</label><input id="pfEmail" type="email" value="${esc(ME.email||'')}" autocomplete="email" placeholder="you@agutah.gov" style="width:100%"></div>
+     <div class="field"><label for="pfSection">Section</label>${sectionSelect(ME.section||'').replace('id="uSection"','id="pfSection"')}</div>
+     <div class="field"><label for="pfTitle">Job title</label><input id="pfTitle" value="${esc(ME.title||'')}" placeholder="e.g. Legislative Coordinator" style="width:100%"></div>
+     <div class="field"><label for="pfPhone">Phone <span class="tiny muted">(optional)</span></label><input id="pfPhone" type="tel" value="${esc(ME.phone||'')}" autocomplete="tel" style="width:100%"></div>
+     <div style="grid-column:1/-1"><button class="btn primary">Save profile</button></div></form></div>
    <div class="card"><h2>Change your password</h2>${ME.source==='db'?`<form id="pwForm"><div class="field" style="margin-bottom:10px"><label for="pwOld">Current password</label><input type="password" id="pwOld" autocomplete="current-password" required style="width:100%"></div>
     <div class="field" style="margin-bottom:10px"><label for="pwNew">New password (at least 10 characters)</label><input type="password" id="pwNew" autocomplete="new-password" minlength="10" required style="width:100%"></div><button class="btn primary">Change password</button></form>`
     :`<p class="desc">Your account is set in Cloudflare (the DOCKET_USERS setting). To change its password, make a new line with <code>make_password.py</code> and replace yours there.</p>`}</div></div>`);
@@ -1240,6 +1249,8 @@ function bind(){
   on('addCode','onsubmit',e=>{e.preventDefault();const v=$('codeIn').value.trim().replace(/^title\s+/i,'');if(!/^\d+[A-Za-z]?(-\d+[A-Za-z]?(-\d+(\.\d+)?)?)?$/.test(v)){toast('Use a format like 13, 13-11 or 13-11-4.5');return}if(W.codes.some(x=>x.t===v))return;W.codes.push({t:v,on:true});saveWatch();route()});
   on('optsForm','onsubmit',e=>{e.preventDefault();const f=e.target;['struck','defsOnly','titlesOnly'].forEach(k=>W.opts[k]=f[k].checked);saveWatch();route();toast('Options saved')});
   // account and admin
+  on('pfForm','onsubmit',async e=>{e.preventDefault();try{const j=await api('profile',{first:$('pfFirst').value,last:$('pfLast').value,email:$('pfEmail').value,section:$('pfSection').value,title:$('pfTitle').value,phone:$('pfPhone').value});
+    Object.assign(ME,{display:j.display,email:j.email,section:j.section,first:j.first,last:j.last,title:j.title,phone:j.phone});toast('Profile saved');route(true)}catch(err){toast(err.message)}});
   on('pwForm','onsubmit',async e=>{e.preventDefault();try{await api('password',{old:$('pwOld').value,new:$('pwNew').value});toast('Password changed. Sign in again with the new one.');setTimeout(()=>location.href='/login',1500)}catch(err){toast(err.message)}});
   on('addUser','onclick',()=>openUserDlg(null));
   app.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>openUserDlg(null,ADMIN.requests.find(r=>r.id===b.dataset.approve)));
@@ -1265,7 +1276,7 @@ function bind(){
     try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':x.by)} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
     catch(e){$('teamLogBody').textContent='History didn’t load.';delete tl.dataset.done}});
   // page modules in their own files
-  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind','outBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
+  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind','outBind','wishBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
 }
 const curKey=()=>{const p=decodeURIComponent(location.hash.slice(1)).split('-');return p[1]+'/'+p.slice(2).join('-')};
 let lastPull=0;
@@ -1277,7 +1288,7 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     const meP=fetch('/api/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():{user:null}).catch(()=>({user:null}));
     [INDEX,CONFIG]=await Promise.all([getJSON('data/index.json'),getJSON('config.json')]);
     const me=await meP;
-    if(me&&me.user){ME={user:me.user,display:me.display,role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{},tracker:me.tracker||null};PEOPLE=me.people||[]}
+    if(me&&me.user){ME={user:me.user,display:me.display,email:me.email||'',first:me.first||'',last:me.last||'',title:me.title||'',phone:me.phone||'',role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{},tracker:me.tracker||null};PEOPLE=me.people||[]}
     loadCols();
     Promise.all([getJSON('data/legislators.json'),getJSON('geo/where.json').catch(()=>null)]).then(([l,w])=>{WHERE=w;LEGS=l;if(booted&&/^#(legislators|learn)/.test(location.hash))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);

@@ -1,0 +1,603 @@
+{
+ "year": "2026",
+ "source": "https://le.utah.gov/interim/2026/pdf/00002139.pdf",
+ "label": "Approved by the Legislative Management Committee, April 16, 2026. Each committee could amend its list at its first meeting in May.",
+ "committees": {
+  "INTBUS": [
+   {
+    "n": 1,
+    "title": "Currency Availability",
+    "desc": "Study the need for legislative action and identify impacts to the business community related to the availability of currency due to penny shortages, including issues related to price rounding, best practices, and effects on state agencies."
+   },
+   {
+    "n": 2,
+    "title": "Employment Non-Competition Clauses",
+    "desc": "Review recent legislative action on non-competition clauses in employment agreements in specific industries and consider existing statutory provisions governing non-competition clauses for all employees."
+   },
+   {
+    "n": 3,
+    "title": "Healthcare Consumer Safety",
+    "desc": "Study emerging issues involving minor surgical procedures, medical spas, and wellness clinics identified by the Division of Professional Licensing and the Office of Professional Licensure Review."
+   },
+   {
+    "n": 4,
+    "title": "Homeowners' Insurance",
+    "desc": "Study emerging issues related to homeowners' insurance and state legislative trends to reduce costs and risks for homeowners. Also, consider proposals to address wildfire-related cost increases, such as creating state-supported high-risk pooled insurance or establishing a home mitigation grant program."
+   },
+   {
+    "n": 5,
+    "title": "Insurance Market Updates",
+    "desc": "Review overall trends in insurance markets to assess the ongoing impacts of enacted legislation and the need for further statutory changes. Study changes in premiums with a particular emphasis on property and casualty (P&C) and health insurance lines."
+   },
+   {
+    "n": 6,
+    "title": "Office of AI Policy",
+    "desc": "An overview of the office of AI policy and emerging key issues in AI governance."
+   },
+   {
+    "n": 7,
+    "title": "Professional Licensing Coordination",
+    "desc": "Study the relationships between state law and other entities, including federal requirements, national organizations, and interstate compacts, as they relate to the regulation of professional licenses"
+   },
+   {
+    "n": 8,
+    "title": "Professional Licensing Regulations",
+    "desc": "Review recommendations from the Office of Professional Licensing Review and other issues related to professional licensure."
+   },
+   {
+    "n": 9,
+    "title": "Property Management Oversight",
+    "desc": "Review recommendations from the Department of Commerce and consider how to resolve shared regulatory obligations for property management licensees between the Divisions of Consumer Protection and Real Estate."
+   },
+   {
+    "n": 10,
+    "title": "Radon and Asbestos Mitigation Licensing",
+    "desc": "Study licensing qualifications and scope of practice for construction licensees engaged in radon and asbestos mitigation to balance accessibility, cost, and homeowner safety."
+   },
+   {
+    "n": 11,
+    "title": "Real Estate Wire Fraud",
+    "desc": "Study the real estate purchase process to identify the primary causes of wire fraud, including vulnerabilities in communication methods, and consider potential legislative action to decrease the risk of data leaks, identity theft, and wire fraud."
+   },
+   {
+    "n": 12,
+    "title": "Trust Companies",
+    "desc": "Study existing regulations affecting trust companies. Consider statutory changes that would expand access to individuals with lower net worth or unconventional asset classes."
+   }
+  ],
+  "INTEDW": [
+   {
+    "n": 1,
+    "title": "Governor's Office of Economic Development Review",
+    "desc": "Hear an update on the Governor’s Office of Economic Development’s (GOED) Strategic Framework execution and evaluate economic development-related programs across agencies and determine which, if any, programs are better suited for GOED. Review existing GOED programs, their effectiveness, and return on investment across all areas, including tourism and film."
+   },
+   {
+    "n": 2,
+    "title": "Nucleus Institute",
+    "desc": "A presentation from the Nucleus Institute on innovations they are supporting in the education, workforce, and community ecosystems in Utah (including an update on the Innovation District at The Point)."
+   },
+   {
+    "n": 3,
+    "title": "Quantum Computing",
+    "desc": "Study the creation of a “Utah Quantum 2030” Task Force to support Utah’s leadership in quantum innovation, secure data infrastructure, and commercialization by 2030. The task force would review a “Utah Quantum Roadmap” and provide recommendations."
+   },
+   {
+    "n": 4,
+    "title": "State Location Privacy Act",
+    "desc": "There are constituent concerns with sensitive location data, such as someone attending a worship service or political rally, potentially being sold or otherwise used against them. This would examine the state of the law on the sale of location data collected via cell phone apps and whether the state should enact a “State Location Privacy Act.”"
+   },
+   {
+    "n": 5,
+    "title": "Temporary Assistance for Needy Families Review",
+    "desc": "Review Temporary Assistance for Needy Families (TANF) and the funds going to each of its four allowable uses. Study allowing the Department of Workforce Services to assign multiple allowable uses to each program under the same program contract. This will better inform the legislature on TANF uses."
+   },
+   {
+    "n": 6,
+    "title": "Workforce Needs",
+    "desc": "Study Utah's workforce needs, what training programs exist to meet those needs, and what the near (3-5 years) future needs will be. Examine the roles of apprenticeships, workforce Pell, and AI training programs, as well as other workforce-related topics, to increase the number of skilled workers, enhance competitiveness, and meet the needs of public and private employers."
+   }
+  ],
+  "INTEDU": [
+   {
+    "n": 1,
+    "title": "Advanced Placement (AP) Credit vs. Concurrent Enrollment Alignment",
+    "desc": "The Utah System of Higher Education (USHE) institutions accept high school concurrent enrollment credit more readily than AP credit, even though AP courses are generally more rigorous. The committee should examine how to better align credit recognition policies across institutions."
+   },
+   {
+    "n": 2,
+    "title": "Business Manager Reporting Structure in Public Education",
+    "desc": "In public education, business managers (deputy superintendents) do not report to the superintendent in a local education agency or in USBE. The committee should consider whether this organizational structure is appropriate for public education administration. See 2026 H.B. 524, Public Education Financial Officers."
+   },
+   {
+    "n": 3,
+    "title": "Educator Licensing and Disciplinary Action",
+    "desc": "Currently, the Utah Professional Practices Advisory Commission (UPPAC) manages complaints about teacher conduct. Review options for (1) improving the UPPAC process and (2) improving the due process for teachers during an investigation."
+   },
+   {
+    "n": 4,
+    "title": "Institutional Neutrality and Student Clubs",
+    "desc": "Examine recent legislation on institutional neutrality in public education (2024 H.B. 261, Equal Opportunity Initiatives, and 2026 S.B. 295, Intellectual Diversity in Education and Government) and the landscape of curricular and non-curricular clubs. Is there any clean-up needed?"
+   },
+   {
+    "n": 5,
+    "title": "K12 and USHE Education and Workforce Partnerships",
+    "desc": "A joint presentation from the Utah Board of Higher Education and USBE on education and workforce readiness partnerships between the two systems, including technical education concurrent enrollment, APEX, First Credential, and youth apprenticeships, and more."
+   },
+   {
+    "n": 6,
+    "title": "Legislative Audits",
+    "desc": "Review 5-6 education-related audits likely to be assigned to the Education Interim Committee as the lead review committee."
+   },
+   {
+    "n": 7,
+    "title": "Legislatively Mandated Education Programs",
+    "desc": "How many and what programs does the state board oversee as mandated by the Legislature? Should they be prioritized to match the mission and vision of the public education system as established in code?"
+   },
+   {
+    "n": 8,
+    "title": "Legislatively Mandated Education Programs and Outcome-based Investment Grant Program",
+    "desc": "2026 S.B. 324, Outcome-based Investment Grant Pilot Framework, established an Outcome-based Investment Grant Pilot Program. Which legislatively mandated public education programs could benefit from going through the process established by S.B. 324?"
+   },
+   {
+    "n": 9,
+    "title": "Organizing and Coordinating Civics Education Code",
+    "desc": "Civics education is spread throughout the education code and needs to be organized and coordinated. The issue was highlighted by the number of places that required edits in 2026 H.B. 312, School Curriculum and Standards Modifications."
+   },
+   {
+    "n": 10,
+    "title": "Roles in Curriculum and Class Creation",
+    "desc": "Ensure legislators understand the distinct roles in creating a class and curriculum: USBE sets standards; LEAs select curriculum; parents and stakeholders provide input; and legislation shapes the overall process. This is not a bill but a topic that requires discussion and clarification."
+   },
+   {
+    "n": 11,
+    "title": "Special Education Funding",
+    "desc": "Study special education funding, including provisions in 2026 H.B. 463, Special Education Funding Modifications. Study compensation for paraprofessional support at Utah Schools for the Deaf and Blind, including interpreters."
+   },
+   {
+    "n": 12,
+    "title": "Strategic Reinvestment Plan for Public Education",
+    "desc": "Study options for a strategic reinvestment plan for public education (see 2025 H.B. 265, Higher Education Strategic Reinvestment)."
+   },
+   {
+    "n": 13,
+    "title": "Successful Arts Education Implementation",
+    "desc": "Review successful arts education programs in Utah. How are they successful with limited funding?"
+   },
+   {
+    "n": 14,
+    "title": "System Redesign",
+    "desc": "A presentation on the restructuring of USHE into regions (stemming from 2026 H.B. 352, Higher Education Alignment) and how this new System architecture will enhance collaboration and help Utah capitalize on greater efficiencies in the delivery of higher education across the state."
+   },
+   {
+    "n": 15,
+    "title": "Teacher Licensing",
+    "desc": "Review credit-hour requirements for degrees or licenses (such as teacher licenses) that require more than 120 credit hours. Study current teacher licensing practices and whether a subject- matter bachelor's degree (math, history, engineering, etc.) plus a master's in education should qualify for a full Professional Educator License in Utah."
+   },
+   {
+    "n": 16,
+    "title": "Teacher Licensing",
+    "desc": "Study current teacher licensing practices and whether a subject- matter bachelor's degree (math, history, engineering, etc.) plus a master's in education should qualify for a full Professional Educator License in Utah."
+   },
+   {
+    "n": 17,
+    "title": "USHE Campus Safety Task Force Updates",
+    "desc": "A presentation on the work the USHE Campus Safety Task Force has engaged in since its development, and anticipated outcomes and work products from the task force."
+   }
+  ],
+  "INTGOC": [
+   {
+    "n": 1,
+    "title": "Artificial Intelligence in Political Advertising",
+    "desc": "Study updating current statute as it pertains to when and how one is required to disclose the use of artificial intelligence in all forms of political advertising materials (e.g., audio, visual, and print), and if statutory language needs to be adjusted to disclose when AI is used to enhance, alter, mislead, etc. This study item was submitted with respect to 2026 H.B. 504, Political Advertising Modifications."
+   },
+   {
+    "n": 2,
+    "title": "Boards and Commissions",
+    "desc": "Study the establishment of an ongoing review process for boards and commissions to assess their efficacy and value."
+   },
+   {
+    "n": 3,
+    "title": "Cooperative Contracts Fund",
+    "desc": "Evaluate whether the Cooperative Contracts fund should be converted from an internal service fund (ISF) to an enterprise fund (EF). Metrics over the last several years show primary customers for the Cooperative Contract program with the Division of Purchasing are non-state public entities (aligning more closely with the definition of a regulatory fee or enterprise fund). Government Accounting Standards Board (GASB) rules specify if more than 50% of revenue is generated outside of state government (this is currently happening with 1% fee charged to cooperative contracts for the Division of Purchasing's revenue), the revenue must be classified as an enterprise fund. Review potential statutory changes for the Cooperative Contract program."
+   },
+   {
+    "n": 4,
+    "title": "Cost of Elections",
+    "desc": "Assess and study all costs related to elections, including the cost of ballots, staff costs, wages for poll workers, processing costs, and election day costs. Identify the average cost of elections for counties and municipalities and how costs vary across smaller and larger counties. Fiscal analysis could consist of reviewing costs from the last few years or projected costs in light of the changes coming in 2029. This study item was submitted after 2026 H.B. 479, Election Code Modifications"
+   },
+   {
+    "n": 5,
+    "title": "Election Integrity, Security, and Participation",
+    "desc": "Study how to ensure election integrity and security while maintaining participation."
+   },
+   {
+    "n": 6,
+    "title": "Municipal Service Districts",
+    "desc": "Study Municipal Services Districts, including their governance, transparency, and the scope of their authority regarding planning and zoning."
+   }
+  ],
+  "INTHHS": [
+   {
+    "n": 1,
+    "title": "Behavioral Health",
+    "desc": "Subcategories for study include the practice of electroconvulsive therapy, capacity and resource constraints at the Utah State Hospital, opioid prevention and education, civil commitment processes, and behavioral health network adequacy standards."
+   },
+   {
+    "n": 2,
+    "title": "Child Health and Welfare",
+    "desc": "Study maternal and infant health, including prenatal testing, issues relating to balancing the rights of parents and the ability of the Division of Child and Family Services to assess a child’s safety, oversight of children in foster care with medical needs, and education on and access to healthy food."
+   },
+   {
+    "n": 3,
+    "title": "Healthcare Access and Cost",
+    "desc": "Consider opportunities to reduce healthcare costs while improving access to high-quality healthcare services. Subcategories include studying anticompetitive practices across healthcare systems, healthcare consumer debt burden, living kidney donations, and any- willing-provider policies. Will also study issues related to increasing demand for specialized, high-acuity medical care for incarcerated individuals with chronic and complex conditions."
+   },
+   {
+    "n": 4,
+    "title": "Healthcare Workforce",
+    "desc": "Study issues related to the healthcare workforce, including a preceptorship incentive program and training and licensure requirements for healthcare practitioners."
+   },
+   {
+    "n": 5,
+    "title": "Medicaid",
+    "desc": "Study issues related to the Medicaid program, including delivery of behavioral health services in managed care systems, access to atypical antipsychotic medications, and the Upper Payment Limit program. Will also study implementation of H.R. 1, One Big Beautiful Bill Act, including community engagement requirements, and provider tax changes."
+   },
+   {
+    "n": 6,
+    "title": "Miscellaneous",
+    "desc": "Conduct sunset reviews, respond to legislative audits, address recommendations included in statutorily required reports."
+   },
+   {
+    "n": 7,
+    "title": "Utah State Hospital",
+    "desc": "Study capacity and resource constraints at the Utah State Hospital. Explore the expansion of the state hospital system, bed space for offenders experiencing mental illness, and other tools to address mental health treatment in custodial/non-custodial settings."
+   }
+  ],
+  "INTJUD": [
+   {
+    "n": 1,
+    "title": "Attorney Opinion Letters in Real Estate Escrow",
+    "desc": "Examine issues related to 2026 H.B. 503, Real Estate Modifications, which the House Judiciary Committee referred to interim study at the sponsor’s request. The bill would have allowed title insurance producers to handle real estate escrows using an attorney opinion letter instead of a traditional title insurance policy in certain transactions."
+   },
+   {
+    "n": 2,
+    "title": "Child Welfare Case Timelines",
+    "desc": "Study the efficiency of child welfare cases moving through the court system, with a focus on time spent at each stage and the causes of delay (e.g., continuances, cancellations, and workload). This item relates to 2026 H.B. 576, Child Welfare Timeline Compliance Amendments, which sought to address court compliance with child welfare timelines."
+   },
+   {
+    "n": 3,
+    "title": "Criminal Fines",
+    "desc": "Review criminal fines, fees, and restitution in Utah’s criminal justice system. Examine if the criminal surcharge should be changed to a flat fee."
+   },
+   {
+    "n": 4,
+    "title": "Domestic Relations Commissioners",
+    "desc": "Study the appropriate scope of the domestic relations commissioner's authority in family court proceedings. Concerns have been raised that some proceedings involve complex financial or equitable determinations beyond the intended scope of the commissioner's role, and that delays in obtaining judicial review can generate substantial attorney fees. The committee could explore options to clarify commissioner authority, establish thresholds for mandatory judicial assignment, and set standards for timely de novo review."
+   },
+   {
+    "n": 5,
+    "title": "General Provisions for the Utah Code",
+    "desc": "Study the benefits of adding a general provisions title to the Utah Code. OLRGC has been working on a proposal to add a title at the beginning of the Utah Code that would include provisions that are applicable to the entire Utah Code, including definitions, drafting and interpretation rules, and severability and savings clauses."
+   },
+   {
+    "n": 6,
+    "title": "Justice Court Closures",
+    "desc": "Study the financial and operational impact on district courts of absorbing caseloads from closed municipal justice courts, including lower-level offenses and traffic violations. Examine whether expanding the role of district court commissioners would help manage the anticipated increase in cases."
+   },
+   {
+    "n": 7,
+    "title": "Juvenile Detention",
+    "desc": "Study issues related to H.B. 465, Juvenile Court Amendments. Specifically, assess whether existing juvenile detention facilities adequately meet the demands of the juvenile justice system, and explore the policy proposed in H.B. 465 to restore a juvenile court's authority—eliminated in 2017—to suspend detention orders as an incentive for compliance with specified conditions, such as drug treatment."
+   },
+   {
+    "n": 8,
+    "title": "Pretrial Release and Failure to Appear Rates",
+    "desc": "Study issues related to 2026 H.B. 593, Bail Amendments. Specifically, examine implementation requirements for pretrial services programs to comply with the bill’s updated arraignment procedures for repeat offenders, including the elimination of own-recognizance release in favor of supervised release, cash bail, or detention. Study failure to appear (FTA) rates in Utah courts across case types and judicial districts, including how rates have changed over time and how Utah compares to other states. As part of this study, the committee could work with the courts to obtain relevant data and examine what Utah courts and pretrial supervision programs have done to reduce FTAs. The study could also examine approaches taken in other states, including automated court date reminder systems. According to a 2025 Pew survey, Utah is among 19 states without such a system, though the courts are developing automated text and email reminders through their existing MyCourtCase platform."
+   },
+   {
+    "n": 9,
+    "title": "Statute of Limitations",
+    "desc": "Study the appropriate limitations period for wage claim lawsuits. Current law establishes a one-year limitations period for administrative wage claims, but is silent on the period applicable to court actions. This study item relates to 2026 S.B. 213, Criminal Proceedings Amendments, which would have clarified that a one-year limitation period applies to wage-claim lawsuits. The study may also examine how statutes of limitations are organized throughout the Utah Code, including identifying provisions that fall outside the primary criminal and civil limitation statutes (76-1-3 and 78B-2) and evaluating whether to clarify or consolidate those provisions."
+   },
+   {
+    "n": 10,
+    "title": "Victims' Services Funding and Impact Statements",
+    "desc": "Study the funding structure for victim services in Utah and the role of victim impact statements in the justice system. As federal funding declines, concerns have arisen that current funding mechanisms create competition among service providers. The committee could explore sustainable funding alternatives and examine whether the priority of victim impact statements in the justice system should be more clearly defined."
+   }
+  ],
+  "INTLAW": [
+   {
+    "n": 1,
+    "title": "Construction Fraud",
+    "desc": "Review whether Utah should revamp construction fraud offenses so they can be charged criminally."
+   },
+   {
+    "n": 2,
+    "title": "Extending the Statute of Limitations on Pattern of Unlawful Activity",
+    "desc": "Review the state’s pattern of unlawful behavior statute of limitations to ensure the law accurately reflects complex, long-running criminal schemes."
+   },
+   {
+    "n": 3,
+    "title": "Registrable Offenses",
+    "desc": "Examine what should qualify as a registrable offense in Utah."
+   },
+   {
+    "n": 4,
+    "title": "Criminal Justice Audits",
+    "desc": "Review four criminal justice audits assigned to the Law Enforcement and Criminal Justice Interim Committee as the lead review committee."
+   },
+   {
+    "n": 5,
+    "title": "Speedy Trial",
+    "desc": "Evaluate Utah’s process to a speedy trial, including conducting a review of the systemic impacts, judicial resources, and practices in other states."
+   },
+   {
+    "n": 6,
+    "title": "AP&P Officers/Agents",
+    "desc": "Examine ways to enable Adult Probation and Parole officers to access various law enforcement databases and address the use of medical THC by probationers and parolees. Examine the supervision and oversight of individuals on felony probation."
+   },
+   {
+    "n": 7,
+    "title": "Department of Criminal Justice Statutory Review",
+    "desc": "Receive a presentation from the Department of Criminal Justice on agency reviews of criminal offenses."
+   },
+   {
+    "n": 8,
+    "title": "DNA Program Funding",
+    "desc": "Review the State Crime Lab's DNA program funding structure."
+   },
+   {
+    "n": 9,
+    "title": "Emerging Technologies Utilized by Law Enforcement",
+    "desc": "Study the process for implementing existing and emerging technologies used in law enforcement."
+   },
+   {
+    "n": 10,
+    "title": "License Plate Readers",
+    "desc": "Study law enforcement’s use of license plate readers."
+   },
+   {
+    "n": 11,
+    "title": "POST Training Facility",
+    "desc": "Consider the need to develop a new POST training facility."
+   },
+   {
+    "n": 12,
+    "title": "Correctional Facility Standards",
+    "desc": "Research correctional facility standards, including drug abuse policies."
+   },
+   {
+    "n": 13,
+    "title": "Mental Health",
+    "desc": "Study competency and who qualifies for Utah's insanity defense code."
+   },
+   {
+    "n": 14,
+    "title": "Childhood Trauma and the Juvenile Justice System",
+    "desc": "Examine the relationship between childhood trauma and juvenile justice involvement in Utah to evaluate whether Utah statutes appropriately account for trauma, victimization, and developmental factors when juveniles are prosecuted, transferred to adult court, or sentenced."
+   },
+   {
+    "n": 15,
+    "title": "Domestic Violence Services",
+    "desc": "Evaluate training curriculum related to domestic violence to ensure it provides evidence-based information, reflects the operational realities of shelters and advocacy organizations, and provides a comprehensive coverage of various forms of abuse."
+   },
+   {
+    "n": 16,
+    "title": "Victim Services Commission Assessment Study",
+    "desc": "Receive a presentation on the Victim Services Commission's completed study related to best practices, policies, commission duties and structure, crime victim services funding, and other topics related to the commission."
+   }
+  ],
+  "INTNAE": [
+   {
+    "n": 1,
+    "title": "Agricultural Burns",
+    "desc": "Examine inconsistencies among statute, rule, and permitting practices to clarify when agricultural burning is allowed and how clearing index thresholds apply."
+   },
+   {
+    "n": 2,
+    "title": "Animal Depredation",
+    "desc": "Review predator control authorities, strengthening management of invasive pests such as feral swine, and depredation fees."
+   },
+   {
+    "n": 3,
+    "title": "Aquaculture",
+    "desc": "Evaluate whether regulatory changes could better support the growth and operation of Utah’s aquaculture industry."
+   },
+   {
+    "n": 4,
+    "title": "Carbon Credits",
+    "desc": "Study the management, sale, and oversight of carbon credits generated on state and federal lands to assess risks, transparency, and protection of Utah’s interests."
+   },
+   {
+    "n": 5,
+    "title": "Food Donations",
+    "desc": "Examine opportunities to better facilitate meat donations and surplus food to food banks and schools, including improving plant processing access for donated livestock and game."
+   },
+   {
+    "n": 6,
+    "title": "Native Plants",
+    "desc": "Study how the state can encourage access to and use of native plant species."
+   },
+   {
+    "n": 7,
+    "title": "Resource Value Assessments",
+    "desc": "Assess the feasibility and implications of including mineral rights in property value assessments."
+   },
+   {
+    "n": 8,
+    "title": "Waste & Recycling",
+    "desc": "Study feasible methods for the collection and recycling of antifreeze and waste tires."
+   },
+   {
+    "n": 9,
+    "title": "Water",
+    "desc": "In coordination with the Legislative Water Development Commission, study: 40-year water demand planning and public system water loss; Colorado River and Colorado River Authority issues; drinking water data and safety (electronic reporting, lead testing in childcare facilities); drought response planning and strategy; groundwater protection, recharge, and river connectivity; hydropower expansion feasibility; long-term infrastructure funding and water use transparency quantifying water needs and goals (Great Salt Lake and statewide); retention/detention basin use;"
+   },
+   {
+    "n": 10,
+    "title": "Rare Earth Elements",
+    "desc": "Study the management and development of rare earth elements, including research activities occurring within the state. (Chair Stratton)"
+   },
+   {
+    "n": 11,
+    "title": "Emergency Preparedness",
+    "desc": "Study strategies and policies to strengthen emergency preparedness statewide. (Chair Stratton)"
+   }
+  ],
+  "INTPOL": [
+   {
+    "n": 1,
+    "title": "Annexation",
+    "desc": "Study the existing annexation process in statute and consider modifying it."
+   },
+   {
+    "n": 2,
+    "title": "Impact Fees on Small Homes",
+    "desc": "Study whether small homes should be charged a lower impact fee than large homes."
+   },
+   {
+    "n": 3,
+    "title": "Incorporation Process",
+    "desc": "Study the incorporation process in statute for traditional incorporations and preliminary municipalities. Study problems that have arisen related to the current incorporation process and recommend legislation to address any agreed-upon revisions to fix the current code."
+   },
+   {
+    "n": 4,
+    "title": "Local Officials",
+    "desc": "Study the roles, duties, and responsibilities of local officials, including: the appointment of unelected individuals to special district boards; the duties of county managers who are not elected officials, but are hired by the county; and the role of the clerk/auditor vs the duties of the budget officer."
+   },
+   {
+    "n": 5,
+    "title": "Planning for Future Growth",
+    "desc": "Study how to better plan for future growth. Current planning is generally reactive – roads, schools, and utilities often aren’t planned for and are built after homes begin construction. This increases home costs and negatively impacts existing residents. Counties with significant projected growth should reserve infrastructure lanes and plan for incorporation."
+   },
+   {
+    "n": 6,
+    "title": "Public Funds Reports",
+    "desc": "Study the total cash balances across state entities and political subdivisions that have public funds, focusing on how much cash each entity has, where the cash is being held, and how the funds are used."
+   },
+   {
+    "n": 7,
+    "title": "Tax Increment Financing",
+    "desc": "2026 H.B. 507, State Coordination of Regional and Local Economic Development Projects Amendments, requires the Political Subdivisions Interim Committee to convene a working group to study tax increment financing issues. The committee would study caps on the maximum percentage of tax increment or the maximum amount of revenue to be generated through tax increment. The committee will also study how to measure the return on investment and incentive programs, specifically, how much property tax revenue is being deferred. This study item would examine whether tax increment financing programs are effective or have a negative impact on residents' property taxes."
+   }
+  ],
+  "INTPUT": [
+   {
+    "n": 1,
+    "title": "General Overview of Utilities",
+    "desc": "A comparison between rate structures and the governance of major energy companies and an examination of possible alignment between them, their rates, and the Energy Balancing Account."
+   },
+   {
+    "n": 2,
+    "title": "Large-load Users: Schedule 32 and 34",
+    "desc": "Study appropriate actions to fix or repeal code relating to Rocky Mountain Power’s Schedule 32 and 34 in the context of 2025 S.B. 132, Electric Utility Amendments."
+   },
+   {
+    "n": 3,
+    "title": "Potential Energy Producers",
+    "desc": "Engage with potential new energy producers who are looking to build in Utah."
+   },
+   {
+    "n": 4,
+    "title": "Project Financing",
+    "desc": "Examine barriers and mechanisms for financing new energy projects, including the roles of service territory and the Utah Energy Council in project financing."
+   },
+   {
+    "n": 5,
+    "title": "Rocky Mountain Power’s Operations in Other States",
+    "desc": "An update on PacifiCorp’s recent sale of its Washington service area and continued discussion on RMP’s potential separation from PacifiCorp. An update from the Office of Energy Development’s collaboration with Rocky Mountain Power on the strategic energy framework and implementation."
+   },
+   {
+    "n": 6,
+    "title": "Rural Utah Energy Economic Impact",
+    "desc": "Examine the impact of new energy projects or the loss of energy projects on rural Utah’s economy."
+   },
+   {
+    "n": 7,
+    "title": "Transmission and Generation",
+    "desc": "Examine the relationship between transmission and generation development, with a focus on planning for long-term growth in the state and region without burdening Utah rate-payers, including Utah’s participation in regional energy markets."
+   }
+  ],
+  "INTRIE": [
+   {
+    "n": 1,
+    "title": "Independent Entities",
+    "desc": "Examine independent entities."
+   },
+   {
+    "n": 2,
+    "title": "PEHP Initiatives",
+    "desc": "Study PEHP initiatives related to point-of-service rebates, GLP-1 pilot, IVF benefit, etc., as well as assistance that PEHP is providing to the Division of Correctional Health Services and PEHP’s development of a short-term disability program for the State."
+   },
+   {
+    "n": 3,
+    "title": "Administrative and Technical Modifications Bill",
+    "desc": "URS bill cleanup language that represents administrative and technical cleanup language as opposed to substantive benefit or plan modifications with cost impacts."
+   },
+   {
+    "n": 4,
+    "title": "AUREUS Project Update",
+    "desc": "The AUREUS project, which is the upgrade of URS’ recordkeeping system for the retirement plans, went live on March 30, 2026. URS will provide the committee with information about the system launch and progress during early use."
+   },
+   {
+    "n": 5,
+    "title": "Overview of URS and Annual Comprehensive Financial Report",
+    "desc": "An overview of URS, including information on the Annual Comprehensive Financial Report (ACFR), investment returns, and funded status."
+   },
+   {
+    "n": 6,
+    "title": "Preliminary Contribution Rates and Updated Actuarial Calculations",
+    "desc": "Study of preliminary contribution rates for the next fiscal year approved by the Utah State Retirement Board for the retirement systems and plans administered by URS. The committee will also receive a presentation explaining the outcome of the recent experience study conducted by the consulting actuaries on required contributions and other financial and actuarial issues relating to the retirement systems and plans."
+   },
+   {
+    "n": 7,
+    "title": "Review of Tier 2 Retirement Systems and Benefits",
+    "desc": "Review the current benefits available to Tier 2 URS members under the Hybrid and 401(k)- only retirement options, and explore potential changes. These may include closing an option, changing the default option, or adding flexibility to the plans, such as cash-outs, annuity options, and the ability to switch plan participation mid-career. Policy, financial, actuarial, and legal issues related to potential plan-change legislation will also be considered."
+   }
+  ],
+  "INTREV": [
+   {
+    "n": 1,
+    "title": "Income Tax",
+    "desc": "Study various issues related to the individual income tax and corporate income tax, including: the effectiveness and utilization of tax credits; and options for reducing the income tax rate."
+   },
+   {
+    "n": 2,
+    "title": "Sales and Use Tax",
+    "desc": "Study various issues related to the sales and use tax, including sales and use tax filing periods."
+   },
+   {
+    "n": 3,
+    "title": "Property Tax",
+    "desc": "Study various issues related to the property tax, including: impact of the armed forces exemptions; property tax relief; tax notices; and truth in taxation."
+   },
+   {
+    "n": 4,
+    "title": "Other Revenue and Tax Issues",
+    "desc": "Study various revenue and taxation issues, as needed, including: severance tax; and international money transmissions."
+   }
+  ],
+  "INTTRA": [
+   {
+    "n": 1,
+    "title": "Traffic Safety",
+    "desc": "Study items related to traffic safety and law enforcement, including: motorcycle safety; distracted driving; traffic flow including left lane usage; funding for law enforcement due to new state roads or increased lanes on state roads; crosswalk timing; non-domiciled commercial driver licenses; and parking in bike lanes."
+   },
+   {
+    "n": 2,
+    "title": "Transit",
+    "desc": "Study items related to public transit, including: an update on the Utah Transit Authority governance changes; and human services transportation."
+   },
+   {
+    "n": 3,
+    "title": "Transportation Management",
+    "desc": "Study items related to the operation and maintenance of state transportation systems, including: bridge condition; encroachment permits; and Lake Powell ferry."
+   },
+   {
+    "n": 4,
+    "title": "Vehicle Registration",
+    "desc": "Study items related to the Motor Vehicle Division and vehicle registrations, including: emissions testing and safety inspections; registration refunds; vehicle taxes and fees; commercial vehicle registration, including trailer registration; electronic titling; and digital license plates."
+   }
+  ]
+ }
+}

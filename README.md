@@ -148,6 +148,28 @@ The relationship side of the session, for admins and anyone with Admin → Edit 
 - Follow-up dates you own show as a badge on the tab; the 15-minute email job emails the owner once a follow-up comes due
   (owners need an account with an email address). Stored in the `outreach` table.
 
+### Wish list and language
+
+Outreach → **Wish list** keeps ideas for future sessions in three lists (OAG wish list, client wish list, outside ideas),
+like the office's spreadsheet (**Import your spreadsheet** reads it: section rows, then Priority, To Do, OAG Team or Group,
+Summary, Next Steps, OAG POC). Each idea moves from Idea to Writing the language, Language ready, Sent to sponsor or
+drafter, Bill file opened, Numbered bill and Passed (or Parked). Open an idea to type or attach the language,
+**Get the divisions' input** (starts a Draft review of the office's own language) and **Send to the sponsor and drafter**
+(an email from you in Outlook).
+
+- **Redlines:** divisions can answer a Draft review by attaching a marked-up Word or PDF file instead of (or as well as)
+  typing comments. Files are kept in D1 (`files`, `file_parts`; `lib/files.js`), up to 10 MB each, attached to the
+  "everything's in" email and downloadable from the review.
+- **Emails come from the sender:** division emails are written as a note from whoever pressed Send, signed with the name
+  and title in **Your account → Your profile**, sent under their name, and replies go to their email. Admins whose
+  login is in `DOCKET_USERS` set their name, email and section there too (stored in `profiles`).
+- **Testimony** suggests the committee meetings a bill is on the agenda for (or pick another), and greets that
+  committee's chair by name.
+- **Interim** lists the Legislature's study items under each interim committee, from `site/data/interim.json`.
+  `build_interim.py` reads the year's approved list (the PDF link in `site/config.json` → `interimStudyItems`; add
+  next year's when the Legislative Management Committee approves it, usually in April) at the end of the data update.
+- The walk-through at the top of Outreach → Overview (`site/outdemo.js`) shows the whole loop.
+
 ## Schedules
 
 - Data: weekdays at about 6:40 am, 12:40 pm, 5:25 pm and 7:40 pm Mountain (an hour later during

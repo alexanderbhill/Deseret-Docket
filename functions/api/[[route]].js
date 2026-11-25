@@ -21,6 +21,7 @@
 //   GET  /api/cron/subs          confirmed subscriptions and the bills each one covers
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
 import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady, customUnits, unitNamer } from "../../lib/fiscal.js";
+import { saveFile, fileMeta, fileResponse, filesFor, deleteFile } from "../../lib/files.js";
 import { KINDS as OUT_KINDS, cleanItem, listOutreach, ensureOutreach, outreachTick } from "../../lib/outreach.js";
 import { keepServer, addLog, sendRequests, sendReviewReminders, ensureReview } from "../../lib/review.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
@@ -284,6 +285,38 @@ export async function onRequest(context) {
     return method === "POST" ? new Response("Unsubscribed", { status: 200 }) : Response.redirect(new URL("/#email-unsubscribed", url), 302);
   }
 
+  // Files on Outreach items (redlines, the office's marked-up drafts, proposed language): download and upload.
+  if (route === "file" || route.startsWith("file/")) {
+    if (!user || (user.role !== "admin" && !(user.perms && user.perms.outreach))) return bad("Sign in with Outreach access to open files.", 403);
+    const fid = route.split("/")[1] || "";
+    if (method === "GET" && fid) return fileResponse(db, fid);
+    if (method === "POST" && request.headers.get("X-Docket") === "1") {
+      const f = await request.formData().catch(() => null);
+      if (!f) return bad("Send the file as a form.");
+      const itemId = String(f.get("item") || "");
+      const item = /^[0-9a-f]{16}$/.test(itemId) ? await db.prepare("SELECT id, kind, data FROM outreach WHERE id = ?").bind(itemId).first() : null;
+      if (f.get("action") === "delete") {
+        const m = await fileMeta(db, String(f.get("id") || ""));
+        if (!m) return bad("Already removed.", 404);
+        if (user.role !== "admin" && m.by !== (user.display || user.name)) return bad("Only the person who attached it, or an admin, can remove it.", 403);
+        await deleteFile(db, m.id);
+        return json({ ok: true, files: await filesFor(db, m.item_id) });
+      }
+      if (!item) return bad("Save the item first, then attach files.", 404);
+      const up = f.get("file");
+      if (!up || typeof up !== "object" || !up.size) return bad("Choose a file.");
+      const div = String(f.get("division") || "");
+      try { await saveFile(db, up, item.id, DIV_RE.test(div) ? div : "", user.display || user.name); }
+      catch (e) { return bad(e.message); }
+      return json({ ok: true, files: await filesFor(db, item.id) });
+    }
+    if (method === "GET") {
+      const itemId = url.searchParams.get("item") || "";
+      return json({ files: /^[0-9a-f]{16}$/.test(itemId) ? await filesFor(db, itemId) : [] });
+    }
+    return bad("Bad request");
+  }
+
   // Everything else that changes something must be a same-site JSON request.
   let body = {};
   if (method === "POST") {
@@ -408,12 +441,30 @@ export async function onRequest(context) {
     }
 
     // ---------------- everything below needs a signed-in account
+    if (route === "profile" && method === "POST") {
+      // Your account → Your profile: the same details people give when they create an account, plus title and phone.
+      if (!user) return bad("Sign in first.", 401);
+      await ensureUsersTable(db);
+      const clean = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
+      const first = clean(body.first, 40), last = clean(body.last, 60), title = clean(body.title, 100), phone = clean(body.phone, 30);
+      const email = clean(body.email, 200).toLowerCase(), section = String(body.section || "");
+      if (!first || !last) return bad("Add your first and last name.");
+      if (email && !/^[^\s@<>()",;:]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}$/.test(email)) return bad("That email address doesn't look right.");
+      if (section && section !== "other" && !DIV_RE.test(section)) return bad("Pick your section from the list.");
+      const t = new Date().toISOString();
+      const ops = [db.prepare(`INSERT INTO profiles (username, first, last, email, section, title, phone, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET first=excluded.first, last=excluded.last, email=excluded.email, section=excluded.section, title=excluded.title, phone=excluded.phone, at=excluded.at`)
+        .bind(user.name, first, last, email, section, title, phone, t)];
+      if (user.source === "db") ops.push(db.prepare("UPDATE users SET name = ?, first = ?, last = ?, email = ?, section = ? WHERE username = ?").bind(`${first} ${last}`, first, last, email, section, user.name));
+      await db.batch(ops);
+      return json({ ok: true, display: `${first} ${last}`, email, section, first, last, title, phone });
+    }
     if (route === "me" && method === "GET") {
       if (!user) return json({ user: null });
       const pr = await db.prepare("SELECT v FROM prefs WHERE username = ?").bind(user.name).first();
       const fw = await db.prepare("SELECT v FROM settings WHERE k = 'wrap_on'").first();
       const tc = canTracker(user) ? await trackerCfg(db) : null;
-      return json({ flags: { wrap: !!(fw && fw.v === "1") }, tracker: tc && tc.url ? { url: tc.url, name: tc.name } : null, user: user.name, display: user.display || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
+      return json({ flags: { wrap: !!(fw && fw.v === "1") }, tracker: tc && tc.url ? { url: tc.url, name: tc.name } : null, user: user.name, display: user.display || "", email: user.email || "", first: user.first || "", last: user.last || "", title: user.title || "", phone: user.phone || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
     }
     if (!user) return bad("Sign in required", 401);
 
@@ -483,6 +534,14 @@ export async function onRequest(context) {
         await db.prepare("UPDATE outreach SET data = ?, updated_by = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(d), user.name, new Date().toISOString(), row.id).run();
         return json({ ok: true, info, items: await listOutreach(db) });
       }
+      if (body.action === "bulk") {
+        // Importing a spreadsheet (the wish list): up to 300 new items in one go.
+        if (body.kind !== "wish") return bad("Only wish list items can be imported.");
+        const list = (Array.isArray(body.items) ? body.items : []).slice(0, 300).map((x) => cleanItem("wish", x)).filter((d) => d.summary);
+        if (!list.length) return bad("Nothing to import: every row needs a summary.");
+        await db.batch(list.map((d) => db.prepare("INSERT INTO outreach (id, kind, data, by, created_at, updated_by, updated_at) VALUES (?, 'wish', ?, ?, ?, ?, ?)").bind(frand(8), JSON.stringify(d), user.name, t, user.name, t)));
+        return json({ ok: true, added: list.length, items: await listOutreach(db) });
+      }
       const kind = String(body.kind || "");
       if (!OUT_KINDS[kind]) return bad("Unknown kind.");
       const d = cleanItem(kind, body.item || {});
@@ -491,6 +550,7 @@ export async function onRequest(context) {
       if (kind === "testimony" && !d.bill) return bad("Pick the bill.");
       if (kind === "amend" && (!d.bill || !d.change)) return bad("Pick the bill and describe the change.");
       if (kind === "interim" && (!d.com || !d.topic)) return bad("Pick the interim committee and the topic.");
+      if (kind === "wish" && !d.summary) return bad("Write a short summary of the idea.");
       if (kind === "review" && !d.bill && !d.title) return bad("Pick the bill or bill file, or name the draft.");
       const cur = /^[0-9a-f]{16}$/.test(id0) ? await db.prepare("SELECT id, kind, data FROM outreach WHERE id = ?").bind(id0).first() : null;
       if (cur && cur.kind !== kind) return bad("That item is a different kind.");

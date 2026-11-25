@@ -38,6 +38,12 @@ jobs:
         run: |
           python3 -I intel_update.py new-data --prev site/data || echo "Extras failed; the bill data still publishes."
 
+      # Outreach → Interim: the study items the Legislature chose for each interim committee (re-read only
+      # when site/config.json points at a new year's list)
+      - name: Interim study items
+        run: |
+          pip install -q pdfplumber && python3 -I build_interim.py new-data --prev site/data || echo "Study items failed; the bill data still publishes."
+
       - name: Swap in the new data
         run: |
           rm -rf site/data && mv new-data site/data

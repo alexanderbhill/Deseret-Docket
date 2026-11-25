@@ -1,5 +1,5 @@
 /* Draft review (Outreach → Draft review): tracking a draft from the drafter, out to the office's divisions for
-   comments, and back from the point of contact (Dan or Katie) to the drafter and legislators.
+   comments, and back from whoever is handling it to the drafter and legislators.
    Each review shows whose turn it is:
      Waiting on us       just received (send it to the divisions), or every division answered (send the feedback back)
      Waiting on divisions  a division hasn't answered yet
@@ -8,7 +8,7 @@
    those emails wait in Fiscal Hive → Settings → Outbox. Stored as Outreach items of kind "review" (lib/review.js). */
 'use strict';
 const REV_TURN={us:'Waiting on us',team:'Waiting on divisions',drafter:'Waiting on the drafter',closed:'Closed'};
-const REV_ROLE={drafter:'Drafter (LRGC)',sponsor:'Sponsor',stakeholder:'Stakeholder'};
+const REV_ROLE={drafter:'Drafter (LRGC)',sponsor:'Sponsor',stakeholder:'Stakeholder',office:'Our own language'};
 function revTurn(it){if(it.closed)return 'closed';if(it.sent&&it.sent.at)return 'drafter';if(Object.values(it.reqs||{}).some(r=>r.status==='waiting'))return 'team';return 'us'}
 function revParseBill(v){const t=String(v||'').trim();if(!t)return '';const k=typeof normBill==='function'?normBill(t,UI.session):'';if(k&&BYKEY[k])return k;
   const f=allRows(UI.session).find(b=>b.file&&b.title.toLowerCase()===t.toLowerCase());return f?f.key:''}
@@ -81,7 +81,7 @@ function revOpen(id,focus){
   const banner={us:!(it.divisions||[]).length?'Received. Press Edit to pick the divisions that should review it.':revAsked(it)?'Every division has answered. Put the office’s feedback together and send it back.':'Received. Send it to the divisions for their comments.',team:`${revIn(it)} of ${revAsked(it)} divisions have answered.${it.due?` Comments are due ${outDate(it.due)}.`:''}`,drafter:`The office’s feedback went back ${revWhen(it.sent&&it.sent.at)}. Waiting on the next version.`,closed:'This round is closed.'}[t];
   const divRow=v=>{const r=(it.reqs||{})[v];const st=!r?'todo':r.status;
     return `<tr><td><b>${esc(divName(v))}</b></td><td><span class="rev-st ${st}">${{todo:'Not asked',waiting:'Waiting',none:'No concerns',comments:'Comments'}[st]}</span></td><td class="small">${r&&r.at&&st!=='waiting'?`${esc(r.by||'')}<div class="tiny muted">${esc(revWhen(r.at))}</div>`:r&&r.sent?`<span class="tiny muted">Asked ${esc(revWhen(r.sent))}${r.reminded?` · reminded ${esc(revWhen(r.reminded))}`:''}</span>`:''}</td>
-     <td class="small">${r&&r.comments?`<div style="white-space:pre-wrap">${esc(r.comments)}</div>`:''}${r&&r.lang?`<div class="rev-lang"><b>Suggested language:</b> ${esc(r.lang)}</div>`:''}</td>
+     <td class="small">${r&&r.comments?`<div style="white-space:pre-wrap">${esc(r.comments)}</div>`:''}${r&&r.lang?`<div class="rev-lang"><b>Suggested language:</b> ${esc(r.lang)}</div>`:''}${(r&&r.files||[]).map(f=>`<a class="out-file" href="/api/file/${esc(f.id)}">${ic('file')}${esc(f.name)}</a>`).join('')}</td>
      <td style="white-space:nowrap">${!r?`<button class="btn sm" data-rev="sendone" data-id="${esc(it.id)}" data-div="${esc(v)}">Ask</button>`:st==='waiting'?`<button class="btn sm" data-rev="remindone" data-id="${esc(it.id)}" data-div="${esc(v)}">Remind</button>`:''} <button class="btn sm" data-rev="record" data-id="${esc(it.id)}" data-div="${esc(v)}">Record answer</button></td></tr>
      <tr class="rev-rec" id="revrec-${esc(v)}" hidden><td colspan="5"><div class="filters"><div class="field"><label>Answer</label><select data-recst><option value="none">No concerns</option><option value="comments" ${st==='comments'?'selected':''}>Comments</option><option value="waiting">Still waiting</option></select></div><div class="field"><label>From</label><input data-recby placeholder="Who answered" value="${esc(r&&r.by||'')}"></div></div>
       <div class="field"><label>Comments</label><textarea data-reccom rows="3">${esc(r&&r.comments||'')}</textarea></div><div class="field"><label>Suggested language</label><textarea data-reclang rows="2">${esc(r&&r.lang||'')}</textarea></div>
@@ -98,12 +98,14 @@ function revOpen(id,focus){
     <button class="btn" data-outedit="${esc(it.id)}">${ic('pencil')}Edit</button>${t!=='closed'?`<button class="btn" data-rev="close" data-id="${esc(it.id)}" data-closed="1">${ic('check')}Mark done</button>`:`<button class="btn" data-rev="close" data-id="${esc(it.id)}" data-closed="0">Reopen</button>`}</div>
    ${(it.divisions||[]).length?`<div class="tablewrap" style="border:0"><table class="compact out-t rev-t"><thead><tr><th>Division</th><th>Status</th><th>Who, when</th><th>Comments</th><th></th></tr></thead><tbody>${it.divisions.map(divRow).join('')}</tbody></table></div>`:'<p class="small muted">No divisions picked yet. Press Edit to pick them.</p>'}
    ${it.sent&&it.sent.at?`<details class="rev-sentbox"><summary><b>What went back</b> <span class="tiny muted">${esc(revWhen(it.sent.at))} · ${esc(it.sent.by)}${it.sent.to?' → '+esc(it.sent.to):''}</span></summary><div style="white-space:pre-wrap" class="small">${esc(it.sent.summary||'')}</div></details>`:''}
+   <h3 class="rev-h" style="margin-top:14px">Files</h3>${outFilesBox(it.id,{label:'Attach the office’s marked-up copy',hint:'Divisions’ redlines show up here too. Word or PDF, up to 10 MB.'})}
    <div class="grid2" style="align-items:start;margin-top:12px">
     <div><h3 class="rev-h">Trail</h3><ol class="rev-log">${(it.log||[]).slice().reverse().map(l=>`<li><span class="tiny muted">${esc(revWhen(l.at))} · ${esc(l.by)}</span><div class="small">${esc(l.what)}</div></li>`).join('')||'<li class="small muted">Nothing yet.</li>'}</ol></div>
     <div><h3 class="rev-h">Log a reply or call</h3><div class="field"><textarea id="revLogTx" rows="2" placeholder="e.g. Drafter replied: will take the changes on lines 40–52"></textarea></div><button class="btn sm" data-rev="log" data-id="${esc(it.id)}">Add to the trail</button>
      ${!next?`<details class="rev-more" id="revNextH" ${t==='drafter'||focus==='next'?'open':''}><summary>New version came in</summary><div class="filters"><div class="field"><label for="revNv">Version</label><input id="revNv" placeholder="e.g. 1st Sub, or Draft 3"></div><div class="field grow"><label for="revNl">Link</label><input id="revNl" placeholder="https://…"></div></div><button class="btn sm" data-rev="next" data-id="${esc(it.id)}">Start the next round</button><p class="tiny muted">Closes this round and starts a new one with the same people and divisions.</p></details>`:''}</div></div>`;
   dlg.querySelector('#revX').onclick=()=>dlg.close();
   if(!dlg.open)dlg.showModal();
+  outFilesLoad(dlg);
   if(focus==='next'&&$('revNv')){$('revNv').focus();$('revNextH').scrollIntoView({block:'center'})}
 }
 function revFeedback(it,named){
@@ -114,7 +116,9 @@ function revFeedback(it,named){
   for(const [v,r] of withC){lines.push('');if(named)lines.push(`${divName(v)}:`);
     if(r.comments)lines.push(...r.comments.split(/\n+/).map(x=>`• ${x.trim()}`));if(r.lang)lines.push(`  Suggested language: ${r.lang}`)}
   if(withC.length&&none.length&&named)lines.push('',`No concerns from ${outList(none.map(([v])=>divName(v)))}.`);
-  lines.push('','Please let me know if you have any questions.','',`${it.owner||(ME.display||ME.user)}`,'Utah Attorney General’s Office');
+  if(R.some(([,r])=>(r.files||[]).length))lines.push('','I’ve attached the marked-up copies.');
+  // signed by whoever is sending it, from their profile (Your account → Your profile)
+  lines.push('','Please let me know if you have any questions.','','Thanks,',ME.display||ME.user,ME.title?`${ME.title}, Utah Attorney General’s Office`:'Utah Attorney General’s Office');
   return lines.join('\n');
 }
 function revCompose(id){
@@ -129,6 +133,7 @@ function revCompose(id){
    <div class="field"><label for="rcSubj">Subject</label><input id="rcSubj" value="${esc(subj)}"></div>
    <label class="check" style="margin:8px 0"><input type="checkbox" id="rcNamed"><span>Name the divisions in the feedback</span></label>
    <div class="field"><label for="rcBody">Feedback (edit before sending)</label><textarea id="rcBody" rows="14" class="rev-body">${esc(revFeedback(it,false))}</textarea></div>
+   <div class="field"><label>Attach in Outlook</label><div class="tiny muted" style="margin-bottom:4px">Outlook can’t pick up files from here, so download any you want to send and attach them to the email.</div>${outFilesBox(it.id,{label:'Add a file',hint:'e.g. the office’s combined redline'})}</div>
    <div class="rev-act" style="margin-top:10px"><a class="btn primary" id="rcOutlook" href="#">${ic('mail')}Open in Outlook</a><a class="btn" id="rcWeb" href="#" target="_blank" rel="noopener">${ic('external')}Outlook on the web</a><button class="btn" id="rcCopy">Copy</button>
     <button class="btn" data-demo="review" data-step="6" title="Once Outlook is connected">${ic('spark')}Send from Outlook <span class="tiny">(once connected)</span></button></div>
    <div class="rev-mark" id="rcMark" hidden><b>Did it go out?</b> <button class="btn sm primary" id="rcSent">Yes, mark it sent back</button> <span class="tiny muted">Records the date and what you sent, and moves it to “Waiting on the drafter.”</span></div>`;
@@ -143,6 +148,7 @@ function revCompose(id){
   $('rcCopy').onclick=async()=>{const v=vals();via='copy';try{await navigator.clipboard.writeText(v.body);toast('Feedback copied')}catch(_){toast('Select the text and copy it yourself.')}show()};
   $('rcSent').onclick=()=>{const v=vals();revStep('sent',it.id,{to:[v.to,v.cc].filter(Boolean).join(', '),summary:v.body,via}).then(()=>{if(dlg.open)revOpen(it.id)})};
   if(!dlg.open)dlg.showModal();
+  outFilesLoad(dlg);
 }
 document.addEventListener('click',e=>{
   const el=e.target.closest&&e.target.closest('[data-rev]');if(!el)return;e.preventDefault();
@@ -161,3 +167,22 @@ document.addEventListener('click',e=>{
   if(a==='next')return revStep('next',id,{version:$('revNv').value,link:$('revNl').value.trim()});
 });
 function revBind(){}
+
+/* Files on an Outreach item: divisions' redlines, the office's own marked-up copy, proposed language.
+   outFilesBox(id) draws a placeholder; outFilesLoad fills it (download links, attach, remove). */
+const outFileSize=n=>n>1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+function outFilesBox(id,{label='Attach a file',hint='A Word file with tracked changes or a marked-up PDF, up to 10 MB.',division=''}={}){
+  return `<div class="out-files" data-files="${esc(id)}" data-fdiv="${esc(division)}"><div class="out-flist small muted">Loading files…</div>
+   <label class="btn sm out-fup">${ic('file')}${esc(label)}<input type="file" accept=".pdf,.doc,.docx,.rtf,.odt,.txt" hidden></label> <span class="tiny muted">${esc(hint)}</span></div>`}
+async function outFilesLoad(root){
+  for(const box of (root||document).querySelectorAll('[data-files]')){
+    const id=box.dataset.files,list=box.querySelector('.out-flist');
+    const draw=files=>{list.innerHTML=files.length?files.map(f=>`<div class="out-frow"><a class="out-file" href="/api/file/${esc(f.id)}">${ic('file')}${esc(f.name)}</a><span class="tiny muted">${esc(f.division?divName(f.division):'Office')} · ${outFileSize(f.size)} · ${esc(f.by||'')}</span>${isAdmin()||f.by===(ME.display||ME.user)?`<button type="button" class="linkbtn tiny" data-fdel="${esc(f.id)}">Remove</button>`:''}</div>`).join(''):'<span class="small muted">No files yet.</span>';
+      list.querySelectorAll('[data-fdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this file?'))return;const fd=new FormData();fd.append('action','delete');fd.append('id',b.dataset.fdel);draw((await outFilePost(fd)).files||[])})};
+    try{draw((await (await fetch('/api/file?item='+encodeURIComponent(id),{credentials:'same-origin'})).json()).files||[])}catch(e){list.textContent='Couldn’t load the files.'}
+    const inp=box.querySelector('input[type=file]');
+    inp.onchange=async()=>{const f=inp.files[0];if(!f)return;const fd=new FormData();fd.append('item',id);fd.append('division',box.dataset.fdiv||'');fd.append('file',f);
+      list.innerHTML='<span class="small muted">Uploading…</span>';try{draw((await outFilePost(fd)).files||[]);toast('File attached')}catch(err){toast(err.message);outFilesLoad(box.parentNode)}inp.value=''};
+  }
+}
+async function outFilePost(fd){const r=await fetch('/api/file',{method:'POST',body:fd,credentials:'same-origin',headers:{'X-Docket':'1'}});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||'Upload failed');return j}
