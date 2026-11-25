@@ -32,12 +32,13 @@ async function agPhotoData(file){const img=await new Promise((ok,no)=>{const i=n
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-agpedit]');if(!b||!isAdmin())return;e.preventDefault();if(typeof closeInfo==='function')closeInfo();
   const id=b.dataset.agpedit,p=AG_PEOPLE[id],x=(loadAGPX()[id])||{};
   let dlg=$('agpDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='agpDlg';document.body.appendChild(dlg)}
-  dlg.innerHTML=`<form method="dialog" id="agpForm"><h2>${esc(p[0])}</h2><p class="small muted">${esc(p[1])}. Use an official headshot the office is fine sharing internally; it’s resized to a small square.</p>
-   <div style="display:flex;gap:14px;align-items:center;margin:10px 0"><span id="agpPrev">${agFace(id,'lg')}</span><div class="field"><label for="agpFile">Photo</label><input type="file" id="agpFile" accept="image/*">${x.photo?'<label class="check" style="margin-top:6px"><input type="checkbox" id="agpNoPhoto"><span>Remove the photo</span></label>':''}</div></div>
+  dlg.innerHTML=`<form method="dialog" id="agpForm"><h2>${esc(p[0])}</h2><p class="small muted">${esc(p[1])}. Upload a headshot, or paste a link to one (for example, right-click the photo on their page on the AG’s website and copy the image address).</p>
+   <div style="display:flex;gap:14px;align-items:center;margin:10px 0"><span id="agpPrev">${agFace(id,'lg')}</span><div class="field"><label for="agpFile">Upload a photo</label><input type="file" id="agpFile" accept="image/*"><label for="agpUrl" style="margin-top:8px">Or a link to a photo</label><input id="agpUrl" type="url" placeholder="https://attorneygeneral.utah.gov/…jpg" value="${esc(/^https:/.test(x.photo||'')?x.photo:'')}" style="width:100%">${x.photo?'<label class="check" style="margin-top:6px"><input type="checkbox" id="agpNoPhoto"><span>Remove the photo</span></label>':''}</div></div>
    <div class="field"><label for="agpBio">Bio</label><textarea id="agpBio" style="width:100%;min-height:150px">${esc(x.bio||p[2])}</textarea></div>
    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="agpCancel">Cancel</button><button class="btn primary" id="agpSave">Save</button></div></form>`;
   dlg.showModal();let photo=null;
   $('agpCancel').onclick=()=>dlg.close();
+  $('agpUrl').oninput=()=>{const u=$('agpUrl').value.trim();if(/^https:\/\/\S+$/.test(u)){photo=u;$('agpPrev').innerHTML=`<img class="agface lg" src="${esc(u)}" alt="">`}};
   $('agpFile').onchange=async ev=>{try{photo=await agPhotoData(ev.target.files[0]);$('agpPrev').innerHTML=`<img class="agface lg" src="${photo}" alt="">`}catch(err){toast(err.message)}};
   $('agpForm').onsubmit=async ev=>{ev.preventDefault();const bio=$('agpBio').value.trim();
     try{const j=await api('agpeople',{id,bio:bio===p[2]?'':bio,...(photo?{photo}:{}),...($('agpNoPhoto')&&$('agpNoPhoto').checked?{photo:''}:{})});AGPX=j.people||{};dlg.close();toast(`${p[0]}: saved`);route(true)}catch(err){toast(err.message)}};
@@ -86,8 +87,8 @@ function pageAGGuide(){
 
    <div class="card"><h2>The org chart</h2><p class="desc">Hover (or tap) a name for their photo and bio. Click a department to see its divisions.</p>
     <div class="agorg">
-     <div class="agorg-top"><div class="agorg-box ag">${agFace('brown')}<span class="tiny">Attorney General</span>${agName('brown')}<a class="tiny" href="${AG_SITE}/attorney-general-derek-brown/" target="_blank" rel="noopener">Meet AG Brown</a></div></div>
-     <div class="agorg-mid"><span class="agorg-lbl tiny">Executive</span><div class="agorg-box">${agFace('burton')}<span class="tiny">Chief Deputy Attorney General and General Counsel</span>${agName('burton')}</div><div class="agorg-box">${agFace('hass')}<span class="tiny">Deputy General Counsel and Director of External Relations</span>${agName('hass')}</div></div>
+     <div class="agorg-top"><div class="agorg-box ag">${agFace('brown')}<span class="tiny">Attorney General</span>${agName('brown')}</div></div>
+     <div class="agorg-mid"><div class="agorg-box">${agFace('burton')}<span class="tiny">Chief Deputy Attorney General and General Counsel</span>${agName('burton')}</div><div class="agorg-box">${agFace('hass')}<span class="tiny">Deputy General Counsel and Director of External Relations</span>${agName('hass')}</div></div>
      <div class="agorg-depts">${depts.filter(d=>d.designate!==false).map(d=>{const L=AG_LEADS[d.id];const ds=divs.filter(x=>x.dept===d.id);return `<button type="button" class="agorg-box dept ${AGDEPT===d.id?'on':''}" data-agdept="${esc(d.id)}" style="--c:${d.color}" aria-expanded="${AGDEPT===d.id}">${AG_LEAD_ID[d.id]?agFace(AG_LEAD_ID[d.id],'sm'):''}<span class="tiny">${esc(d.name)}</span>${L?`${AG_LEAD_ID[d.id]?agName(AG_LEAD_ID[d.id]):`<b>${esc(L[0])}</b>`}<span class="tiny muted">${esc(L[1])}</span>`:''}<span class="tiny agorg-n">${plural(ds.length,'division')} ${AGDEPT===d.id?'▴':'▾'}</span></button>`}).join('')}</div>
      ${AGDEPT?`<div class="agorg-divs" style="--c:${deptColor(AGDEPT)}"><div class="chips">${divs.filter(x=>x.dept===AGDEPT).map(divChip).join('')}</div>${AG_DEPT_URL[AGDEPT]?`<a class="small" href="${AG_SITE}${AG_DEPT_URL[AGDEPT]}" target="_blank" rel="noopener">${esc(deptName(AGDEPT))} on the AG’s website →</a>`:''}</div>`:''}
     </div>
@@ -101,7 +102,7 @@ function pageAGGuide(){
     <div class="card"><h2>Recent highlights</h2><p class="desc">A few results from the office’s <a href="${AG_SITE}/2025-impact/" target="_blank" rel="noopener">2025 Impact</a> report.</p>
      <ol class="ag-wins">${AG_WINS.map(([d,t])=>`<li><span class="tiny muted">${esc(d)}</span><span>${esc(t)}</span></li>`).join('')}</ol></div></div>
 
-   <div class="card"><h2>Fun facts</h2><p class="desc">Tap a card to flip it. Ready to test yourself? <a href="#learn-agquiz">Play AG Showdown →</a></p>
+   <div class="card"><h2>Fun facts</h2><p class="desc">Tap a card to flip it. Ready to test yourself? <a href="#learn-agquiz">Play AG Office Showdown →</a></p>
     <div class="flipgrid">${AG_FACTS.map(([i,t,d])=>`<button type="button" class="flip" aria-label="${esc(t)}"><span class="f-front"><span class="ico">${i}</span><b>${esc(t)}</b></span><span class="f-back">${esc(d)}</span></button>`).join('')}</div></div>
 
    <div class="card"><h2>Every Attorney General since statehood</h2><p class="desc">Hover a name for their years in office.</p>

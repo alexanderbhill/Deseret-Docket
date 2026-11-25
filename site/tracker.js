@@ -16,7 +16,7 @@ function trkSyncLine(sy){
   if(!sy)return `<p class="small muted">Not synced yet. It updates ${TRK_TIMES}, right after the Legislature data refresh.</p>`;
   const when=`${fmtLong(new Date(sy.at))} at ${fmtTime(new Date(sy.at))}`;
   if(sy.ok)return `<p class="small"><span class="pill pass">Synced</span> Updated from Deseret Docket ${esc(when)} · ${plural(sy.rows,'bill')}</p>`;
-  if(!sy.connected)return `<p class="small"><span class="pill muted">Preview only</span> The workbook connection isn’t set up yet, so this is what the next sync would write (${plural(sy.rows,'bill')}, as of ${esc(when)}).</p>`;
+  if(!sy.connected)return `<p class="small"><span class="pill warn">Not writing to Excel yet</span> The Microsoft 365 connection isn’t set up, so the workbook isn’t being updated. Below is what the next sync would write (${plural(sy.rows,'bill')}, as of ${esc(when)}).${isAdmin()?' See <a href="#admin">Admin → Bill tracker workbook</a> for the setup steps.':' An admin needs to finish the setup.'}</p>`;
   return `<p class="small"><span class="pill warn">Didn’t sync</span> Last try ${esc(when)}: ${esc(sy.error||'unknown error')}</p>`;
 }
 function trkPreview(sy){
@@ -55,7 +55,22 @@ function adminTrackerHTML(){
     <div style="grid-column:1/-1"><button class="btn primary">Save</button>${c.by?` <span class="tiny muted">Last changed by ${esc(c.by)}, ${fmtLong(new Date(c.at))}</span>`:''}</div></form>
    <p class="small" style="margin-top:12px"><b>Who can see it:</b> ${who.length?esc(who.map(u=>u.name||u.username).join(', ')):'only admins so far'}. Turn it on for someone with <b>Edit</b> next to their account (“Can see the shared bill tracker workbook”).</p>
    ${trkSyncLine(T.sync)}
-   <details class="small" style="margin-top:6px"><summary>How the sync connects to Microsoft 365</summary><p>Writing to a SharePoint workbook needs a Microsoft 365 app registration from the office’s IT team, with permission to edit that file. Add its details as GitHub secrets: <code>MS_TENANT_ID</code>, <code>MS_CLIENT_ID</code> and <code>MS_CLIENT_SECRET</code>. Until then each update still builds the rows and shows them as a preview. The sync only rewrites the “${esc(c.sheet||'Deseret Docket')}” sheet; every other sheet in the workbook is left alone.</p></details></div>`;
+   ${trkSetupHTML(c,T.sync)}</div>`;
+}
+// What has to be true for Deseret Docket to write to the workbook, with where each step stands.
+function trkSetupHTML(c,sy){
+  const ok=sy&&sy.ok, connected=sy&&sy.connected;
+  const st=(done,warn)=>done?'<span class="trk-st ok" aria-label="Done">✓</span>':warn?'<span class="trk-st warn" aria-label="Problem">!</span>':'<span class="trk-st" aria-label="To do">○</span>';
+  const steps=[
+   [!!c.url,false,'Paste the workbook’s Share link above and save.','In Excel on the web: Share → Copy link. It must be an .xlsx workbook in SharePoint or OneDrive.'],
+   [connected,false,'IT registers an app for Deseret Docket in Microsoft Entra ID (formerly Azure AD), in the office’s Microsoft 365 tenant.','Ask IT for an “app registration” with a client secret. This is the account the sync signs in as; nobody’s password is used.'],
+   [connected,false,'IT gives that app the Microsoft Graph application permission Files.ReadWrite.All, and a Microsoft 365 admin grants consent.','This lets the app edit the workbook without anyone signed in. If IT prefers a narrower permission, move the workbook to a SharePoint team site and use Sites.Selected scoped to that site (Sites.Selected can’t reach a personal OneDrive).'],
+   [connected,false,'Add three secrets in GitHub: repository → Settings → Secrets and variables → Actions → New repository secret.','MS_TENANT_ID (the Directory/tenant ID), MS_CLIENT_ID (the Application/client ID) and MS_CLIENT_SECRET (the secret’s Value, not its ID). Names must match exactly.'],
+   [ok,connected&&!ok,'Run it once: GitHub → Actions → Update Deseret Docket → Run workflow (or wait for the next weekday update).','When it works, this card and the Updates page say “Synced” and a “Deseret Docket” sheet appears in the workbook.'+(connected&&!ok&&sy.error?` Last error: ${sy.error}`:'')]];
+  return `<div class="trk-setup"><h3>${ok?'✓ Connected to Microsoft 365':'What’s needed for the workbook to update itself'}</h3>
+   ${ok?'<p class="small">The sync is writing to the workbook. Nothing else to do.</p>':`<p class="small">Until these steps are done, the site builds the rows and shows the preview, but the Excel workbook is <b>not</b> changed. Steps 2–4 need the office’s IT team.</p>`}
+   <ol class="trk-steps">${steps.map(([d,w,t,more])=>`<li class="${d?'done':''}">${st(d,w)}<div><b>${esc(t)}</b><span class="small muted">${esc(more)}</span></div></li>`).join('')}</ol>
+   <p class="tiny muted">Only the “${esc(c.sheet||'Deseret Docket')}” sheet is rewritten; every other sheet in the workbook is left alone.</p></div>`;
 }
 function trackerBind(){
   on('trkForm','onsubmit',async e=>{e.preventDefault();try{await api('tracker',{url:$('trkUrl').value.trim(),name:$('trkName').value,sheet:$('trkSheet').value,scope:$('trkScope').value,session:$('trkSes').value});toast('Bill tracker saved');ME.tracker=$('trkUrl').value.trim()?{url:$('trkUrl').value.trim(),name:$('trkName').value}:null;trkLoad(true)}catch(err){toast(err.message)}});

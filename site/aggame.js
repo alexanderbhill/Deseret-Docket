@@ -1,12 +1,12 @@
-/* Learn → AG Showdown: a Kahoot-style game built from the AG's Office fun facts, recent big cases and
+/* Learn → AG Office Showdown: a timed quiz built from the AG's Office fun facts, recent big cases and
    the office's priorities. Ten timed questions, four colored answers, more points for faster answers,
-   a streak bonus, and after each question a one-line way to say it to other interns, legislators,
-   friends and family. Best scores go on the Learn leaderboard (game "agquiz").
+   a streak bonus, and after each question the fact itself, phrased the way you'd say it to other
+   interns, legislators, friends and family. Best scores go on the Learn leaderboard (game "agquiz").
    Sources: attorneygeneral.utah.gov (history, Executive Team, staff bios, newsroom, 2025 Impact report)
    and news coverage of the Kalshi (Oct. 2026), Live Nation (Apr. 2026) and Snap cases. */
 'use strict';
 const AGK_SECS=20, AGK_N=10;
-// [question, [right answer, wrong, wrong, wrong], what to say about it]
+// [question, [right answer, wrong, wrong, wrong], the fact, as you'd say it]
 const AGK_BANK=[
  ['The Utah Attorney General’s Office started in…',['1850, while Utah was still a territory','1896, at statehood','1912','1947'],'It’s older than the state: it began in 1850, 46 years before statehood.'],
  ['Why did the territorial AG’s office disappear in 1874?',['Congress’s Poland Act abolished it','The Legislature defunded it','The governor merged it into the courts','It moved to Washington, D.C.'],'Congress wiped it out with the Poland Act in 1874, and Utah’s 1895 constitution brought it back.'],
@@ -55,14 +55,14 @@ function agkNext(){if(AGK.i+1>=AGK.qs.length){AGK.state='end';if(typeof lgBest==
   AGK.i++;AGK.picked=null;AGK.state='q';AGK.t0=Date.now();route(true);agkTimer()}
 const AGK_SHAPES=[['▲','red'],['◆','blue'],['●','yellow'],['■','green']];
 function gameAG(){
-  if(AGK.state==='start'){agkStop();return `<div class="card agk agk-start"><div class="agk-logo">⚖️</div><h2>AG Showdown</h2>
-    <p class="desc">${AGK_N} questions about the Utah Attorney General’s Office: its history, who leads it, the big cases lately and what it’s focused on now. You get ${AGK_SECS} seconds each; faster right answers score more, and streaks add a bonus. After each one you’ll get a line you can use when someone asks what the office does.</p>
+  if(AGK.state==='start'){agkStop();return `<div class="card agk agk-start"><div class="agk-logo">⚡</div><h2>AG Office Showdown</h2>
+    <p class="desc">${AGK_N} questions about the Utah Attorney General’s Office: its history, who leads it, the big cases lately and what it’s focused on now. You get ${AGK_SECS} seconds each. Faster right answers score more, and streaks add a bonus.</p>
     <p><button class="btn primary agk-go" id="agkStart">Start</button></p>${LG.best.agquiz?`<p class="small muted">Your best: ${LG.best.agquiz.toLocaleString()} points</p>`:''}
     <p class="tiny muted">Keys: <kbd>1</kbd>–<kbd>4</kbd> to answer · <kbd>Enter</kbd> for the next question</p></div>`}
   if(AGK.state==='end'){const pct=Math.round(AGK.right/AGK.qs.length*100);
     return `<div class="card agk agk-end"><h2>${pct>=90?'🏆 Ready for the Capitol':pct>=70?'🎉 Nicely done':pct>=50?'👍 Getting there':'📚 Keep studying'}</h2>
      <div class="agk-final"><div><b>${AGK.score.toLocaleString()}</b><span>points</span></div><div><b>${AGK.right}/${AGK.qs.length}</b><span>right</span></div><div><b>${AGK.best}</b><span>best streak</span></div></div>
-     <h3 style="font-family:var(--sans);font-size:16px;margin-top:18px">Your talking points from this round</h3><ul class="agk-recap">${AGK.qs.map(q=>`<li>${esc(q.say)}</li>`).join('')}</ul>
+     <h3 style="font-family:var(--sans);font-size:16px;margin-top:18px">What this round covered</h3><ul class="agk-recap">${AGK.qs.map(q=>`<li>${esc(q.say)}</li>`).join('')}</ul>
      <p><button class="btn primary" id="agkStart">Play again</button> <a class="btn" href="#learn-ag">Read the AG’s Office guide</a> <a class="btn" href="#learn-board">Leaderboard</a></p></div>`}
   const q=AGK.qs[AGK.i],rev=AGK.state==='reveal',left=Math.max(0,AGK_SECS-(Date.now()-AGK.t0)/1000);
   const right=q.o.findIndex(o=>o.ok);
@@ -70,7 +70,7 @@ function gameAG(){
    <h2 class="agk-q">${esc(q.q)}</h2>
    ${rev?'':`<div class="agk-timer"><i id="agkBar" style="width:${left/AGK_SECS*100}%"></i></div><div class="agk-left" id="agkLeft" aria-hidden="true">${Math.ceil(left)}</div>`}
    <div class="agk-grid">${q.o.map((o,i)=>`<button type="button" class="agk-a ${AGK_SHAPES[i][1]} ${rev?(o.ok?'right':i===AGK.picked?'wrong':'dim'):''}" data-agk="${i}" ${rev?'disabled':''}><span class="agk-sh" aria-hidden="true">${AGK_SHAPES[i][0]}</span><span>${esc(o.t)}</span>${rev&&o.ok?'<span class="agk-ck" aria-label="Right answer">✓</span>':''}</button>`).join('')}</div>
-   ${rev?`<div class="agk-fb ${AGK.picked===right?'ok':'no'}"><b>${AGK.picked===right?`Correct! +${AGK.gain.toLocaleString()}`:AGK.picked<0?'Time’s up.':'Not quite.'}</b> <span>Say it like this: ${esc(q.say)}</span></div>
+   ${rev?`<div class="agk-fb ${AGK.picked===right?'ok':'no'}"><b>${AGK.picked===right?`Correct! +${AGK.gain.toLocaleString()}`:AGK.picked<0?'Time’s up.':'Not quite.'}</b> <span>${esc(q.say)}</span></div>
    <p style="text-align:center"><button class="btn primary" id="agkNext">${AGK.i+1>=AGK.qs.length?'See your score':'Next question →'}</button></p>`:''}</div>`;
 }
 function agkBind(){

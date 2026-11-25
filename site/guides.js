@@ -30,7 +30,12 @@ const JOURNEY=[
  ['Enrolled','OLRGC prepares the final text; the Speaker and Senate President sign it.','OLRGC · presiding officers','both'],
  ['Governor','The governor has 20 days after the session ends to sign or veto. Bills not acted on become law without a signature. Appropriations can be vetoed line by line.','Governor','gov'],
  ['In effect','Most bills take effect 60 days after the session ends, in early May. Some take effect on signing or on a date the bill sets.','Everyone','gov']];
-const DIE=[['🗂️','Stuck in Rules'],['✋','Held in committee'],['⭕','Circled and never uncircled'],['💸','Fiscal note never funded'],['⏰','Out of time at sine die'],['🚫','Vetoed']];
+const DIE=[['🗂️','Stuck in Rules','Every numbered bill goes to the House or Senate Rules Committee first. Rules decides which standing committee hears it, or whether it goes anywhere at all. A bill Rules never assigns never gets a hearing and dies there when the session ends.'],
+ ['✋','Held in committee','A standing committee can hold a bill (often at the sponsor’s request, to fix it), vote it down, or simply never put it on an agenda. A held bill only moves again if the committee brings it back.'],
+ ['⭕','Circled and never uncircled','On the floor, a bill on the 2nd or 3rd reading calendar can be “circled”: set aside so the sponsor can count votes, line up an amendment or wait for money. If nobody uncircles it before sine die, it dies on the calendar.'],
+ ['💸','Fiscal note never funded','A bill that costs money usually needs the Executive Appropriations Committee to set money aside for it near the end of the session. If the money never comes, the bill typically sits on the calendar until time runs out.'],
+ ['⏰','Out of time at sine die','The session ends at midnight on the 45th day. Anything that hasn’t passed both chambers in the same form by then is dead. Nothing carries over to next year; it has to be filed again.'],
+ ['🚫','Vetoed','After the session the governor has 20 days to sign or veto. A vetoed bill is dead unless two-thirds of both the House and the Senate vote to override it, usually in a veto override session.']];
 
 function guideProcess(){
   if(BUDGET===null){BUDGET=undefined;getJSON('data/budget.json').then(b=>{BUDGET=b;if(location.hash==='#learn-process')route(true)}).catch(()=>{BUDGET={error:true}})}
@@ -39,8 +44,8 @@ function guideProcess(){
    <p class="desc">The general session runs 45 days, from late January to midnight on sine die in early March. Most of the work happens before it starts. Tap anything to read more.</p>
    <nav class="guide-toc">${[['g-ideas','💡 Ideas'],['g-staff','🧑‍💼 Staff'],['g-path','🛤️ The path'],['g-fn','💵 Fiscal notes'],['g-budget','🏦 The budget'],['g-die','🪦 Where bills die']].map(([i,l])=>`<a href="#learn-process" data-gto="${i}">${l}</a>`).join('')}</nav></div>
 
-  <div class="card guide" id="g-ideas"><h2>1. Where bill ideas come from</h2><p class="desc">Anyone can bring a legislator an idea, but only a legislator can open a bill file.</p>
-   <div class="idea-grid">${IDEAS.map(([i,t,d])=>`<details class="idea"><summary><span class="ico">${i}</span><b>${esc(t)}</b></summary><p>${esc(d)}</p></details>`).join('')}</div>
+  <div class="card guide" id="g-ideas"><h2>1. Where bill ideas come from</h2><p class="desc">Anyone can bring a legislator an idea, but only a legislator can open a bill file. <b>Click any card</b> to see how that kind of idea becomes a bill.</p>
+   <div class="idea-grid">${IDEAS.map(([i,t,d])=>`<details class="idea"><summary title="Click to read more"><span class="ico">${i}</span><b>${esc(t)}</b><span class="idea-more" aria-hidden="true">▾</span></summary><p>${esc(d)}</p></details>`).join('')}</div>
    <p class="small muted" style="margin-top:12px">On every bill page, <b>Has this bill run before?</b> and the out-of-state lookalike check show when an idea came from an earlier session or another state.</p></div>
 
   <div class="card guide" id="g-staff"><h2>2. The staff behind every bill</h2><p class="desc">Three nonpartisan offices serve all 104 legislators, whatever their party.</p>
@@ -57,7 +62,7 @@ function guideProcess(){
 
   ${budgetGuide()}
 
-  <div class="card guide" id="g-die"><h2>6. Where bills quietly die</h2><div class="die-grid">${DIE.map(([i,t])=>`<div><span class="ico">${i}</span>${esc(t)}</div>`).join('')}</div>
+  <div class="card guide" id="g-die"><h2>6. Where bills quietly die</h2><p class="desc">Hover over (or tap) each one to see how it happens.</p><div class="die-grid">${DIE.map(([i,t,d])=>`<div tabindex="0" data-full="${esc(d)}"><span class="ico">${i}</span><span class="die-t">${esc(t)}</span><span class="die-i" aria-hidden="true">ⓘ</span></div>`).join('')}</div>
    <p class="small muted" style="margin-top:10px">Most bills don’t pass. On the Bills tab, the progress bar on each bill shows how far it got.</p></div>`;
 }
 const guideBudget={};

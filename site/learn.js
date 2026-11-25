@@ -5,7 +5,7 @@
 let LG={score:0,streak:0,best:lsGet('docket-learn-best',{}),q:null,answered:null};
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const legTitle=l=>`${l.house==='H'?'Rep.':'Sen.'} ${l.name}`;
-const GAMES=[['faces','🧑‍⚖️ Face match'],['map','🗺️ District map'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['terms','📖 Floor vocabulary'],['agquiz','⚖️ AG Showdown']];
+const GAMES=[['faces','🧑‍⚖️ Face match'],['map','🗺️ District map'],['party','🗳️ Red or blue?'],['facts','✨ Fun facts'],['quotes','💬 Who said it?'],['redo','🏛️ Capitol quirks'],['terms','📖 Floor vocabulary'],['agquiz','⚡ AG Office Showdown']];
 function lgBest(k,v){if(v>(LG.best[k]||0)){LG.best[k]=v;lsSet('docket-learn-best',LG.best)}
   // Post to the shared leaderboard when it beats what the board has for you.
   if(ME&&LGB&&v>(((LGB.board[ME.user]||{}).s||{})[k]||0))api('lgboard',{game:k,score:v}).then(j=>{LGB=j}).catch(()=>{})}
@@ -21,15 +21,21 @@ function loadBoard(){if(LGB===null&&ME){LGB=undefined;api('lgboard').then(j=>{LG
   // Send any personal bests from this browser the board doesn't have yet.
   const mine=(j.board[j.me]||{}).s||{};for(const [k] of GAMES)if((LG.best[k]||0)>(mine[k]||0))api('lgboard',{game:k,score:LG.best[k]}).then(x=>{LGB=x}).catch(()=>{});
   if(location.hash.startsWith('#learn'))route(true)}).catch(()=>{LGB={board:{},me:ME.user}})}return LGB}
+// The "All games" total: each game counts up to 100 points, your best as a share of the office's best in that game,
+// so piling up one game can't outweigh the others.
+const LGB_CAP=100;
 function boardHTML(){
   if(!ME)return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">Sign in to put your scores on the office leaderboard.</p></div>`;
   const B=loadBoard();if(!B)return '<div class="card"><p>Loading the leaderboard…</p></div>';
-  const g=LGBGAME, rows=Object.entries(B.board).map(([u,x])=>({u,n:x.n||u,v:g==='all'?Object.values(x.s||{}).reduce((a,b)=>a+b,0):((x.s||{})[g]||0),s:x.s||{}})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v||a.n.localeCompare(b.n));
+  const top={};for(const x of Object.values(B.board))for(const [k,v] of Object.entries(x.s||{}))top[k]=Math.max(top[k]||0,v);
+  const pts=(s,k)=>s&&top[k]?Math.round(LGB_CAP*s/top[k]):0;
+  const g=LGBGAME, rows=Object.entries(B.board).map(([u,x])=>({u,n:x.n||u,v:g==='all'?GAMES.reduce((a,[k])=>a+pts((x.s||{})[k],k),0):((x.s||{})[g]||0),s:x.s||{}})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v||a.n.localeCompare(b.n));
   let rank=0,prev=null;rows.forEach((r,i)=>{if(r.v!==prev){rank=i+1;prev=r.v}r.rank=rank});
   const medal=n=>n===1?'🥇':n===2?'🥈':n===3?'🥉':n;
-  return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">Everyone’s best streak in each game. “All games” adds up your bests.</p>
+  const unit=g==='agquiz'?'Best score':'Best streak';
+  return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">${g==='all'?`Every game counts the same: each is worth up to ${LGB_CAP} points, your best compared with the office’s best in that game. Playing one game over and over can’t earn more than ${LGB_CAP}, so the top spot goes to whoever does well across all ${GAMES.length}.`:`Everyone’s ${unit.toLowerCase()} in this game.`}</p>
    <div class="seg lgb-seg" role="group" aria-label="Game">${[['all','All games'],...GAMES].map(([k,l])=>`<button type="button" data-lgb="${k}" class="${g===k?'on':''}">${l}</button>`).join('')}</div>
-   ${rows.length?`<table class="lgb"><thead><tr><th>#</th><th>Player</th>${g==='all'?GAMES.map(([k,l])=>`<th class="n hide-m" title="${esc(l.slice(2).trim())}">${l.split(' ')[0]}</th>`).join(''):''}<th class="n">${g==='all'?'Total':'Best streak'}</th></tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr class="${r.u===B.me?'me':''}"><td>${medal(r.rank)}</td><td>${esc(r.n)}${r.u===B.me?' <span class="tiny muted">(you)</span>':''}</td>${g==='all'?GAMES.map(([k])=>`<td class="n hide-m">${r.s[k]||''}</td>`).join(''):''}<td class="n"><b>${r.v}</b></td></tr>`).join('')}</tbody></table>`:'<p class="empty">No scores yet. Play a game to get on the board.</p>'}</div>`;
+   ${rows.length?`<table class="lgb"><thead><tr><th>#</th><th>Player</th>${g==='all'?GAMES.map(([k,l])=>`<th class="n hide-m" title="${esc(l.replace(/^\S+\s/,''))}">${l.split(' ')[0]}</th>`).join(''):''}<th class="n">${g==='all'?`Total <span class="tiny muted">of ${GAMES.length*LGB_CAP}</span>`:unit}</th></tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr class="${r.u===B.me?'me':''}"><td>${medal(r.rank)}</td><td>${esc(r.n)}${r.u===B.me?' <span class="tiny muted">(you)</span>':''}</td>${g==='all'?GAMES.map(([k])=>`<td class="n hide-m" ${r.s[k]?`title="Your best: ${r.s[k].toLocaleString()} · office best: ${(top[k]||0).toLocaleString()}"`:''}>${r.s[k]?pts(r.s[k],k):''}</td>`).join(''):''}<td class="n"><b>${r.v.toLocaleString()}</b></td></tr>`).join('')}</tbody></table>`:'<p class="empty">No scores yet. Play a game to get on the board.</p>'}</div>`;
 }
 // ---------- keyboard: 1–4 (or R and D) to answer, Enter, space or → for the next card
 document.addEventListener('keydown',e=>{
@@ -82,7 +88,7 @@ const LEARN_PLAY=[['faces','🧑‍⚖️','Face match','See a photo, pick the l
  ['quotes','💬','Who said it?','A real line from a committee hearing. Guess which legislator said it.'],
  ['redo','🏛️','Capitol quirks','Jell-O, the state dinosaur, a 45-day session: odd bills and fun facts from Utah’s Legislature.'],
  ['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],
- ['agquiz','⚖️','AG Showdown','A fast, Kahoot-style quiz on the Attorney General’s Office: history, leaders, big cases and priorities, with talking points.'],
+ ['agquiz','⚡','AG Office Showdown','A fast, timed quiz on the Attorney General’s Office: its history, leaders, big cases and priorities.'],
  ['board','🏆','Leaderboard','See who in the office has the longest streak in each game.']];
 const LEARN_READ=[['process','🛤️','How a bill becomes law','Where bill ideas come from, who drafts and prices them, every step to the governor, and how the budget gets built.'],
  ['ag','⚖️','The AG’s Office, explained','Counselors, protectors and stewards: the org chart, what each division does, the office in the news, and fun facts.'],

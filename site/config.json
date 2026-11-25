@@ -37,23 +37,9 @@
  ],
  "divisions": [
   {
-   "id": "ex-office",
+   "id": "ex-executive",
    "dept": "executive",
-   "name": "Executive Office",
-   "keywords": [],
-   "codes": []
-  },
-  {
-   "id": "ex-external",
-   "dept": "executive",
-   "name": "External Relations and Government Affairs",
-   "keywords": [],
-   "codes": []
-  },
-  {
-   "id": "ex-communications",
-   "dept": "executive",
-   "name": "Communications",
+   "name": "Executive",
    "keywords": [],
    "codes": []
   },

@@ -30,7 +30,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   `fiscal.js` (Fiscal Hive), `office.js` (association-position and budget uploads), `intel.js` (floor watch,
   collisions, run-before, media, follow the money), `legis.js` (legislator profiles), `learn.js`
   (Learn the Legislature: games, Capitol quirks, the sponsor ranking under “Members and their bills”, a
-  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Showdown, a Kahoot-style quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `outreach.js` (the Outreach tab), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive and the email alerts)
+  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Office Showdown, a timed quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `outreach.js` (the Outreach tab), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive and the email alerts)
 - `site/config.json` – departments, divisions (with the keywords used to suggest a division),
   designations and priorities. Edit and commit to change the lists.
 - `site/data/` – bill, budget and legislator data; rewritten by the weekday update, don't edit by hand
@@ -110,8 +110,8 @@ Deployments → pick an earlier deployment → **Rollback to this deployment**.
 
 ## Departments that aren't bill designations
 
-A department with `"designate": false` in `site/config.json` (today: **Executive**, with Executive Office, External Relations
-and Government Affairs, and Communications) is used for accounts, Fiscal Hive routing, the implementation tracker and the org
+A department with `"designate": false` in `site/config.json` (today: **Executive**, with a single
+Executive division) is used for accounts, Fiscal Hive routing, the implementation tracker and the org
 chart, but is never offered as a bill's department or division. Fiscal Hive → Settings → **Custom divisions** adds routing-only
 units (a name and Send/CC emails) stored in the `fn_customdivs` setting.
 

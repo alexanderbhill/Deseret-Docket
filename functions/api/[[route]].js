@@ -728,7 +728,7 @@ export async function onRequest(context) {
         const cur = people[id] || {};
         if ("photo" in body) {
           const ph = String(body.photo || "");
-          if (ph && (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(ph) || ph.length > 120000)) return bad("That photo is too big or isn't an image.");
+          if (ph && !/^https:\/\/[^\s"'<>]{8,600}$/.test(ph) && (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(ph) || ph.length > 120000)) return bad("That photo is too big or isn't an image or an https link.");
           if (ph) cur.photo = ph; else delete cur.photo;
         }
         if ("bio" in body) { const b = String(body.bio || "").trim().slice(0, 1500); if (b) cur.bio = b; else delete cur.bio; }
