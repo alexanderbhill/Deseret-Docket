@@ -123,26 +123,26 @@ The relationship side of the session, for admins and anyone with Admin → Edit 
 - **Draft review:** every draft out for the office's review, in three columns by whose turn it is: **Waiting on us**, **Waiting on
   divisions** and **Waiting on the drafter**, each with how long it's been there.
   1. **Log a draft** when one comes in from the drafter (LRGC), a sponsor or a stakeholder: the bill or bill file, version, who it's from
-     and their email, the legislators to copy, a link to the draft, the point of contact (Dan or Katie), the divisions and the due dates.
+     and their email, the legislators to copy, a link to the draft, the point of contact, the divisions and the due dates.
   2. **Send to divisions** emails each division (its people under Fiscal Hive → Settings → Who gets requests) with **No concerns** and
      **Send comments** buttons. They answer without signing in; comments can include suggested language. A division that answered some
      other way can be recorded with **Record answer**.
   3. One reminder goes out by itself on the due date (or two days after the request with no due date); **Remind** sends one any time.
-     When the last division answers, the point of contact gets an email with every answer.
+     When the last division answers, whoever sent it gets an email with every answer and any redlines.
   4. **Send feedback back** drafts the email to the drafter from the divisions' comments (with or without division names). Open it in
      Outlook or Outlook on the web, send it, then press **Yes, mark it sent back**.
   5. **Log a reply or call** adds to the draft's trail; **New version came in** closes the round and starts the next one with the same
      people and divisions. The bill page (or the bill file's page) shows its draft review too.
   Until email is connected, the division emails wait in Fiscal Hive → Settings → Outbox. **See it with email connected** walks through how
   it works once Outlook is hooked up (spotting drafts in the POC's inbox, sending from their own mailbox in the drafter's thread, and
-  logging replies automatically), which would need Microsoft Graph Mail.Send and Mail.Read permissions on Dan's and Katie's mailboxes.
+  logging replies automatically), which would need Microsoft Graph Mail.Send and Mail.Read permissions on the mailboxes of the people who use it.
 - **Meetings:** who the office met with (legislators, staff, stakeholders), who from the office went, bills discussed, notes and a follow-up date.
 - **Asks:** what the office asked each legislator for, what they said or committed to, status, owner and follow-up date.
 - **Testimony:** pick a bill and get a two-minute draft built from the office position, what the bill does, the divisions it touches,
   the fiscal note and Fiscal Hive estimates, earlier versions and association positions. Edit, rehearse against a timer, save, copy or print.
 - **Amendments:** language requests tied to the bill's page and lines, with status and owner.
 - **Interim:** study items for each interim committee, with the division affected and who's preparing.
-- **Overview:** what's due this week, hearings in the next two weeks that need testimony, recent meetings, and sponsors of
+- **Overview:** the walk-through, the wish list, what's due this week, committee meetings in the next two weeks that need testimony, recent meetings, and sponsors of
   bills the office has a position on that nobody has met with yet.
 - Every bill page (Hearings and debate tab) and legislator profile shows the office's outreach with them.
 - Follow-up dates you own show as a badge on the tab; the 15-minute email job emails the owner once a follow-up comes due
