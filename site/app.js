@@ -70,6 +70,7 @@ const isAdmin=()=>ME&&ME.role==='admin';
 // Session wrap-up shows from the last week of a session (and for a few months after), or when an admin turns it on.
 function wrapVisible(){if(ME&&ME.flags&&ME.flags.wrap)return true;const now=Date.now();return Object.values((CONFIG&&CONFIG.sessions)||{}).some(x=>{const d=pd(x.sineDie);return d&&now>=d-7*864e5&&now<=d+120*864e5})}
 const canFiscal=()=>!!ME&&(isAdmin()||!!(ME.perms&&ME.perms.fiscal));
+const canOutreach=()=>!!ME&&(isAdmin()||!!(ME.perms&&ME.perms.outreach));
 let ADMIN_PENDING=0;
 const P=()=>ME?ME.perms:{edit:false,fields:[],seePriority:false,seeNotes:false,watch:false,scope:'all'};
 const canSee=f=>!!ME&&(f==='priority'?isAdmin()||P().seePriority:f==='note'?isAdmin()||P().seeNotes:true);
@@ -298,8 +299,9 @@ function shell(active,inner,compact){
   else if(changed) sum+=` <b>${changed}</b> changed today.`;
   const sched=`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}.`:''}`;
   const fine=ME?'':`You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
-  const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];const TABICON={updates:'bell',bills:'list',budget:'chart',fiscal:'hive',postsession:'wrap',learn:'book',admin:'gear'};
+  const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];const TABICON={updates:'bell',bills:'list',budget:'chart',fiscal:'hive',outreach:'users',postsession:'wrap',learn:'book',admin:'gear'};
   if(canFiscal()) tabs.push(['fiscal','Fiscal Hive']);
+  if(canOutreach()){const n=typeof outDueCount==='function'?outDueCount():0;tabs.push(['outreach',`Outreach${n?` <span class="badge" title="Follow-ups due">${n}</span>`:''}`])}
   if(ME&&wrapVisible()) tabs.push(['postsession','Session wrap-up']);
   tabs.push(['learn','Learn']);
   if(isAdmin()) tabs.push(['admin',`Admin${ADMIN_PENDING?` <span class="badge">${ADMIN_PENDING}</span>`:''}`]);
@@ -927,7 +929,7 @@ function pageAdmin(){
 const sectionName=id=>id==='other'?'Other / not listed':divName(id)||id||'';
 function sectionSelect(cur){return `<select id="uSection" style="width:100%"><option value="">—</option>${CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id).map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}<option value="other" ${cur==='other'?'selected':''}>Other / not listed</option></select>`}
 function userForm(u,req,inv){
-  const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,tracker:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,scope:'all',departments:[],bills:[]};
+  const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,tracker:true,outreach:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,scope:'all',departments:[],bills:[]};
   if(req&&req.section){const dv=divById(req.section);if(dv&&billDepts().some(d=>d.id===dv.dept)){p.scope='departments';p.departments=[dv.dept]}}
   const val=(k)=>esc(u?u[k]||'':req?(k==='username'?req.username:k==='name'?`${req.first} ${req.last}`:k==='email'?req.email:''):'');
   if(inv)return `<form id="userForm" method="dialog"><h2>${ic('mail')}Invite someone</h2><p class="small muted">Choose what they can see and change now. Next you’ll get an email draft with their sign-up link; they choose their own username and password.</p>
@@ -953,6 +955,7 @@ function permsHTML(p,u){
     <label class="check"><input type="checkbox" id="pNotes" ${p.seeNotes?'checked':''}><span>Can see notes</span></label>
     <label class="check"><input type="checkbox" id="pWatch" ${p.watch?'checked':''}><span>Can change the watch list</span></label>
     <label class="check"><input type="checkbox" id="pFiscal" ${p.fiscal?'checked':''}><span>Can open the Fiscal Hive (fiscal note dashboard)</span></label>
+    <label class="check"><input type="checkbox" id="pOutreach" ${p.outreach?'checked':''}><span>Can use Outreach (meetings with legislators, asks, testimony, amendments, interim)</span></label>
     <label class="check"><input type="checkbox" id="pTracker" ${p.tracker?'checked':''}><span>Can see the shared bill tracker workbook (link and preview on the Updates page)</span></label>
     <span class="flabel" style="margin-top:10px">Bills they can see the office’s information for</span>
     <label class="check"><input type="radio" name="pScope" value="all" ${p.scope==='all'?'checked':''}><span>All bills</span></label>
@@ -971,12 +974,12 @@ function openUserDlg(u,req,inv){
   $('userForm').onsubmit=async e=>{e.preventDefault();
     const toKey=s=>{const m=s.trim().toUpperCase().replace(/\./g,'').match(/^([A-Z]{2,4})\s*0*(\d{1,4})$/);return m?`${UI.session}/${m[1]}${m[2].padStart(4,'0')}`:null};
     const keepOther=u&&u.perms?u.perms.bills.filter(k=>!k.startsWith(UI.session+'/')):[];
-    const perms={edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,
+    const perms={edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,outreach:$('pOutreach').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]};
     if(inv){const b={first:$('iFirst').value.trim(),last:$('iLast').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,role:document.querySelector('input[name=uRole]:checked').value,perms};
       try{const j=await api('invites',b);dlg.close();ADMIN=null;route(true);setTimeout(()=>inviteDraft({...b,token:j.token,expires_at:j.expires}),50)}catch(err){toast(err.message)}return}
     const body={action:req?'approve':'save',id:req?req.id:undefined,username:$('uName').value.trim().toLowerCase(),name:$('uDisp').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,password:$('uPw')?$('uPw').value:'',role:document.querySelector('input[name=uRole]:checked').value,
-      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,
+      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,outreach:$('pOutreach').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]}};
     try{await api(req?'requests':'users',body);dlg.close();toast(req?`Approved. ${body.name} can sign in as ${body.username}.`:body.password?`Saved. Give ${body.username} their password: ${body.password}`:'Saved');ADMIN=null;route(true)}catch(err){toast(err.message)}};
 }
@@ -1108,6 +1111,7 @@ function billSecs(b,m,hs){
   add('hearings','hearings','Committee hearings',`<section><h2>Committee hearings</h2>${hs.length?hs.map(h=>`<div class="card tight hcard" style="margin-bottom:8px"><div><b>${comInfo(h.committee)}</b><div class="small">${WD[h.d.getDay()]}, ${fmtLong(h.d)} · ${fmtTime(h.d)} · ${esc(h.place)}${h.url?` · <a href="${esc(h.url)}" target="_blank" rel="noopener">Agenda</a>`:''}</div></div>${h.d>=TODAY?calBtn(h,b.session):''}</div>`).join(''):'<p class="small muted">Not on any committee agenda yet.</p>'}</section>`);
   add('hearings','floor','Floor calendar',X.floor);
   add('hearings','discussed','What was discussed',discussionSection(b));
+  add('hearings','testimony','Testimony and outreach',typeof outBillHTML==='function'?outBillHTML(b):'');
   add('text','textchanges','Latest text changes',changesCard(b));
   add('text','watch','Where the watch list appears',`<section><h2>Where the watch list appears</h2>${m.length?`<p class="small muted">${plural(m.length,'place')} in ${esc(b.version||'the bill')}.</p><div class="tablewrap" style="border:0"><table class="compact"><thead><tr><th>Term</th><th>Where</th><th>Text</th></tr></thead><tbody>${m.slice(0,200).map(x=>`<tr><td><b>${esc(x.term)}</b>${x.inDef?' <span class="pill muted">definition</span>':''}${x.struck?' <span class="pill warn">struck</span>':''}</td><td>${esc(x.where)}</td><td>${x.code?esc(x.raw):snippet(x.raw,x.term)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="small muted">None of the watch list’s words or code chapters appear in this bill.</p>'}</section>`);
   add('text','collisions','Bill collisions',X.collisions);
@@ -1143,6 +1147,7 @@ function route(soft){
   else if(view==='admin') html=pageAdmin();
   else if(view==='email') html=pageEmail(parts.slice(1).join('-'));
   else if(view==='fiscal') html=pageFiscal(parts.slice(1).join('-'));
+  else if(view==='outreach') html=typeof pageOutreach==='function'?pageOutreach(parts.slice(1).join('-')):shell('',`<div class="card"><h2>Not found</h2></div>`);
   else if(view==='learn') html=pageLearn(parts.slice(1).join('-'));
   else if(view==='postsession') html=pageWrap(parts.slice(1).join('-'));
   else if(view==='packet') html=pagePacket(parts[1],parts.slice(2).join('-'));
@@ -1150,7 +1155,7 @@ function route(soft){
   else html=shell('',`<div class="card"><h2>Not found</h2></div>`);
   app.innerHTML=html; bind();
   if(soft) scrollTo(0,y);
-  const titles={features:'What Deseret Docket does',about:'About',fiscal:'Fiscal Hive',learn:'Learn the Legislature',postsession:'Session wrap-up',packet:'Prep packet',updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
+  const titles={features:'What Deseret Docket does',about:'About',fiscal:'Fiscal Hive',outreach:'Outreach',learn:'Learn the Legislature',postsession:'Session wrap-up',packet:'Prep packet',updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
   document.title=(titles[view]?titles[view]+' · ':'')+'Deseret Docket';
 }
 const on=(id,ev,fn)=>{const el=$(id);if(el)el[ev]=fn};
@@ -1260,7 +1265,7 @@ function bind(){
     try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':x.by)} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
     catch(e){$('teamLogBody').textContent='History didn’t load.';delete tl.dataset.done}});
   // page modules in their own files
-  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
+  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind','outBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
 }
 const curKey=()=>{const p=decodeURIComponent(location.hash.slice(1)).split('-');return p[1]+'/'+p.slice(2).join('-')};
 let lastPull=0;

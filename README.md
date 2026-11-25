@@ -30,7 +30,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   `fiscal.js` (Fiscal Hive), `office.js` (association-position and budget uploads), `intel.js` (floor watch,
   collisions, run-before, media, follow the money), `legis.js` (legislator profiles), `learn.js`
   (Learn the Legislature: games, Capitol quirks, the sponsor ranking under “Members and their bills”, a
-  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Showdown, a Kahoot-style quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive and the email alerts)
+  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Showdown, a Kahoot-style quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `outreach.js` (the Outreach tab), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive and the email alerts)
 - `site/config.json` – departments, divisions (with the keywords used to suggest a division),
   designations and priorities. Edit and commit to change the lists.
 - `site/data/` – bill, budget and legislator data; rewritten by the weekday update, don't edit by hand
@@ -39,7 +39,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
 - `functions/api/[[route]].js` – office information, accounts, the watch list and email sign-ups,
   stored in the Cloudflare D1 database bound to the Pages project as `DB`
 - `functions/respond/` – the no-sign-in pages division staff open from Fiscal Hive emails
-- `lib/` – shared sign-in code, the landing page, Fiscal Hive email logic and the honeybee logo
+- `lib/` – shared sign-in code, the landing page, Fiscal Hive email logic, Outreach storage and follow-up reminders (`outreach.js`) and the honeybee logo
 - `intel_update.py` – newspaper mentions and sentiment, plus `data/ag.json` (the AG's office in the news, its press releases and AG Brown's op-eds); runs after each data update
 - `media_avail.py` – transcribes and summarizes House/Senate media availabilities (`.github/workflows/media.yml`)
 - `update_docket.py` – downloads bills, bill files, fiscal notes, text changes, transcripts, COBI budget
@@ -114,6 +114,22 @@ A department with `"designate": false` in `site/config.json` (today: **Executive
 and Government Affairs, and Communications) is used for accounts, Fiscal Hive routing, the implementation tracker and the org
 chart, but is never offered as a bill's department or division. Fiscal Hive → Settings → **Custom divisions** adds routing-only
 units (a name and Send/CC emails) stored in the `fn_customdivs` setting.
+
+## Outreach
+
+The relationship side of the session, for admins and anyone with Admin → Edit → **Can use Outreach**:
+
+- **Meetings:** who the office met with (legislators, staff, stakeholders), who from the office went, bills discussed, notes and a follow-up date.
+- **Asks:** what the office asked each legislator for, what they said or committed to, status, owner and follow-up date.
+- **Testimony:** pick a bill and get a two-minute draft built from the office position, what the bill does, the divisions it touches,
+  the fiscal note and Fiscal Hive estimates, earlier versions and association positions. Edit, rehearse against a timer, save, copy or print.
+- **Amendments:** language requests tied to the bill's page and lines, with status and owner.
+- **Interim:** study items for each interim committee, with the division affected and who's preparing.
+- **Overview:** what's due this week, hearings in the next two weeks that need testimony, recent meetings, and sponsors of
+  bills the office has a position on that nobody has met with yet.
+- Every bill page (Hearings and debate tab) and legislator profile shows the office's outreach with them.
+- Follow-up dates you own show as a badge on the tab; the 15-minute email job emails the owner once a follow-up comes due
+  (owners need an account with an email address). Stored in the `outreach` table.
 
 ## Schedules
 

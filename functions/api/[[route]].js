@@ -21,6 +21,7 @@
 //   GET  /api/cron/subs          confirmed subscriptions and the bills each one covers
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
 import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady, customUnits } from "../../lib/fiscal.js";
+import { KINDS as OUT_KINDS, cleanItem, listOutreach, ensureOutreach, outreachTick } from "../../lib/outreach.js";
 import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
 
 const DEPTS = new Set(["criminal", "civil", "pp", "appellate", "admin"]);
@@ -343,7 +344,9 @@ export async function onRequest(context) {
         return json({ ok: true });
       }
       if (route === "cron/fn-tick" && method === "POST") {
-        return json(await fiscalTick(env, db, url.origin));
+        const r = await fiscalTick(env, db, url.origin);
+        let outreach = 0; try { outreach = await outreachTick(env, db, url.origin); } catch (e) { outreach = String(e.message || e); }
+        return json({ ...r, outreach });
       }
       if (route === "cron/send" && method === "POST") {
         const emails = (Array.isArray(body.emails) ? body.emails : []).slice(0, 100);
@@ -415,6 +418,34 @@ export async function onRequest(context) {
 
     if (route === "state" && method === "GET") {
       return json({ me: user.name, role: user.role, perms: user.perms, people: (await allPeople(env, db)).all, ...(await readState(db, user)) });
+    }
+    if (route === "outreach") {
+      // Meetings, asks, testimony, amendments and interim items. Admins, and accounts with "Can use Outreach".
+      if (user.role !== "admin" && !user.perms.outreach) return bad("Ask an admin to turn on Outreach for your account.", 403);
+      if (method === "GET") return json({ items: await listOutreach(db) });
+      await ensureOutreach(db);
+      const t = new Date().toISOString();
+      const id0 = String(body.id || "");
+      if (body.action === "delete") {
+        const cur = await db.prepare("SELECT by FROM outreach WHERE id = ?").bind(id0).first();
+        if (!cur) return bad("Already deleted.", 404);
+        if (user.role !== "admin" && cur.by !== user.name) return bad("Only the person who added it, or an admin, can delete it.", 403);
+        await db.prepare("DELETE FROM outreach WHERE id = ?").bind(id0).run();
+        return json({ ok: true, items: await listOutreach(db) });
+      }
+      const kind = String(body.kind || "");
+      if (!OUT_KINDS[kind]) return bad("Unknown kind.");
+      const d = cleanItem(kind, body.item || {});
+      if (kind === "meet" && !d.legs.length && !d.others) return bad("Add who you met with.");
+      if (kind === "ask" && (!d.leg || !d.ask)) return bad("Pick the legislator and write the ask.");
+      if (kind === "testimony" && !d.bill) return bad("Pick the bill.");
+      if (kind === "amend" && (!d.bill || !d.change)) return bad("Pick the bill and describe the change.");
+      if (kind === "interim" && (!d.com || !d.topic)) return bad("Pick the interim committee and the topic.");
+      const cur = /^[0-9a-f]{16}$/.test(id0) ? await db.prepare("SELECT id, kind FROM outreach WHERE id = ?").bind(id0).first() : null;
+      if (cur && cur.kind !== kind) return bad("That item is a different kind.");
+      if (cur) await db.prepare("UPDATE outreach SET data = ?, updated_by = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(d), user.name, t, cur.id).run();
+      else await db.prepare("INSERT INTO outreach (id, kind, data, by, created_at, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(frand(8), kind, JSON.stringify(d), user.name, t, user.name, t).run();
+      return json({ ok: true, items: await listOutreach(db) });
     }
     if (route === "tracker") {
       if (method === "GET") {
