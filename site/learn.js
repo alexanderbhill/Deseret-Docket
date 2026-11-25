@@ -89,7 +89,10 @@ const LEARN_PLAY=[['faces','🧑‍⚖️','Face match','See a photo, pick the l
  ['redo','🏛️','Capitol quirks','Jell-O, the state dinosaur, a 45-day session: odd bills and fun facts from Utah’s Legislature.'],
  ['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],
  ['agquiz','⚡','AG Office Showdown','A fast, timed quiz on the Attorney General’s Office: its history, leaders, big cases and priorities.'],
+ ['meet','🤝','Meet the Legislature','Tap each legislator’s face once you’ve talked with them. See who’s left and how you stack up.'],
  ['board','🏆','Leaderboard','See who in the office has the longest streak in each game.']];
+// Projects everyone works on together (no points).
+const LEARN_TEAM=[['bdays','🎂','Birthday hunt','Help find the birthdays of the legislators the office doesn’t have yet, and where each one came from.']];
 const LEARN_READ=[['process','🛤️','How a bill becomes law','Where bill ideas come from, who drafts and prices them, every step to the governor, and how the budget gets built.'],
  ['ag','⚖️','The AG’s Office, explained','Counselors, protectors and stewards: the org chart, what each division does, the office in the news, and fun facts.'],
  ['districts','📍','Where every legislator is','A map of Utah with a dot for each senator or representative, colored by party.'],
@@ -105,10 +108,12 @@ function pageLearn(sub,extra=''){
   const head=`<div class="card learn-hero"><div><h2>Learn the Legislature</h2></div>
    <nav class="learn-nav" aria-label="Learn"><a href="#learn" class="${cur===''?'on':''}">🏠 Start</a></nav>
    <div class="learn-navs"><nav class="learn-nav" aria-label="Games"><span class="nav-l">Play</span>${LEARN_PLAY.map(chip).join('')}</nav>
-   <nav class="learn-nav" aria-label="Guides"><span class="nav-l">Learn</span>${LEARN_READ.map(chip).join('')}</nav></div></div>`;
+   <nav class="learn-nav" aria-label="Guides"><span class="nav-l">Learn</span>${LEARN_READ.map(chip).join('')}</nav>
+   ${ME?`<nav class="learn-nav" aria-label="Together"><span class="nav-l">Together</span>${LEARN_TEAM.map(chip).join('')}</nav>`:''}</div></div>`;
   const pick={faces:gameFaces,party:gameParty,redo:gameRedo,facts:gameFacts,quotes:gameQuotes,terms:gameTerms,map:()=>typeof gameMap==='function'?gameMap():'',agquiz:()=>typeof gameAG==='function'?gameAG():''};
   let body='';
   if(pick[sub])body=pick[sub]();else if(sub==='process')body=guideProcess();else if(sub==='members')body=memberGrid();else if(sub==='board')body=boardHTML();
+  else if(sub==='meet')body=typeof gameMeet==='function'?gameMeet():'';else if(sub==='bdays')body=typeof gameBdays==='function'?gameBdays():'';
   else if(sub==='districts')body=typeof refMap==='function'?refMap():'';else if(sub==='ag')body=typeof pageAGGuide==='function'?pageAGGuide():'';
   // Skip anything two people have flagged.
   for(let i=0;i<25&&body&&pick[sub]&&LG.q&&!LG.answered&&isHidden(qidOf(sub,LG.q));i++){LG.q=null;body=pick[sub]()}
@@ -118,7 +123,9 @@ function pageLearn(sub,extra=''){
   if(!body) body=`<h3 class="learn-sec">${typeof ic==='function'?ic('trophy'):''} Play</h3><p class="small muted learn-sec-d">Quick games to learn faces, districts and the vocabulary. Your best streaks go on the office leaderboard.</p>
    <div class="learn-grid">${LEARN_PLAY.map(learnTile).join('')}</div>
    <h3 class="learn-sec">${typeof ic==='function'?ic('book'):''} Learn</h3><p class="small muted learn-sec-d">Guides and references to read at your own pace.</p>
-   <div class="learn-grid">${LEARN_READ.map(learnTile).join('')}</div>`;
+   <div class="learn-grid">${LEARN_READ.map(learnTile).join('')}</div>
+   ${ME?`<h3 class="learn-sec">${typeof ic==='function'?ic('users'):''} Together</h3><p class="small muted learn-sec-d">Projects the whole office works on. No points, just progress.</p>
+   <div class="learn-grid">${LEARN_TEAM.map(learnTile).join('')}</div>`:''}`;
   return shell('learn',head+body+extra);
 }
 
@@ -254,7 +261,7 @@ function wsForm(){
    <form id="wsForm" class="filters" style="margin-top:8px"><div class="field"><label for="wsLeg">Who said it</label><select id="wsLeg">${LEGS.slice().sort((x,y)=>x.full.localeCompare(y.full)).map(o=>`<option value="${o.id}">${esc(legTitle(o))}</option>`).join('')}</select></div>
    <div class="field grow"><label for="wsTxt">The quote (mention a bill, committee or place so people can work it out)</label><textarea id="wsTxt" rows="2" maxlength="400"></textarea></div>
    <div class="field grow"><label for="wsCtx">Where it was said (optional)</label><input id="wsCtx" maxlength="120" placeholder="H.B. 12 in House Education Committee"></div><button class="btn">Add quote</button></form>
-   ${mine.length?`<div class="tiny muted" style="margin-top:8px">${isAdmin()?'Quotes people have added':'Quotes you’ve added'}:</div>${mine.map(x=>`<div class="tiny">“${esc(x.q.slice(0,90))}${x.q.length>90?'…':''}” <span class="muted">(${esc((legById(x.id)||{}).name||x.id)}, added by ${esc(x.by)})</span> <button class="linkbtn tiny" data-wsdel="${esc(x.at)}">remove</button></div>`).join('')}`:''}</details>`;
+   ${mine.length?`<div class="tiny muted" style="margin-top:8px">${isAdmin()?'Quotes people have added':'Quotes you’ve added'}:</div>${mine.map(x=>`<div class="tiny">“${esc(x.q.slice(0,90))}${x.q.length>90?'…':''}” <span class="muted">(${esc((legById(x.id)||{}).name||x.id)}, added by ${esc(pn(x.by))})</span> <button class="linkbtn tiny" data-wsdel="${esc(x.at)}">remove</button></div>`).join('')}`:''}</details>`;
 }
 function gameQuotes(){
   loadQuotes();if(QUOTES===undefined)return '<div class="card"><p>Finding quotes in the hearing recordings…</p></div>';

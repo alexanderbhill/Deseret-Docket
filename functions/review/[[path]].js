@@ -6,6 +6,7 @@ import { BEE, BEE_CSS } from "../../lib/logo.js";
 import { ensureReview, addLog, reviewTurn, reviewName, allInEmail, TOKEN_DAYS } from "../../lib/review.js";
 import { unitNamer } from "../../lib/fiscal.js";
 import { saveFile, filesFor, deleteFile, MAX_FILE } from "../../lib/files.js";
+import { logActivity } from "../../lib/activity.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtDay = (d) => (d ? new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }) : "");
@@ -71,6 +72,8 @@ export async function onRequest({ request, env, params }) {
     d.reqs = { ...(d.reqs || {}), [div]: { ...req, status: a, comments: a === "comments" ? comments : "", lang: a === "comments" ? lang : "", files: a === "comments" ? kept.map((x) => ({ id: x.id, name: x.name, size: x.size })) : [], by, at: new Date().toISOString() } };
     addLog(d, by || dn, `${dn}: ${a === "none" ? "no concerns" : saved.length ? `sent comments with ${saved.length === 1 ? "a redline" : saved.length + " files"}` : "sent comments"}`);
     await db.prepare("UPDATE outreach SET data = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(d), new Date().toISOString(), row.id).run();
+    // The answer shows up in the office's activity log, marked as coming from the division's email.
+    await logActivity(db, [{ by: by || dn, src: "email", kind: "review", item: row.id, title: [d.label, d.title].filter(Boolean).join(" "), what: `${dn} answered: ${a === "none" ? "no concerns" : "comments"}`, legs: d.legs || [], bills: d.bill ? [d.bill] : [] }]);
     if (wasTeam && reviewTurn(d) === "us") { try { await allInEmail(env, db, url.origin, d, row.id); } catch { /* the dashboard shows it either way */ } }
     return page("Thank you", `<h1 class="ok">Thank you!</h1>${box}<p>Recorded for ${esc(dn)}: <b>${a === "none" ? "no concerns" : "comments"}</b>${kept.length && a === "comments" ? ` and ${kept.length === 1 ? "your file" : kept.length + " files"}` : ""}. ${esc(pocFirst)} will include it in the office’s feedback. You can open this link again to change your answer until the feedback goes back.</p>`);
   }

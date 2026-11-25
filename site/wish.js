@@ -21,7 +21,7 @@ function wishPage(){
   const row=it=>{const rv=reviews.filter(r=>r.wish===it.id);const b=it.bill&&BYKEY[it.bill];
     return `<tr class="wish-row" data-wish="${esc(it.id)}" tabindex="0"><td>${it.priority?'<span class="wish-pri" title="Priority">★</span>':''}</td><td><b>${esc(it.team||'')}</b>${it.division?`<div class="tiny muted">${esc(divName(it.division))}</div>`:''}</td>
      <td><b class="wish-sum">${esc(it.summary)}</b>${it.todo?` <span class="pill warn">${esc(it.todo)}</span>`:''}${it.details?`<div class="small muted out-clip">${esc(it.details)}</div>`:''}</td>
-     <td>${wishPill(it)}${rv.length?`<div class="tiny muted">${plural(rv.length,'draft review')}</div>`:''}${b?`<div>${outBill(it.bill)}</div>`:''}</td>
+     <td>${wishPill(it)}${!b&&typeof intMatches==='function'&&intMatches(it).length?' <span class="pill gold" title="A bill file looks like this idea. See Interim → Overview.">Possible bill file</span>':''}${rv.length?`<div class="tiny muted">${plural(rv.length,'draft review')}</div>`:''}${b?`<div>${outBill(it.bill)}</div>`:''}</td>
      <td class="small"><div class="out-clip">${esc(it.next||'')}</div></td><td class="small">${esc(it.poc||'')}${it.sponsor?`<div>${outLegChip(it.sponsor)}</div>`:''}</td></tr>`};
   const counts=WISH_STEPS.map(([k,l])=>[k,l,all.filter(x=>x.status===k&&(!WISHSES||x.session===WISHSES)).length]);
   return `<div class="card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div><h2>Wish list</h2>
@@ -37,7 +37,7 @@ function wishPage(){
 function wishOverview(){
   const all=outOf('wish').filter(outIsOpen);if(!all.length)return '';
   const pri=all.filter(x=>x.priority).sort((a,b)=>wishStep(a.status)-wishStep(b.status)).slice(0,6);
-  return `<div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><h2>Wish list</h2><a class="btn sm" href="#outreach-wish">All ideas →</a></div>
+  return `<div class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><h2>Wish list</h2><a class="btn sm" href="#interim-wish">All ideas →</a></div>
    <div class="wish-pipe">${WISH_STEPS.map(([k,l],i)=>`<div class="s${i}"><b>${all.filter(x=>x.status===k).length}</b><span>${esc(l)}</span></div>`).join('')}</div>
    ${pri.length?`<h4 class="out-sub">Priorities</h4><div class="rows">${pri.map(it=>`<div class="row wish-row" data-wish="${esc(it.id)}" tabindex="0" style="grid-template-columns:minmax(0,1fr) auto;cursor:pointer"><div class="what" style="font-size:14.5px"><span class="wish-pri">★</span> ${esc(it.summary)}<span class="sub">${[it.team,it.todo,it.next].filter(Boolean).map(esc).join(' · ')}</span></div><div class="r">${wishPill(it)}</div></div>`).join('')}</div>`:''}</div>`;
 }

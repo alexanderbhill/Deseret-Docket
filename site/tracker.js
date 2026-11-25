@@ -52,7 +52,7 @@ function adminTrackerHTML(){
     <div class="field"><label for="trkSheet">Sheet Deseret Docket fills in</label><input id="trkSheet" value="${esc(c.sheet)}" maxlength="31" style="width:100%"></div>
     <div class="field"><label for="trkScope">Which bills</label><select id="trkScope" style="width:100%"><option value="office" ${c.scope!=='all'?'selected':''}>The office list (bills with a position, department, designation or assignment)</option><option value="all" ${c.scope==='all'?'selected':''}>Every bill and bill file</option></select></div>
     <div class="field"><label for="trkSes">Session</label><select id="trkSes" style="width:100%"><option value="">Newest session</option>${sessions.map(x=>`<option value="${x}" ${c.session===x?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
-    <div style="grid-column:1/-1"><button class="btn primary">Save</button>${c.by?` <span class="tiny muted">Last changed by ${esc(c.by)}, ${fmtLong(new Date(c.at))}</span>`:''}</div></form>
+    <div style="grid-column:1/-1"><button class="btn primary">Save</button>${c.by?` <span class="tiny muted">Last changed by ${esc(pn(c.by))}, ${fmtLong(new Date(c.at))}</span>`:''}</div></form>
    <p class="small" style="margin-top:12px"><b>Who can see it:</b> ${who.length?esc(who.map(u=>u.name||u.username).join(', ')):'only admins so far'}. Turn it on for someone with <b>Edit</b> next to their account (“Can see the shared bill tracker workbook”).</p>
    ${trkSyncLine(T.sync)}
    ${trkSetupHTML(c,T.sync)}</div>`;

@@ -30,7 +30,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   `fiscal.js` (Fiscal Hive), `office.js` (association-position and budget uploads), `intel.js` (floor watch,
   collisions, run-before, media, follow the money), `legis.js` (legislator profiles), `learn.js`
   (Learn the Legislature: games, Capitol quirks, the sponsor ranking under “Members and their bills”, a
-  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Office Showdown, a timed quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `outreach.js` (the Outreach tab), `review.js` (Outreach → Draft review), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive, the email alerts and Draft review with Outlook connected)
+  leaderboard stored in the `lgboard` setting, and “Who said it?” quotes people add, stored in `wsquotes`), `wrap.js` (session wrap-up and prep packets), `tour.js` (tour and Help menu), `map.js` (Learn → District map game and the reference map), `guides.js` (Learn → How a bill becomes law, including the budget), `agguide.js` (Learn → the AG's Office, explained, including the org chart's photo-and-bio cards, stored in the `agpeople` setting), `aggame.js` (Learn → AG Office Showdown, a timed quiz on the office), `tracker.js` (the shared Excel bill tracker card and its Admin settings), `hearshare.js` (the Share button on hearing tiles), `outreach.js` (the Outreach tab), `review.js` (Outreach → Draft review), `activity.js` (the activity log, Outreach → Legislators and Quick log), `interim.js` (the Interim tab and rumor bills), `meetgame.js` (Learn → Meet the Legislature and the Birthday hunt), `tables.js` (frozen columns and the top scroll bar on wide tables), `changes.js` (Help → About: what's new and usage stats), `hover.js` (hover cards for committees, divisions and legislators, and pie-slice labels), `demo.js` (walk-through demos of Fiscal Hive, the email alerts and Draft review with Outlook connected)
 - `site/config.json` – departments, divisions (with the keywords used to suggest a division),
   designations and priorities. Edit and commit to change the lists.
 - `site/data/` – bill, budget and legislator data; rewritten by the weekday update, don't edit by hand
@@ -40,7 +40,7 @@ Live site: https://deseret-docket.pages.dev (Cloudflare Pages, connected to this
   stored in the Cloudflare D1 database bound to the Pages project as `DB`
 - `functions/respond/` – the no-sign-in pages division staff open from Fiscal Hive emails
 - `functions/review/` – the no-sign-in pages divisions open from Draft review emails
-- `lib/` – shared sign-in code, the landing page, Fiscal Hive email logic, Outreach storage and follow-up reminders (`outreach.js`), Draft review emails and reminders (`review.js`) and the honeybee logo
+- `lib/` – shared sign-in code, the activity log (`activity.js`), the landing page, Fiscal Hive email logic, Outreach storage and follow-up reminders (`outreach.js`), Draft review emails and reminders (`review.js`) and the honeybee logo
 - `intel_update.py` – newspaper mentions and sentiment, plus `data/ag.json` (the AG's office in the news, its press releases and AG Brown's op-eds); runs after each data update
 - `media_avail.py` – transcribes and summarizes House/Senate media availabilities (`.github/workflows/media.yml`)
 - `update_docket.py` – downloads bills, bill files, fiscal notes, text changes, transcripts, COBI budget
@@ -169,6 +169,53 @@ drafter, Bill file opened, Numbered bill and Passed (or Parked). Open an idea to
   `build_interim.py` reads the year's approved list (the PDF link in `site/config.json` → `interimStudyItems`; add
   next year's when the Legislative Management Committee approves it, usually in April) at the end of the data update.
 - The walk-through at the top of Outreach → Overview (`site/outdemo.js`) shows the whole loop.
+
+## Interim
+
+Admins, and accounts with Admin → Edit → **Can use Interim** (older accounts follow their Outreach setting):
+
+- **Rumor bills:** bills someone heard are coming: who's carrying it, how the office heard, how sure (whisper, likely,
+  confirmed), the divisions it would touch and words to watch for. When a bill file or bill appears with the same
+  sponsor or words in common, the card (and Interim → Overview) offers it; **That's it** links them. **Get the divisions'
+  input** starts a Draft review, like a wish list idea.
+- **Wish list** and **Study items** moved here from Outreach (old links redirect).
+- A bill's page shows when it came from a rumor or the wish list.
+
+## The activity log
+
+Outreach → Activity log and Interim → Activity log list one line for everything that happened, written automatically:
+each save in Outreach and Interim (new item, status change, follow-up, bill linked, point of contact), every Draft
+review step, and each division that answers from its email. Stored in the `activity` table (`lib/activity.js`).
+
+**Outlook, later:** a sync job (with a Microsoft Graph app registration: Calendars.Read, Mail.Read) can post calendar
+meetings and emails with legislators to `POST /api/cron/activity` with the `X-Cron-Key` header:
+`{ "events": [{ "at", "by", "src": "outlook-cal" | "outlook-mail", "what", "title", "legs": ["PETERT"], "bills": [], "ext": "<Graph id>" }] }`.
+`ext` keeps repeats out. Only who, when and the subject are logged.
+
+Outreach also has **Quick log** (one line after a call, email, text or hallway conversation; saved as a meeting with
+how it happened) and **Legislators**, every legislator with when the office last talked with them.
+
+## Interns
+
+The **Intern** section (Executive → Intern in `site/config.json`, id `ex-intern`) starts an account with: can see
+the office priority and notes, can change association positions and notes, no Fiscal Hive, Outreach, Interim, watch
+list or shared tracker. It applies when an admin picks Intern as the section while approving, inviting or adding
+someone (and on the server when no permissions are sent). The admin can change anything afterward.
+
+## Learn additions
+
+- **Meet the Legislature:** each person taps the legislators they've talked with (setting `lgmet`), with a "who
+  should I meet next" suggestion and standings.
+- **Birthday hunt:** everyone signed in adds birthdays the office doesn't have, each with a source (setting `bdays`,
+  keyed by chamber, district and last name so incoming legislators match once they're in the data). An admin can
+  load the birthdays the office already has from the Elected Officials Contacts workbook; only the House and Senate
+  sheets' district, names and birthday are read. Nothing personal is kept in this repository.
+
+## Help → About
+
+Shows what the latest updates did (edit `CHANGES` at the top of `site/changes.js` with each release) and usage
+counts from `GET /api/stats` (accounts, who used the site today, this week and this month from the `seen` table,
+office edits, Fiscal Hive, Outreach, Interim and Learn). Counts only, signed-in accounts only.
 
 ## Schedules
 

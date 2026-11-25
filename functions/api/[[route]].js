@@ -22,9 +22,10 @@
 //   POST /api/cron/send          { emails: [...] } sends through Resend and records what went out
 import { ensureFiscal, flushQueue, sendReminders, fiscalTick, contactsFor, contactSet, threshold, logFn, rand as frand, settleCard, mailReady, customUnits, unitNamer } from "../../lib/fiscal.js";
 import { saveFile, fileMeta, fileResponse, filesFor, deleteFile } from "../../lib/files.js";
-import { KINDS as OUT_KINDS, cleanItem, listOutreach, ensureOutreach, outreachTick } from "../../lib/outreach.js";
+import { KINDS as OUT_KINDS, INTERIM_KINDS, cleanItem, listOutreach, ensureOutreach, outreachTick } from "../../lib/outreach.js";
 import { keepServer, addLog, sendRequests, sendReviewReminders, ensureReview } from "../../lib/review.js";
-import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
+import { ensureUsersTable, findUser, checkPassword, hashPassword, cleanPerms, DEFAULT_PERMS, INTERN_PERMS, INTERN_SECTION, parseEnvAdmins, FIELDS } from "../../lib/auth.js";
+import { ensureActivity, logActivity, listActivity, itemActivity, SOURCES as ACT_SOURCES } from "../../lib/activity.js";
 
 const DEPTS = new Set(["criminal", "civil", "pp", "appellate", "admin"]);
 const PRIORITIES = new Set(["high", "priority", "watching", "notrelevant"]);
@@ -112,6 +113,30 @@ async function allPeople(env, db) {
   const p = await people(db);
   const admins = [...parseEnvAdmins(env).keys()];
   return { extra: p.extra, all: [...new Set([...admins, ...p.all])].sort((a, b) => a.localeCompare(b)) };
+}
+// Everyone's full name by username, so the site shows "Dan Burton", not "dburton", wherever it names a person.
+async function nameMap(env, db) {
+  const out = {};
+  try {
+    for (const u of (await db.prepare("SELECT username, name, first, last FROM users").all()).results || []) {
+      const n = (u.name || [u.first, u.last].filter(Boolean).join(" ")).trim(); if (n) out[u.username] = n;
+    }
+    for (const pr of (await db.prepare("SELECT username, first, last FROM profiles").all()).results || []) {
+      const n = [pr.first, pr.last].filter(Boolean).join(" ").trim(); if (n && !out[pr.username]) out[pr.username] = n;
+    }
+  } catch { /* older databases */ }
+  return out;
+}
+// When each person last used the site (at most one write an hour per person).
+async function touchSeen(db, user) {
+  try {
+    await db.prepare("CREATE TABLE IF NOT EXISTS seen (username TEXT PRIMARY KEY, first_at TEXT, last_at TEXT, days INTEGER DEFAULT 0, last_day TEXT)").run();
+    const now = new Date(), t = now.toISOString(), day = new Date(now.getTime() - 7 * 3600e3).toISOString().slice(0, 10);
+    const r = await db.prepare("SELECT last_at, last_day FROM seen WHERE username = ?").bind(user.name).first();
+    if (r && r.last_at && now - new Date(r.last_at) < 3600e3) return;
+    if (!r) await db.prepare("INSERT INTO seen (username, first_at, last_at, days, last_day) VALUES (?, ?, ?, 1, ?)").bind(user.name, t, t, day).run();
+    else await db.prepare("UPDATE seen SET last_at = ?, days = days + ?, last_day = ? WHERE username = ?").bind(t, r.last_day === day ? 0 : 1, day, user.name).run();
+  } catch { /* never block sign-in */ }
 }
 
 function cleanWatch(w) {
@@ -377,6 +402,12 @@ export async function onRequest(context) {
         await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('media_queue', ?, 'job', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, at=excluded.at").bind(JSON.stringify(q.slice(-40)), new Date().toISOString()).run();
         return json({ ok: true });
       }
+      if (route === "cron/activity" && method === "POST") {
+        // For the Outlook sync, once it's connected: calendar meetings and emails with legislators and drafters, one line each.
+        // { events: [{ at, by, src: "outlook-cal"|"outlook-mail", kind, what, title, legs, bills, ext }] }; ext (the Graph id) keeps repeats out.
+        const ev = (Array.isArray(body.events) ? body.events : []).slice(0, 200).filter((e) => e && e.what && e.ext && ["outlook-cal", "outlook-mail", "auto"].includes(e.src));
+        return json({ ok: true, added: await logActivity(db, ev) });
+      }
       if (route === "cron/fn-tick" && method === "POST") {
         const r = await fiscalTick(env, db, url.origin);
         let outreach = 0; try { outreach = await outreachTick(env, db, url.origin); } catch (e) { outreach = String(e.message || e); }
@@ -461,29 +492,38 @@ export async function onRequest(context) {
     }
     if (route === "me" && method === "GET") {
       if (!user) return json({ user: null });
+      await touchSeen(db, user);
       const pr = await db.prepare("SELECT v FROM prefs WHERE username = ?").bind(user.name).first();
       const fw = await db.prepare("SELECT v FROM settings WHERE k = 'wrap_on'").first();
       const tc = canTracker(user) ? await trackerCfg(db) : null;
-      return json({ flags: { wrap: !!(fw && fw.v === "1") }, tracker: tc && tc.url ? { url: tc.url, name: tc.name } : null, user: user.name, display: user.display || "", email: user.email || "", first: user.first || "", last: user.last || "", title: user.title || "", phone: user.phone || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
+      return json({ flags: { wrap: !!(fw && fw.v === "1") }, tracker: tc && tc.url ? { url: tc.url, name: tc.name } : null, user: user.name, display: user.display || "", email: user.email || "", first: user.first || "", last: user.last || "", title: user.title || "", phone: user.phone || "", role: user.role, perms: user.perms, source: user.source, section: user.section || "", names: await nameMap(env, db), people: (await allPeople(env, db)).all, prefs: pr ? obj(pr.v) : {} });
     }
     if (!user) return bad("Sign in required", 401);
 
     if (route === "state" && method === "GET") {
-      return json({ me: user.name, role: user.role, perms: user.perms, people: (await allPeople(env, db)).all, ...(await readState(db, user)) });
+      return json({ me: user.name, role: user.role, perms: user.perms, names: await nameMap(env, db), people: (await allPeople(env, db)).all, ...(await readState(db, user)) });
     }
     if (route === "outreach") {
       // Meetings, asks, testimony, amendments and interim items. Admins, and accounts with "Can use Outreach".
-      if (user.role !== "admin" && !user.perms.outreach) return bad("Ask an admin to turn on Outreach for your account.", 403);
-      if (method === "GET") return json({ items: await listOutreach(db) });
+      // Wish list, rumor bills and interim study items are the Interim tab ("Can use Interim"); the rest is Outreach.
+      const canOut = user.role === "admin" || !!user.perms.outreach, canInt = user.role === "admin" || !!user.perms.interim;
+      if (!canOut && !canInt) return bad("Ask an admin to turn on Outreach or Interim for your account.", 403);
+      const allowed = (k) => (INTERIM_KINDS.includes(k) ? canInt : k === "review" ? canOut || canInt : canOut);
+      const visible = async () => (await listOutreach(db)).filter((x) => allowed(x.kind));
+      if (method === "GET") return json({ items: await visible() });
       await ensureOutreach(db);
       const t = new Date().toISOString();
       const id0 = String(body.id || "");
+      const who0 = user.display || user.name;
       if (body.action === "delete") {
-        const cur = await db.prepare("SELECT by FROM outreach WHERE id = ?").bind(id0).first();
+        const cur = await db.prepare("SELECT by, kind, data FROM outreach WHERE id = ?").bind(id0).first();
         if (!cur) return bad("Already deleted.", 404);
+        if (!allowed(cur.kind)) return bad("Your account can't change that.", 403);
         if (user.role !== "admin" && cur.by !== user.name) return bad("Only the person who added it, or an admin, can delete it.", 403);
         await db.prepare("DELETE FROM outreach WHERE id = ?").bind(id0).run();
-        return json({ ok: true, items: await listOutreach(db) });
+        const LBL = { meet: "a meeting", ask: "an ask", amend: "an amendment request", interim: "an interim study item", wish: "a wish list idea", rumor: "a rumored bill", review: "a draft review", testimony: "testimony" };
+        await logActivity(db, [{ by: who0, kind: cur.kind, item: id0, what: `Deleted ${LBL[cur.kind] || "an item"}`, title: "" }]);
+        return json({ ok: true, items: await visible() });
       }
       if (String(body.action || "").startsWith("review-")) {
         // Draft review steps: send to divisions, remind, record an answer or a reply, mark it sent back, start the next version.
@@ -491,6 +531,7 @@ export async function onRequest(context) {
         const row = /^[0-9a-f]{16}$/.test(id0) ? await db.prepare("SELECT id, kind, data FROM outreach WHERE id = ?").bind(id0).first() : null;
         if (!row || row.kind !== "review") return bad("That draft review is gone.", 404);
         const d = obj(row.data), who = user.display || user.name, a = body.action;
+        const logN = (Array.isArray(d.log) ? d.log : []).length;
         const divs = (Array.isArray(body.divisions) ? body.divisions : []).map(String).filter((x) => DIV_RE.test(x));
         let info = {};
         if (a === "review-send") {
@@ -532,18 +573,24 @@ export async function onRequest(context) {
           info = { next: nid };
         } else return bad("Unknown step.");
         await db.prepare("UPDATE outreach SET data = ?, updated_by = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(d), user.name, new Date().toISOString(), row.id).run();
-        return json({ ok: true, info, items: await listOutreach(db) });
+        // Every step the draft's own trail recorded also goes in the office's activity log.
+        const bills0 = d.bill ? [d.bill] : [], title0 = [d.label, d.title].filter(Boolean).join(" ");
+        await logActivity(db, (d.log || []).slice(logN).map((x) => ({ by: x.by || who, kind: "review", item: row.id, title: title0, what: x.what, legs: d.legs || [], bills: bills0 })));
+        return json({ ok: true, info, items: await visible() });
       }
       if (body.action === "bulk") {
         // Importing a spreadsheet (the wish list): up to 300 new items in one go.
         if (body.kind !== "wish") return bad("Only wish list items can be imported.");
+        if (!canInt) return bad("Ask an admin to turn on Interim for your account.", 403);
         const list = (Array.isArray(body.items) ? body.items : []).slice(0, 300).map((x) => cleanItem("wish", x)).filter((d) => d.summary);
         if (!list.length) return bad("Nothing to import: every row needs a summary.");
         await db.batch(list.map((d) => db.prepare("INSERT INTO outreach (id, kind, data, by, created_at, updated_by, updated_at) VALUES (?, 'wish', ?, ?, ?, ?, ?)").bind(frand(8), JSON.stringify(d), user.name, t, user.name, t)));
-        return json({ ok: true, added: list.length, items: await listOutreach(db) });
+        await logActivity(db, [{ by: who0, kind: "wish", what: `Imported ${list.length} wish list idea${list.length === 1 ? "" : "s"} from a spreadsheet` }]);
+        return json({ ok: true, added: list.length, items: await visible() });
       }
       const kind = String(body.kind || "");
       if (!OUT_KINDS[kind]) return bad("Unknown kind.");
+      if (!allowed(kind)) return bad(INTERIM_KINDS.includes(kind) ? "Ask an admin to turn on Interim for your account." : "Ask an admin to turn on Outreach for your account.", 403);
       const d = cleanItem(kind, body.item || {});
       if (kind === "meet" && !d.legs.length && !d.others) return bad("Add who you met with.");
       if (kind === "ask" && (!d.leg || !d.ask)) return bad("Pick the legislator and write the ask.");
@@ -551,6 +598,7 @@ export async function onRequest(context) {
       if (kind === "amend" && (!d.bill || !d.change)) return bad("Pick the bill and describe the change.");
       if (kind === "interim" && (!d.com || !d.topic)) return bad("Pick the interim committee and the topic.");
       if (kind === "wish" && !d.summary) return bad("Write a short summary of the idea.");
+      if (kind === "rumor" && !d.summary) return bad("Write what the bill would do, in a line.");
       if (kind === "review" && !d.bill && !d.title) return bad("Pick the bill or bill file, or name the draft.");
       const cur = /^[0-9a-f]{16}$/.test(id0) ? await db.prepare("SELECT id, kind, data FROM outreach WHERE id = ?").bind(id0).first() : null;
       if (cur && cur.kind !== kind) return bad("That item is a different kind.");
@@ -558,9 +606,15 @@ export async function onRequest(context) {
         if (cur) keepServer(d, obj(cur.data));
         else { if (!d.received) d.received = t.slice(0, 10); addLog(d, user.display || user.name, `Draft received${d.version ? " (" + d.version + ")" : ""}${d.from ? " from " + d.from : ""}`); }
       }
+      const newId = cur ? cur.id : frand(8);
       if (cur) await db.prepare("UPDATE outreach SET data = ?, updated_by = ?, updated_at = ? WHERE id = ?").bind(JSON.stringify(d), user.name, t, cur.id).run();
-      else await db.prepare("INSERT INTO outreach (id, kind, data, by, created_at, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(frand(8), kind, JSON.stringify(d), user.name, t, user.name, t).run();
-      return json({ ok: true, items: await listOutreach(db) });
+      else await db.prepare("INSERT INTO outreach (id, kind, data, by, created_at, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(newId, kind, JSON.stringify(d), user.name, t, user.name, t).run();
+      // The activity log writes itself: one line for a new item, or for what changed (status, follow-up, bill, POC).
+      const lines = itemActivity(kind, cur ? obj(cur.data) : null, d, who0, newId);
+      if (kind === "review" && !cur && d.wish) lines.forEach((x) => { x.what = "Sent a wish list idea’s language to Draft review"; });
+      if (kind === "review" && !cur && d.rumor) lines.forEach((x) => { x.what = "Sent a rumored bill to Draft review"; });
+      await logActivity(db, lines);
+      return json({ ok: true, id: newId, items: await visible() });
     }
     if (route === "tracker") {
       if (method === "GET") {
@@ -911,6 +965,110 @@ export async function onRequest(context) {
       }
       return json({ board, me: user.name });
     }
+
+    // ---------------- Outreach and Interim: the activity log
+    if (route === "activity" && method === "GET") {
+      if (user.role !== "admin" && !user.perms.outreach && !user.perms.interim) return bad("Ask an admin to turn on Outreach or Interim for your account.", 403);
+      const tab = url.searchParams.get("tab") || "";
+      const kinds = tab === "interim" ? INTERIM_KINDS.concat(["review"]) : tab === "outreach" ? ["meet", "ask", "amend", "testimony", "review"] : null;
+      let rows = await listActivity(db, { leg: url.searchParams.get("leg") || "", bill: url.searchParams.get("bill") || "", item: url.searchParams.get("item") || "", kinds, limit: +url.searchParams.get("limit") || 200, before: url.searchParams.get("before") || "" });
+      const canOut = user.role === "admin" || !!user.perms.outreach, canInt = user.role === "admin" || !!user.perms.interim;
+      rows = rows.filter((r) => (INTERIM_KINDS.includes(r.kind) ? canInt : r.kind === "review" || !r.kind ? true : canOut));
+      return json({ activity: rows });
+    }
+    // ---------------- Learn: the birthday hunt (everyone signed in finds legislators' birthdays together)
+    // Stored by chamber, district and last name, so a birthday found for an incoming legislator attaches to them
+    // as soon as the Legislature's data lists them. { "H-3-belmont": { name, house, district, md: "04-21", year, src, by, at } }
+    if (route === "bdays") {
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'bdays'").first();
+      const all = f ? obj(f.v) : {};
+      if (method === "GET") return json({ bdays: all });
+      const K_RE = /^[HS]-\d{1,2}-[a-z'-]{2,40}$/;
+      const clean = (x) => {
+        const k = String(x.k || ""), md = String(x.md || "");
+        if (!K_RE.test(k) || !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(md)) return null;
+        const year = /^(19[2-9]\d|200\d)$/.test(String(x.year || "")) ? String(x.year) : "";
+        return { k, v: { name: String(x.name || "").trim().slice(0, 80), house: k[0], district: k.split("-")[1], md, year, src: String(x.src || "").trim().slice(0, 400) } };
+      };
+      if (body.action === "import") {
+        if (user.role !== "admin") return bad("Only an admin can import birthdays.", 403);
+        let n = 0;
+        for (const x of (Array.isArray(body.items) ? body.items : []).slice(0, 300)) {
+          const c = clean(x); if (!c) continue;
+          if (all[c.k] && !body.overwrite) continue;
+          all[c.k] = { ...c.v, src: c.v.src || "Office contacts workbook", by: user.display || user.name, at: new Date().toISOString() }; n++;
+        }
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('bdays', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(all), user.name, new Date().toISOString()).run();
+        return json({ ok: true, added: n, bdays: all });
+      }
+      if (body.action === "delete") {
+        const k = String(body.k || ""), cur = all[k];
+        if (!cur) return bad("Already removed.");
+        if (user.role !== "admin" && cur.byUser !== user.name) return bad("Only the person who added it, or an admin, can remove it.", 403);
+        delete all[k];
+      } else {
+        const c = clean(body);
+        if (!c) return bad("Pick the month and day.");
+        if (!c.v.src) return bad("Add where you found it (a link, a post, or who told you).");
+        const cur = all[c.k];
+        if (cur && cur.byUser && cur.byUser !== user.name && user.role !== "admin" && cur.md !== c.v.md) c.v.prev = { md: cur.md, src: cur.src, by: cur.by };
+        all[c.k] = { ...c.v, by: user.display || user.name, byUser: user.name, at: new Date().toISOString() };
+      }
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('bdays', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(all), user.name, new Date().toISOString()).run();
+      return json({ ok: true, bdays: all });
+    }
+    // ---------------- Learn: Meet the Legislature (each person marks the legislators they've talked with)
+    if (route === "lgmet") {
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'lgmet'").first();
+      const all = f ? obj(f.v) : {};
+      if (method === "POST") {
+        const id = String(body.id || "");
+        if (!/^[A-Z0-9]{2,12}$/.test(id)) return bad("Pick a legislator.");
+        const me = all[user.name] || { n: "", m: {} };
+        me.n = user.display || user.name;
+        if (body.met) me.m[id] = { at: new Date().toISOString(), note: String(body.note || "").trim().slice(0, 140) }; else delete me.m[id];
+        all[user.name] = me;
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('lgmet', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(all), user.name, new Date().toISOString()).run();
+      }
+      return json({ met: all, me: user.name });
+    }
+    // ---------------- Help → About: how the site is being used (counts only, no names)
+    if (route === "stats" && method === "GET") {
+      const one = async (sql, ...a) => { try { const r = await db.prepare(sql).bind(...a).first(); return r ? Object.values(r)[0] || 0 : 0; } catch { return 0; } };
+      const ago = (d) => new Date(Date.now() - d * 864e5).toISOString();
+      await ensureActivity(db);
+      const envAdmins = parseEnvAdmins(env).size;
+      const kinds = {};
+      try { for (const r of (await db.prepare("SELECT kind, COUNT(*) n FROM outreach GROUP BY kind").all()).results || []) kinds[r.kind] = r.n; } catch { /* none yet */ }
+      const daily = [];
+      try { for (const r of (await db.prepare("SELECT substr(at,1,10) d, COUNT(*) n, COUNT(DISTINCT by) p FROM log WHERE at >= ? GROUP BY d ORDER BY d").bind(ago(30)).all()).results || []) daily.push([r.d, r.n, r.p]); } catch { /* none */ }
+      const lgm = await db.prepare("SELECT v FROM settings WHERE k = 'lgmet'").first(), bd = await db.prepare("SELECT v FROM settings WHERE k = 'bdays'").first(), lb = await db.prepare("SELECT v FROM settings WHERE k = 'lgboard'").first();
+      const met = lgm ? obj(lgm.v) : {};
+      return json({
+        accounts: (await one("SELECT COUNT(*) FROM users WHERE disabled = 0")) + envAdmins,
+        pending: await one("SELECT COUNT(*) FROM account_requests WHERE status = 'pending'"),
+        active7: await one("SELECT COUNT(*) FROM seen WHERE last_at >= ?", ago(7)),
+        active30: await one("SELECT COUNT(*) FROM seen WHERE last_at >= ?", ago(30)),
+        activeToday: await one("SELECT COUNT(*) FROM seen WHERE last_at >= ?", ago(1)),
+        visitDays: await one("SELECT SUM(days) FROM seen"),
+        officeBills: await one("SELECT COUNT(*) FROM bills WHERE (position IS NOT NULL AND position <> '') OR (departments IS NOT NULL AND departments <> '[]') OR (assignees IS NOT NULL AND assignees <> '[]')"),
+        positions: await one("SELECT COUNT(*) FROM bills WHERE position IS NOT NULL AND position <> ''"),
+        notes: await one("SELECT COUNT(*) FROM bills WHERE note IS NOT NULL AND note <> ''"),
+        edits7: await one("SELECT COUNT(*) FROM log WHERE at >= ? AND key <> '*'", ago(7)),
+        edits: await one("SELECT COUNT(*) FROM log WHERE key <> '*'"),
+        editors7: await one("SELECT COUNT(DISTINCT by) FROM log WHERE at >= ?", ago(7)),
+        fiscalAsked: await one("SELECT COUNT(*) FROM fn_requests"),
+        fiscalAnswered: await one("SELECT COUNT(*) FROM fn_requests WHERE answered_at IS NOT NULL AND answered_at <> ''"),
+        outreach: kinds,
+        activity7: await one("SELECT COUNT(*) FROM activity WHERE at >= ?", ago(7)),
+        emailSubs: await one("SELECT COUNT(*) FROM email_subs WHERE confirmed = 1"),
+        gamers: lb ? Object.keys(obj(lb.v)).length : 0,
+        metPeople: Object.values(met).filter((x) => Object.keys(x.m || {}).length).length,
+        metTotal: Object.values(met).reduce((n, x) => n + Object.keys(x.m || {}).length, 0),
+        bdays: bd ? Object.keys(obj(bd.v)).length : 0,
+        daily,
+      });
+    }
     if (route === "flags" && method === "POST") {
       if (user.role !== "admin") return bad("Only an admin can do that.", 403);
       await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('wrap_on', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(body.wrap ? "1" : "0", user.name, new Date().toISOString()).run();
@@ -1004,7 +1162,7 @@ export async function onRequest(context) {
       const expires = new Date(Date.now() + 14 * 864e5).toISOString();
       await db.prepare("DELETE FROM invites WHERE lower(email) = ? AND used_at IS NULL").bind(email).run();
       await db.prepare("INSERT INTO invites (token, email, first, last, section, role, perms, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(token, email, first, last, String(body.section || "").slice(0, 60), role, JSON.stringify(cleanPerms(body.perms || DEFAULT_PERMS)), user.name, now, expires).run();
+        .bind(token, email, first, last, String(body.section || "").slice(0, 60), role, JSON.stringify(cleanPerms(body.perms || (String(body.section || "") === INTERN_SECTION ? INTERN_PERMS : DEFAULT_PERMS))), user.name, now, expires).run();
       return json({ ok: true, token, expires });
     }
     // ---------------- admins: account requests from the landing page
@@ -1024,7 +1182,7 @@ export async function onRequest(context) {
       if (body.action === "approve") {
         if (parseEnvAdmins(env).has(r.username) || await db.prepare("SELECT 1 FROM users WHERE username = ?").bind(r.username).first()) return bad("Someone already has that username.");
         const role = body.role === "admin" ? "admin" : "member";
-        const perms = JSON.stringify(cleanPerms(body.perms || DEFAULT_PERMS));
+        const perms = JSON.stringify(cleanPerms(body.perms || (String(body.section || "") === INTERN_SECTION ? INTERN_PERMS : DEFAULT_PERMS)));
         await db.batch([
           db.prepare("INSERT INTO users (username, pass, role, perms, name, email, ver, disabled, created_at, created_by, first, last, section) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)")
             .bind(r.username, r.pass, role, perms, `${r.first} ${r.last}`.trim(), r.email, now, user.name, r.first, r.last, r.section),
@@ -1061,7 +1219,7 @@ export async function onRequest(context) {
         const cur = await db.prepare("SELECT * FROM users WHERE username = ?").bind(username).first();
         if (body.action === "save") {
           const role = body.role === "admin" ? "admin" : "member";
-          const perms = JSON.stringify(cleanPerms(body.perms || DEFAULT_PERMS));
+          const perms = JSON.stringify(cleanPerms(body.perms || (String(body.section || "") === INTERN_SECTION ? INTERN_PERMS : DEFAULT_PERMS)));
           const name = String(body.name || "").slice(0, 80), email = String(body.email || "").slice(0, 120);
           const section = String(body.section || "").slice(0, 60);
           const pw = body.password ? String(body.password) : "";

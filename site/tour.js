@@ -119,6 +119,7 @@ function pageAbout(){
   return shell('',`<div class="card about-hero"><div class="ab-top">${BEE}<div><h2>About Deseret Docket</h2><p class="desc">A bill tracker for the Utah Legislature, built by Alexander Hill.</p></div></div>
     ${to?`<p>Questions or comments? Email <a href="mailto:${esc(to)}">${esc(to)}</a>.</p>`:''}
     <div class="fbbtns"><button type="button" class="dlbig" data-fb="bug">${ic('x')}<span><b>Report a bug</b><small>Something broken, wrong or confusing</small></span></button><button type="button" class="dlbig alt" data-fb="feature">${ic('spark')}<span><b>Request a feature</b><small>An idea that would make the site more useful</small></span></button></div></div>
+   ${typeof aboutExtrasHTML==='function'?aboutExtrasHTML():''}
    <div class="card"><h2>${ic('scale','h')}How the office’s information is protected</h2><div class="feats">${sec.map(x=>`<div class="feat"><span class="fi">${ic(x[0])}</span><span><b>${esc(x[1])}</b><span>${esc(x[2])}</span></span></div>`).join('')}</div></div>
    <dialog id="fbDlg"></dialog>`);
 }

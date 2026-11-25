@@ -44,6 +44,14 @@
    "codes": []
   },
   {
+   "id": "ex-intern",
+   "dept": "executive",
+   "name": "Intern",
+   "_about": "Interns. Picking this section when approving, inviting or adding an account starts it with the intern permissions: sees the office priority, can add notes and association positions, no Fiscal Hive, Outreach, Interim or shared tracker.",
+   "keywords": [],
+   "codes": []
+  },
+  {
    "id": "cr-investigations",
    "dept": "criminal",
    "name": "Investigations",

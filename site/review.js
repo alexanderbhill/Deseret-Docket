@@ -34,7 +34,7 @@ function revNext(it){const t=revTurn(it),asked=revAsked(it),n=(it.divisions||[])
 function revCard(it){const t=revTurn(it),asked=revAsked(it),b=BYKEY[it.bill];
   const status=t==='us'&&!asked?'Received; not sent to divisions yet':t==='us'?'Every division answered':t==='team'?`${revIn(it)} of ${asked} divisions answered`:t==='drafter'?`Sent back${it.sent.to?' to '+it.sent.to:''} by ${it.sent.by}`:'Closed';
   return `<div class="rev-card ${t}"><div class="rev-ctop"><div><a href="#" class="rev-title" data-rev="open" data-id="${esc(it.id)}">${b&&!b.file?`<b>${esc(billLabel(b))}</b> `:''}${esc(b?b.title:revName(it))}</a>
-     <div class="tiny muted">${[it.version,it.from?`${it.from} · ${REV_ROLE[it.fromRole]||''}`:REV_ROLE[it.fromRole],it.owner?'POC '+it.owner:''].filter(Boolean).map(esc).join(' · ')}</div></div>
+     <div class="tiny muted">${[it.version,it.from?`${it.from} · ${REV_ROLE[it.fromRole]||''}`:REV_ROLE[it.fromRole],it.owner?'POC '+pn(it.owner):''].filter(Boolean).map(esc).join(' · ')}</div></div>
      <span class="rev-age" title="How long it’s been in this state">${esc(revAge(revSince(it)))}</span></div>
     <div class="small">${esc(status)} ${revFlag(it)}</div>
     ${(it.divisions||[]).length?`<div class="rev-divs">${it.divisions.map(v=>revDiv(it,v)).join('')}</div>`:''}
@@ -87,7 +87,7 @@ function revOpen(id,focus){
       <div class="field"><label>Comments</label><textarea data-reccom rows="3">${esc(r&&r.comments||'')}</textarea></div><div class="field"><label>Suggested language</label><textarea data-reclang rows="2">${esc(r&&r.lang||'')}</textarea></div>
       <button class="btn sm primary" data-rev="saverec" data-id="${esc(it.id)}" data-div="${esc(v)}">Save answer</button> <span class="tiny muted">For answers that came by phone, reply email or in person.</span></td></tr>`};
   dlg.innerHTML=`<div class="demo-top"><div><span class="kicker">Draft review · ${esc(REV_TURN[t])}</span><h2>${esc(revName(it))}</h2>
-     <div class="small muted">${[it.version,it.from?`From ${it.from} (${REV_ROLE[it.fromRole]||''})`:REV_ROLE[it.fromRole],it.received?'received '+outDate(it.received):'',it.owner?'POC '+it.owner:''].filter(Boolean).map(esc).join(' · ')}</div>
+     <div class="small muted">${[it.version,it.from?`From ${it.from} (${REV_ROLE[it.fromRole]||''})`:REV_ROLE[it.fromRole],it.received?'received '+outDate(it.received):'',it.owner?'POC '+pn(it.owner):''].filter(Boolean).map(esc).join(' · ')}</div>
      <div class="small" style="margin-top:4px">${[it.link?`<a href="${esc(it.link)}" target="_blank" rel="noopener">${ic('external')}Open the draft</a>`:'',b?`<a href="${billHref(b)}">Open the ${b.file?'bill file':'bill'}</a>`:'',(it.legs||[]).length?'Copying '+(it.legs||[]).map(outLegName).map(esc).join(', '):'',prev?`<a href="#" data-rev="open" data-id="${esc(prev.id)}">← Earlier version</a>`:'',next?`<a href="#" data-rev="open" data-id="${esc(next.id)}">Next version →</a>`:''].filter(Boolean).join(' · ')}</div></div>
      <button type="button" class="btn sm" id="revX">Close</button></div>
    <div class="rev-banner ${t}">${esc(banner)} ${revFlag(it)}</div>
@@ -100,7 +100,7 @@ function revOpen(id,focus){
    ${it.sent&&it.sent.at?`<details class="rev-sentbox"><summary><b>What went back</b> <span class="tiny muted">${esc(revWhen(it.sent.at))} · ${esc(it.sent.by)}${it.sent.to?' → '+esc(it.sent.to):''}</span></summary><div style="white-space:pre-wrap" class="small">${esc(it.sent.summary||'')}</div></details>`:''}
    <h3 class="rev-h" style="margin-top:14px">Files</h3>${outFilesBox(it.id,{label:'Attach the office’s marked-up copy',hint:'Divisions’ redlines show up here too. Word or PDF, up to 10 MB.'})}
    <div class="grid2" style="align-items:start;margin-top:12px">
-    <div><h3 class="rev-h">Trail</h3><ol class="rev-log">${(it.log||[]).slice().reverse().map(l=>`<li><span class="tiny muted">${esc(revWhen(l.at))} · ${esc(l.by)}</span><div class="small">${esc(l.what)}</div></li>`).join('')||'<li class="small muted">Nothing yet.</li>'}</ol></div>
+    <div><h3 class="rev-h">Trail</h3><ol class="rev-log">${(it.log||[]).slice().reverse().map(l=>`<li><span class="tiny muted">${esc(revWhen(l.at))} · ${esc(pn(l.by))}</span><div class="small">${esc(l.what)}</div></li>`).join('')||'<li class="small muted">Nothing yet.</li>'}</ol></div>
     <div><h3 class="rev-h">Log a reply or call</h3><div class="field"><textarea id="revLogTx" rows="2" placeholder="e.g. Drafter replied: will take the changes on lines 40–52"></textarea></div><button class="btn sm" data-rev="log" data-id="${esc(it.id)}">Add to the trail</button>
      ${!next?`<details class="rev-more" id="revNextH" ${t==='drafter'||focus==='next'?'open':''}><summary>New version came in</summary><div class="filters"><div class="field"><label for="revNv">Version</label><input id="revNv" placeholder="e.g. 1st Sub, or Draft 3"></div><div class="field grow"><label for="revNl">Link</label><input id="revNl" placeholder="https://…"></div></div><button class="btn sm" data-rev="next" data-id="${esc(it.id)}">Start the next round</button><p class="tiny muted">Closes this round and starts a new one with the same people and divisions.</p></details>`:''}</div></div>`;
   dlg.querySelector('#revX').onclick=()=>dlg.close();

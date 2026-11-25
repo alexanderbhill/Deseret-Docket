@@ -65,12 +65,16 @@ const legById=id=>(LEGS||[]).find(l=>l.id===id);
 
 /* ===================== ACCOUNT & OFFICE DATA ===================== */
 // ME: null for guests. Guests see public bill information only, and nothing they change is saved.
-let ME=null; const OFFICE={}; let WATCHMETA=null, PEOPLE=[], officeSig='';
+let ME=null; const OFFICE={}; let WATCHMETA=null, PEOPLE=[], NAMES={}, officeSig='';
+// A person's full name from their username ("dburton" → "Dan Burton"). Anything that isn't a username shows as written.
+const pn=u=>{if(!u)return '';const k=String(u).toLowerCase();return NAMES[k]||(ME&&k===ME.user&&ME.display)||String(u)};
+const byPeople=(a,b)=>pn(a).localeCompare(pn(b));
 const isAdmin=()=>ME&&ME.role==='admin';
 // Session wrap-up shows from the last week of a session (and for a few months after), or when an admin turns it on.
 function wrapVisible(){if(ME&&ME.flags&&ME.flags.wrap)return true;const now=Date.now();return Object.values((CONFIG&&CONFIG.sessions)||{}).some(x=>{const d=pd(x.sineDie);return d&&now>=d-7*864e5&&now<=d+120*864e5})}
 const canFiscal=()=>!!ME&&(isAdmin()||!!(ME.perms&&ME.perms.fiscal));
 const canOutreach=()=>!!ME&&(isAdmin()||!!(ME.perms&&ME.perms.outreach));
+const canInterim=()=>!!ME&&(isAdmin()||!!(ME.perms&&(ME.perms.interim===undefined?ME.perms.outreach:ME.perms.interim)));
 let ADMIN_PENDING=0;
 const P=()=>ME?ME.perms:{edit:false,fields:[],seePriority:false,seeNotes:false,watch:false,scope:'all'};
 const canSee=f=>!!ME&&(f==='priority'?isAdmin()||P().seePriority:f==='note'?isAdmin()||P().seeNotes:true);
@@ -102,7 +106,7 @@ const onOffice=b=>{const o=off(b);return !!o&&!!((o.departments||[]).length||(o.
 const mineAssigned=b=>!!ME&&assignOf(b).some(a=>[ME.user,(ME.display||'').toLowerCase()].includes(String(a).toLowerCase()));
 async function pullOffice(soft){
   if(!ME) return;
-  try{const st=await api('state');ME.people=st.people;PEOPLE=st.people||[];
+  try{const st=await api('state');ME.people=st.people;PEOPLE=st.people||[];if(st.names)NAMES=st.names;
     const sig=JSON.stringify([st.bills,st.watch]);
     if(sig!==officeSig){officeSig=sig;for(const k of Object.keys(OFFICE))delete OFFICE[k];Object.assign(OFFICE,st.bills||{});
       if(st.watch){W.terms=st.watch.terms;W.codes=st.watch.codes;W.opts=st.watch.opts;WATCHMETA={by:st.watch.by,at:st.watch.at}}
@@ -210,7 +214,7 @@ const visibleCols=()=>COLS.order.filter(c=>colAllowed(c)&&!COLS.hidden.includes(
 function msOptions(field,b){
   if(field==='departments') return billDepts().map(d=>({v:d.id,l:d.name,c:d.color}));
   if(field==='designations') return CONFIG.designations.map(d=>({v:d.id,l:d.name,t:d.full}));
-  if(field==='assignees') return PEOPLE.map(p=>({v:p,l:p}));
+  if(field==='assignees') return PEOPLE.slice().sort(byPeople).map(p=>({v:p,l:pn(p)}));
   if(field==='divisions'){
     const depts=b?deptsOf(b):FLT.dept;
     const list=depts&&depts.length?billDivs().filter(d=>depts.includes(d.dept)):(b?[]:billDivs());
@@ -219,7 +223,7 @@ function msOptions(field,b){
   if(field==='priority') return CONFIG.priorities.map(p=>({v:p.id,l:p.name,c:p.color}));
   return [];
 }
-function msLabel(field,v){if(field==='departments')return deptName(v);if(field==='divisions')return divName(v);if(field==='priority')return priName(v);return v}
+function msLabel(field,v){if(field==='departments')return deptName(v);if(field==='divisions')return divName(v);if(field==='priority')return priName(v);if(field==='assignees')return pn(v);return v}
 function msColor(field,v){if(field==='departments')return deptColor(v);if(field==='divisions'){const d=divById(v);return d?deptColor(d.dept):''}if(field==='priority')return priColor(v);return ''}
 function msHTML(field,key,selected,editable,ph){
   const chips=selected.length?selected.map(v=>{const c=msColor(field,v);return `<span class="chip">${c?`<span class="dot" style="--c:${c}"></span>`:''}${esc(msLabel(field,v))}</span>`}).join(''):`<span class="ph">${esc(editable?(ph||'Choose…'):'—')}</span>`;
@@ -299,9 +303,10 @@ function shell(active,inner,compact){
   else if(changed) sum+=` <b>${changed}</b> changed today.`;
   const sched=`Live data from the Utah Legislature, rechecked weekdays at about 6:40 a.m., 12:40 p.m., 5:25 p.m. and 7:40 p.m.${nu?` Next check: ${ymd(nu)===todayStr?'today':WD[nu.getDay()]} at ${fmtTime(nu)}.`:''}`;
   const fine=ME?'':`You’re browsing as a guest: every bill, hearing and budget figure here is public. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see the office’s departments, designations and notes. Nothing you change as a guest is saved.`;
-  const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];const TABICON={updates:'bell',bills:'list',budget:'chart',fiscal:'hive',outreach:'users',postsession:'wrap',learn:'book',admin:'gear'};
+  const tabs=[['updates','Updates'],['bills','Bills'],['budget','Budget']];const TABICON={updates:'bell',bills:'list',budget:'chart',fiscal:'hive',outreach:'users',interim:'calendar',postsession:'wrap',learn:'book',admin:'gear'};
   if(canFiscal()) tabs.push(['fiscal','Fiscal Hive']);
   if(canOutreach()){const n=typeof outDueCount==='function'?outDueCount():0;tabs.push(['outreach',`Outreach${n?` <span class="badge" title="Follow-ups due">${n}</span>`:''}`])}
+  if(canInterim()){const n=typeof intDueCount==='function'?intDueCount():0;tabs.push(['interim',`Interim${n?` <span class="badge" title="Needs you">${n}</span>`:''}`])}
   if(ME&&wrapVisible()) tabs.push(['postsession','Session wrap-up']);
   tabs.push(['learn','Learn']);
   if(isAdmin()) tabs.push(['admin',`Admin${ADMIN_PENDING?` <span class="badge">${ADMIN_PENDING}</span>`:''}`]);
@@ -482,7 +487,7 @@ const SORTS={
   fiscal:(a,b)=>costKey(b)-costKey(a),
   hearing:(a,b)=>((nextHearing(a)||{}).d||9e15)-((nextHearing(b)||{}).d||9e15),
   designations:(a,b)=>desigOf(b).length-desigOf(a).length||desigOf(a).join().localeCompare(desigOf(b).join()),
-  assignees:(a,b)=>(assignOf(a)[0]||'~').localeCompare(assignOf(b)[0]||'~'),
+  assignees:(a,b)=>(pn(assignOf(a)[0])||'~').localeCompare(pn(assignOf(b)[0])||'~'),
   notes:(a,b)=>(noteOf(a)?0:1)-(noteOf(b)?0:1),
   divisions:(a,b)=>(divsOf(a).map(divName)[0]||'~').localeCompare(divsOf(b).map(divName)[0]||'~'),
 };
@@ -521,14 +526,22 @@ function filteredBills(){
   if(FLT.pri.length&&canSee('priority')) rows=rows.filter(b=>FLT.pri.includes(priOf(b)||'none'));
   if(FLT.sug) rows=rows.filter(b=>divWork(b,FLT.sug));
   if(FLT.sponsor){const id=FLT.sponsor;rows=rows.filter(b=>b.spId===id||b.flId===id||(legById(id)&&legMatchName(legById(id),b.sponsor)))}
-  if(q) rows=rows.filter(b=>[agActOf(b),posName(posOf(b)),b.num,b.title,b.sponsor,b.floor,b.own,b.act,b.description,noteOf(b),deptsOf(b).map(deptName).join(' '),divsOf(b).map(divName).join(' '),desigOf(b).join(' '),assignOf(b).join(' ')].join(' ').toLowerCase().includes(q));
+  if(q) rows=rows.filter(b=>[agActOf(b),posName(posOf(b)),b.num,b.title,b.sponsor,b.floor,b.own,b.act,b.description,noteOf(b),deptsOf(b).map(deptName).join(' '),divsOf(b).map(divName).join(' '),desigOf(b).join(' '),assignOf(b).join(' '),assignOf(b).map(pn).join(' ')].join(' ').toLowerCase().includes(q));
   const s=SORTS[FLT.sort.col]||SORTS.num; rows.sort((a,b)=>FLT.sort.dir*s(a,b)||SORTS.num(a,b));
   return rows;
 }
+// Sorting by a sponsor column groups the table under each legislator's name.
+function billGroupOf(){const c=FLT.sort.col;if(c==='sponsor')return b=>b.sponsor||'';if(c==='house')return b=>b.spH==='H'?b.sponsor:b.flH==='H'?b.floor:'';if(c==='senate')return b=>b.spH==='S'?b.sponsor:b.flH==='S'?b.floor:'';return null}
+const BILL_SORTS=[['num','Bill number'],['sponsor','Sponsor (grouped by legislator)'],['house','House sponsor (grouped)'],['senate','Senate sponsor (grouped)'],['action','Latest action'],['hearing','Next hearing'],['fiscal','Fiscal impact'],['title','Title']];
+function legislatorFilter(){const S=UI.session,n={};for(const b of allRows(S))for(const id of new Set([b.spId,b.flId]))if(id)n[id]=(n[id]||0)+1;
+  const L=(LEGS||[]).filter(l=>l.id).slice().sort((a,b)=>a.house.localeCompare(b.house)||(a.full||a.name).localeCompare(b.full||b.name));
+  return `<div class="field"><label for="fLeg">${ic('user')}Legislator</label><select id="fLeg"><option value="">Anyone</option>${['H','S'].map(h=>`<optgroup label="${h==='H'?'House':'Senate'}">${L.filter(l=>l.house===h).map(l=>`<option value="${esc(l.id)}" ${FLT.sponsor===l.id?'selected':''}>${esc(l.full||l.name)}${n[l.id]?` (${n[l.id]})`:''}</option>`).join('')}</optgroup>`).join('')}</select></div>
+   <div class="field"><label for="fSort">Sort by</label><select id="fSort">${BILL_SORTS.map(([k,l])=>`<option value="${k}" ${FLT.sort.col===k?'selected':''}>${l}</option>`).join('')}${BILL_SORTS.some(x=>x[0]===FLT.sort.col)?'':`<option selected value="${esc(FLT.sort.col)}">${esc((COLDEFS[FLT.sort.col]||{}).label||FLT.sort.col)}</option>`}</select></div>`}
 function legMatchName(l,sp){if(!sp)return false;const last=(l.full||'').split(',')[0].trim();const house=l.house==='H'?'Rep.':'Sen.';return sp.startsWith(house)&&sp.includes(last+',')}
 function billTable(rows,cols){
   return `<div class="tablewrap"><table class="bills"><thead><tr>${cols.map(c=>`<th class="c-${c} ${FLT.sort.col===c?'sorted':''}" draggable="true" data-col="${c}" aria-sort="${FLT.sort.col===c?(FLT.sort.dir>0?'ascending':'descending'):'none'}"><span class="h"><button class="sort" data-sort="${c}" title="Sort. Drag the heading to move the column.">${esc(COLDEFS[c].label)}${FLT.sort.col===c?(FLT.sort.dir>0?' ▲':' ▼'):''}</button></span></th>`).join('')}</tr></thead>
-   <tbody>${rows.map(b=>`<tr>${cols.map(c=>`<td class="c-${c}" data-l="${esc(COLDEFS[c].label)}">${CELL[c](b)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+   <tbody>${(()=>{const g=billGroupOf();let last=null;return rows.map(b=>{let pre='';if(g){const k=g(b);if(k!==last){last=k;const n=rows.filter(x=>g(x)===k).length;pre=`<tr class="grp-row"><td colspan="${cols.length}"><span>${esc(k||'No sponsor listed')} <span class="tiny">${plural(n,'bill')} on this page</span></span></td></tr>`}}
+     return pre+`<tr>${cols.map(c=>`<td class="c-${c}" data-l="${esc(COLDEFS[c].label)}">${CELL[c](b)}</td>`).join('')}</tr>`}).join('')})()}</tbody></table></div>`;
 }
 function colMenu(){
   const all=COLS.order.filter(colAllowed);
@@ -550,7 +563,8 @@ function pageBills(){
     <div class="field"><span class="flabel">${ic('users')}Association</span>${msHTML('designations','flt:desig',FLT.desig,true,'Any')}</div>`:''}
     ${canSee('priority')?`<div class="field"><label for="fPri">${ic('priority')}Priority</label><select id="fPri"><option value="">Any</option>${CONFIG.priorities.map(p=>`<option value="${p.id}" ${FLT.pri[0]===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="none" ${FLT.pri[0]==='none'?'selected':''}>No priority</option></select></div>`:''}
     <div class="field grow"><label for="fFind">${ic('search')}Find</label><input type="search" id="fFind" value="${esc(FLT.find)}" placeholder="HB 101, title, sponsor, committee, note…"></div>
-    ${colMenu()}
+    ${legislatorFilter()}
+    ${colMenu()}${typeof freezeMenu==='function'?freezeMenu():''}
     ${isAdmin()?`<button type="button" class="btn" id="csvBtn" title="Download the bills shown as “${esc(TRACKER_FILE)}.csv”">Download .csv</button>`:''}
     ${ME?`<button type="button" class="btn ${WATCHOPEN?'primary':''}" id="watchToggle" aria-expanded="${WATCHOPEN}">Watch list${W.terms.length+W.codes.length?` (${W.terms.filter(x=>x.on).length+W.codes.filter(x=>x.on).length})`:''}</button>`:''}
    </form>
@@ -572,7 +586,7 @@ function csvFor(rows){
   const lines=[head.map(q).join(',')];
   for(const b of rows){const h=nextHearing(b);
     lines.push([...(office?[posName(posOf(b))]:[]),b.file?fileStatus(b):shortNum(b.num),(outcome(b)||{}).l||'',b.title,b.description||'',...(office?[deptsOf(b).map(deptName).join('; '),divsOf(b).map(divName).join('; ')]:[]),committeeOf(b),spon(b,'H'),spon(b,'S'),`${b.act||''}${b.own?' — '+b.own:''}${b.date?' ('+fmtMDY(b.date)+')':''}`,fis(b),
-      ...(office?CONFIG.designations.map(d=>{const x=cposOf(b)[d.id];return x?(x.pos==='tagged'?'X':posName(x.pos)):''}):[]),...(office&&canSee('priority')?[priName(priOf(b))]:[]),...(office?[assignOf(b).join('; ')]:[]),...(office&&canSee('note')?[noteOf(b)]:[]),agActOf(b)||(b.agd.length?'From the bill text: '+b.agd.map(x=>x[1]).join(' | '):''),
+      ...(office?CONFIG.designations.map(d=>{const x=cposOf(b)[d.id];return x?(x.pos==='tagged'?'X':posName(x.pos)):''}):[]),...(office&&canSee('priority')?[priName(priOf(b))]:[]),...(office?[assignOf(b).map(pn).join('; ')]:[]),...(office&&canSee('note')?[noteOf(b)]:[]),agActOf(b)||(b.agd.length?'From the bill text: '+b.agd.map(x=>x[1]).join(' | '):''),
       h?`${fmtMDY(h.d)} ${fmtTime(h.d)} ${h.committee}`:'',location.origin+'/'+billHref(b)].map(q).join(','))}
   return '﻿'+lines.join('\r\n');
 }
@@ -642,9 +656,10 @@ function pageUpdates(){
     ${items.length?updateRows(items.slice(0,300)):''}${items.length>300?`<p class="small muted">Showing the newest 300.</p>`:''}</div>
    ${hearingsCard()}
    ${typeof updatesExtras==='function'?updatesExtras():''}
-   ${newFiles.length?`<div class="card"><h2>New bill files</h2><p class="desc">Bill requests opened in the last 7 days. Until a bill is numbered, the Legislature publishes only its title and sponsor.</p>
+   ${(FILES[S]||[]).length?`<div class="card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1;min-width:240px"><h2>New bill files</h2><p class="desc">${newFiles.length?'Bill requests opened in the last 7 days. ':'No new bill requests in the last 7 days. '}Until a bill is numbered, the Legislature publishes only its title and sponsor.</p></div>
+    <a class="btn primary" href="#bills" data-goshow="files" data-goclear="1">${ic('table')}All ${(FILES[S]||[]).length.toLocaleString()} unnumbered bill files on the Bills tab</a></div>
     <div class="rows">${newFiles.slice(0,60).map(b=>`<div class="row"><a class="k" href="${billHref(b)}">${ic('file')}Bill file</a><div class="what">${esc(b.title)}<span class="sub">${esc(b.sponsor)} · ${esc(b.act)}</span></div><div class="r">${b.sug.slice(0,1).map(x=>`<span class="pill muted">${esc(divName(x))}</span>`).join('')}<span class="small muted">${fmtMD(pd(b.seen))}</span></div></div>`).join('')}</div>
-    ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files">See all ${newFiles.length}</a></p>`:''}</div>`:''}
+    ${newFiles.length>60?`<p class="small"><a href="#bills" data-goshow="files" data-goclear="1">See all ${newFiles.length}</a></p>`:''}</div>`:''}
    <div class="grid2" style="align-items:start">
     <div>${ME?`<div class="card"><h2>Get updates by email</h2><p class="desc">Turn on the emails you want and pick when they arrive. <button type="button" class="linkbtn demo-btn" data-demo="alerts">▶ See what the emails look like</button></p>${emailForm(false)}</div>`:`<div class="card"><h2>Get updates by email</h2><p class="desc">Email alerts are for signed-in accounts. <a href="/login">Sign in</a> or ask for an account to choose yours. <button type="button" class="linkbtn demo-btn" data-demo="alerts">▶ See what the emails look like</button></p></div>`}
      ${typeof mavHTML==='function'?`<div class="card">${mavHTML()}</div>`:''}</div>
@@ -678,7 +693,7 @@ function hearingsCard(){
   let last=null;
   const body=hs.map(h=>{const d=ymd(h.d);const head=d!==last?`<h3 style="margin:22px 0 4px">${WD[h.d.getDay()]}, ${fmtLong(h.d)}</h3>`:'';last=d;
     return head+`<div class="hearing"><div class="when"><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span></div><div><h4>${comInfo(h.committee)}</h4>
-     ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(a)}</span>`).join('')}${b.agm?'<span class="pill solid">AG mentioned</span>':''}</div>`).join('')}
+     ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(pn(a))}</span>`).join('')}${b.agm?'<span class="pill solid">AG mentioned</span>':''}</div>`).join('')}
      <div class="hlinks">${h.url?`<a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a>`:''}${calBtn(h,S)}</div></div></div>`}).join('');
   return `<div class="card" id="hearingsCard"><div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h2>Hearings</h2>
    <p class="desc">Committee agendas with these bills, soonest first. Meetings within three days are marked on the Bills tab.</p></div>${seg}</div>
@@ -891,7 +906,7 @@ function pageAccount(){
   const p=P();
   return shell('',`<div class="grid2"><div class="card"><h2>Your account</h2>
    <dl class="kv"><dt>Username</dt><dd>${esc(ME.user)}</dd><dt>Name</dt><dd>${esc(ME.display||'—')}</dd><dt>Role</dt><dd>${isAdmin()?'Admin: sees and changes everything, manages accounts':'Member'}</dd>
-   ${isAdmin()?'':`<dt>Can change</dt><dd>${p.edit&&p.fields.length?esc(p.fields.map(f=>({position:'position',agAction:'AG office action',departments:'departments',divisions:'divisions',designations:'designations',priority:'office priority',note:'notes',assignees:'assignments'}[f])).join(', ')):'Nothing (view only)'}</dd>
+   ${isAdmin()?'':`<dt>Can change</dt><dd>${p.edit&&p.fields.length?esc(p.fields.map(f=>({position:'position',agAction:'AG office action',departments:'departments',divisions:'divisions',designations:'association positions',priority:'office priority',note:'notes',assignees:'assignments'}[f])).join(', ')):'Nothing (view only)'}</dd>
    <dt>Office priority</dt><dd>${p.seePriority?'Visible':'Hidden'}</dd><dt>Bills</dt><dd>${p.scope==='all'?'All bills':p.scope==='departments'?'Bills in '+esc(p.departments.map(deptName).join(', ')):p.scope==='assigned'?'Bills assigned to you':`${p.bills.length} chosen bills`}</dd>`}</dl>
    <p style="margin-top:18px"><a class="btn" href="/logout">Sign out</a></p></div>
    <div class="card" id="profileCard"><h2>Your profile</h2><p class="desc">${ME.display?'':'<b>Add your name.</b> '}Emails you send from Deseret Docket (draft reviews, language requests, reminders) go out under this name and title, and replies come straight to this email address. Testimony drafts use them too.</p>
@@ -910,7 +925,12 @@ function pageAccount(){
 
 /* ===================== ADMIN ===================== */
 let ADMIN=null;
-const FIELD_LABEL={position:'Position',agAction:'AG office action',departments:'Departments',divisions:'Divisions',designations:'Designations',priority:'Office priority',note:'Notes',assignees:'Assigned to'};
+const FIELD_LABEL={position:'Position',agAction:'AG office action',departments:'Departments',divisions:'Divisions',designations:'Association positions',priority:'Office priority',note:'Notes',assignees:'Assigned to'};
+// Executive → Intern: the starting permissions for an intern. They see the office priority and notes, change only
+// association positions and notes, and don't get the Fiscal Hive, Outreach, Interim or the shared tracker. An admin can change any of it.
+const INTERN_SECTION='ex-intern';
+const INTERN_PERMS={edit:true,fields:['designations','note'],seePriority:true,seeNotes:true,watch:false,fiscal:false,tracker:false,outreach:false,interim:false,scope:'all',departments:[],bills:[]};
+const isInternSection=id=>id===INTERN_SECTION;
 function pageAdmin(){
   if(!isAdmin()) return shell('',`<div class="card"><h2>Admins only</h2></div>`);
   if(!ADMIN){Promise.all([api('users'),api('requests').catch(()=>({requests:[]})),api('invites').catch(()=>({invites:[]}))]).then(([j,r,v])=>{ADMIN=j;ADMIN.requests=r.requests||[];ADMIN.invites=v.invites||[];route(true)}).catch(e=>{ADMIN={error:e.message};route(true)});return shell('admin',`<div class="card"><p>Loading accounts…</p></div>`)}
@@ -931,15 +951,16 @@ function pageAdmin(){
    </tbody></table></div></div>
    ${typeof adminTrackerHTML==='function'?adminTrackerHTML():''}
    ${typeof adminExtraHTML==='function'?adminExtraHTML():''}
-   <div class="card"><h2>People for “Assigned to”</h2><p class="desc">Everyone with an account is already in the list (${esc(ADMIN.people.all.filter(n=>!ADMIN.people.extra.includes(n)).join(', ')||'nobody yet')}). Add anyone else here, one name per line.</p>
+   <div class="card"><h2>People for “Assigned to”</h2><p class="desc">Everyone with an account is already in the list, by name (${esc(ADMIN.people.all.filter(n=>!ADMIN.people.extra.includes(n)).map(pn).join(', ')||'nobody yet')}). Add anyone else here, one name per line.</p>
     <textarea id="peopleIn" aria-label="Extra people, one per line">${esc(ADMIN.people.extra.join('\n'))}</textarea><p><button class="btn primary" id="savePeople">Save names</button></p></div>
    <dialog id="userDlg"></dialog>`);
 }
 const sectionName=id=>id==='other'?'Other / not listed':divName(id)||id||'';
 function sectionSelect(cur){return `<select id="uSection" style="width:100%"><option value="">—</option>${CONFIG.departments.map(d=>`<optgroup label="${esc(d.name)}">${CONFIG.divisions.filter(x=>x.dept===d.id).map(x=>`<option value="${x.id}" ${cur===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}<option value="other" ${cur==='other'?'selected':''}>Other / not listed</option></select>`}
 function userForm(u,req,inv){
-  const p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,tracker:true,outreach:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,scope:'all',departments:[],bills:[]};
-  if(req&&req.section){const dv=divById(req.section);if(dv&&billDepts().some(d=>d.id===dv.dept)){p.scope='departments';p.departments=[dv.dept]}}
+  let p=u?(u.role==='admin'?{edit:true,fields:Object.keys(FIELD_LABEL),seePriority:true,seeNotes:true,watch:true,fiscal:true,tracker:true,outreach:true,interim:true,scope:'all',departments:[],bills:[]}:u.perms):{edit:true,fields:['position','departments','divisions','designations','note','assignees','agAction'],seePriority:false,seeNotes:true,watch:true,fiscal:false,interim:false,scope:'all',departments:[],bills:[]};
+  if(!u&&req&&isInternSection(req.section))p={...INTERN_PERMS};
+  if(req&&req.section&&!isInternSection(req.section)){const dv=divById(req.section);if(dv&&billDepts().some(d=>d.id===dv.dept)){p.scope='departments';p.departments=[dv.dept]}}
   const val=(k)=>esc(u?u[k]||'':req?(k==='username'?req.username:k==='name'?`${req.first} ${req.last}`:k==='email'?req.email:''):'');
   if(inv)return `<form id="userForm" method="dialog"><h2>${ic('mail')}Invite someone</h2><p class="small muted">Choose what they can see and change now. Next you’ll get an email draft with their sign-up link; they choose their own username and password.</p>
    <div class="grid2" style="gap:12px;margin:12px 0"><div class="field"><label for="iFirst">First name</label><input id="iFirst" required maxlength="40" style="width:100%"></div><div class="field"><label for="iLast">Last name</label><input id="iLast" maxlength="40" style="width:100%"></div>
@@ -957,14 +978,15 @@ function userForm(u,req,inv){
 }
 function permsHTML(p,u){
   return `<span class="flabel">Role</span><label class="check"><input type="radio" name="uRole" value="member" ${!u||u.role!=='admin'?'checked':''}><span>Member, with the permissions below</span></label><label class="check"><input type="radio" name="uRole" value="admin" ${u&&u.role==='admin'?'checked':''}><span>Admin: sees and changes everything, manages accounts</span></label>
-   <div id="permBox"><hr style="margin:14px 0"><span class="flabel">Can change</span>
+   <div id="permBox"><hr style="margin:14px 0"><p class="small rev-banner" id="internNote" ${isInternSection(u?u.section:'')?'':'hidden'} style="margin:0 0 10px">${ic('user')} <b>Intern.</b> Interns start out able to see the office priority, add notes and set association positions, and nothing else: no Fiscal Hive, Outreach, Interim or shared tracker. Change anything below if this intern needs more.</p><span class="flabel">Can change</span>
     <label class="check"><input type="checkbox" id="pEdit" ${p.edit?'checked':''}><span>Can edit office information</span></label>
     <div class="daypick" style="margin:4px 0 10px 26px">${Object.entries(FIELD_LABEL).map(([f,l])=>`<label><input type="checkbox" data-pf="${f}" ${p.fields.includes(f)?'checked':''}>${l}</label>`).join('')}</div>
     <label class="check"><input type="checkbox" id="pPri" ${p.seePriority?'checked':''}><span>Can see the office priority</span></label>
     <label class="check"><input type="checkbox" id="pNotes" ${p.seeNotes?'checked':''}><span>Can see notes</span></label>
     <label class="check"><input type="checkbox" id="pWatch" ${p.watch?'checked':''}><span>Can change the watch list</span></label>
     <label class="check"><input type="checkbox" id="pFiscal" ${p.fiscal?'checked':''}><span>Can open the Fiscal Hive (fiscal note dashboard)</span></label>
-    <label class="check"><input type="checkbox" id="pOutreach" ${p.outreach?'checked':''}><span>Can use Outreach (meetings with legislators, asks, testimony, amendments, interim)</span></label>
+    <label class="check"><input type="checkbox" id="pOutreach" ${p.outreach?'checked':''}><span>Can use Outreach (meetings with legislators, asks, testimony, amendments, draft review)</span></label>
+    <label class="check"><input type="checkbox" id="pInterim" ${(p.interim===undefined?p.outreach:p.interim)?'checked':''}><span>Can use Interim (wish list, rumor bills, interim study items)</span></label>
     <label class="check"><input type="checkbox" id="pTracker" ${p.tracker?'checked':''}><span>Can see the shared bill tracker workbook (link and preview on the Updates page)</span></label>
     <span class="flabel" style="margin-top:10px">Bills they can see the office’s information for</span>
     <label class="check"><input type="radio" name="pScope" value="all" ${p.scope==='all'?'checked':''}><span>All bills</span></label>
@@ -978,17 +1000,20 @@ function openUserDlg(u,req,inv){
   const dlg=$('userDlg');dlg.innerHTML=userForm(u,req,inv);dlg.showModal();
   const sync=()=>{$('permBox').style.display=document.querySelector('input[name=uRole]:checked').value==='admin'?'none':''};sync();
   dlg.querySelectorAll('input[name=uRole]').forEach(r=>r.onchange=sync);
+  // Choosing Executive → Intern as the section sets the intern permissions (the admin can still change them).
+  const applyPerms=q=>{$('pEdit').checked=q.edit;dlg.querySelectorAll('[data-pf]').forEach(x=>x.checked=q.fields.includes(x.dataset.pf));$('pPri').checked=q.seePriority;$('pNotes').checked=q.seeNotes;$('pWatch').checked=q.watch;$('pFiscal').checked=q.fiscal;$('pOutreach').checked=q.outreach;$('pInterim').checked=q.interim;$('pTracker').checked=q.tracker;const r=dlg.querySelector(`input[name=pScope][value=${q.scope}]`);if(r)r.checked=true};
+  if($('uSection'))$('uSection').addEventListener('change',e=>{const yes=isInternSection(e.target.value);$('internNote').hidden=!yes;if(yes){applyPerms(INTERN_PERMS);const m=dlg.querySelector('input[name=uRole][value=member]');if(m){m.checked=true;sync()}toast('Intern permissions applied. Change anything you need.')}});
   if($('genPw'))$('genPw').onclick=()=>{const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';$('uPw').value=[...crypto.getRandomValues(new Uint8Array(14))].map(x=>a[x%a.length]).join('')};
   $('userCancel').onclick=()=>dlg.close();
   $('userForm').onsubmit=async e=>{e.preventDefault();
     const toKey=s=>{const m=s.trim().toUpperCase().replace(/\./g,'').match(/^([A-Z]{2,4})\s*0*(\d{1,4})$/);return m?`${UI.session}/${m[1]}${m[2].padStart(4,'0')}`:null};
     const keepOther=u&&u.perms?u.perms.bills.filter(k=>!k.startsWith(UI.session+'/')):[];
-    const perms={edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,outreach:$('pOutreach').checked,
+    const perms={edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,outreach:$('pOutreach').checked,interim:$('pInterim').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]};
     if(inv){const b={first:$('iFirst').value.trim(),last:$('iLast').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,role:document.querySelector('input[name=uRole]:checked').value,perms};
       try{const j=await api('invites',b);dlg.close();ADMIN=null;route(true);setTimeout(()=>inviteDraft({...b,token:j.token,expires_at:j.expires}),50)}catch(err){toast(err.message)}return}
     const body={action:req?'approve':'save',id:req?req.id:undefined,username:$('uName').value.trim().toLowerCase(),name:$('uDisp').value.trim(),email:$('uEmail').value.trim(),section:$('uSection').value,password:$('uPw')?$('uPw').value:'',role:document.querySelector('input[name=uRole]:checked').value,
-      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,outreach:$('pOutreach').checked,
+      perms:{edit:$('pEdit').checked,fields:[...dlg.querySelectorAll('[data-pf]')].filter(x=>x.checked).map(x=>x.dataset.pf),seePriority:$('pPri').checked,seeNotes:$('pNotes').checked,watch:$('pWatch').checked,fiscal:$('pFiscal').checked,tracker:$('pTracker').checked,outreach:$('pOutreach').checked,interim:$('pInterim').checked,
         scope:document.querySelector('input[name=pScope]:checked').value,departments:[...dlg.querySelectorAll('[data-pd]')].filter(x=>x.checked).map(x=>x.dataset.pd),bills:[...keepOther,...$('pBills').value.split(/[,;\n]+/).map(toKey).filter(Boolean)]}};
     try{await api(req?'requests':'users',body);dlg.close();toast(req?`Approved. ${body.name} can sign in as ${body.username}.`:body.password?`Saved. Give ${body.username} their password: ${body.password}`:'Saved');ADMIN=null;route(true)}catch(err){toast(err.message)}};
 }
@@ -1068,14 +1093,14 @@ function agSection(b){
   const t=agActOf(b), auto=b.agd||[], meta=(off(b)||{}).meta||{};
   const fnAG=b.fn&&(b.fn.ag||[]).some(a=>/attorney general/i.test(a));
   return `<section><h2>What the AG office will have to do</h2>
-   ${ME?(canEdit('agAction')?`<textarea id="agActIn" placeholder="What the office will need to do if this passes: new duties, cases, rules, reports, staffing…">${esc(t)}</textarea><div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="btn primary" id="saveAg">Save</button>${meta.agAction&&meta.agAction.by?`<span class="tiny muted">Last edited by ${esc(meta.agAction.by===ME.user?'you':meta.agAction.by)}</span>`:''}</div>`:(t?`<p class="serif">${esc(t)}</p>`:'<p class="small muted">The office hasn’t written this up yet.</p>')):''}
+   ${ME?(canEdit('agAction')?`<textarea id="agActIn" placeholder="What the office will need to do if this passes: new duties, cases, rules, reports, staffing…">${esc(t)}</textarea><div style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="btn primary" id="saveAg">Save</button>${meta.agAction&&meta.agAction.by?`<span class="tiny muted">Last edited by ${esc(meta.agAction.by===ME.user?'you':pn(meta.agAction.by))}</span>`:''}</div>`:(t?`<p class="serif">${esc(t)}</p>`:'<p class="small muted">The office hasn’t written this up yet.</p>')):''}
    ${auto.length?`<p class="small muted" style="margin:14px 0 6px">Where the bill text gives the Attorney General a role (current version, struck language left out):</p><ul class="small" style="padding-left:18px;margin:0">${auto.map(x=>`<li style="margin-bottom:6px"><b>${esc(x[0])}:</b> ${markAG(x[1])}</li>`).join('')}</ul>`:(b.file?'':'<p class="small muted" style="margin-top:10px">The bill text doesn’t mention the Attorney General.</p>')}
    ${fnAG?`<p class="small" style="margin-top:8px">The fiscal note names the Attorney General’s office; see the cost below.</p>`:''}</section>`;
 }
 function officePanel(b){
   if(!ME) return `<aside class="side"><h3>Office information</h3><p class="small muted">Departments, divisions, designations and notes are for signed-in staff. <a href="/login?next=${encodeURIComponent('/'+location.hash)}">Sign in</a> to see them.</p>${b.sug.length?`<div class="sidegroup"><span class="flabel">Likely divisions, from the bill text</span>${b.sug.map(x=>`<div class="small">${esc(divName(x))} <span class="muted">(${esc(deptName((divById(x)||{}).dept))})</span></div>`).join('')}</div>`:''}</aside>`;
   const o=off(b)||{}, meta=o.meta||{};
-  const by=f=>meta[f]&&meta[f].by?`<div class="tiny muted" style="margin-top:3px">Set by ${esc(meta[f].by===ME.user?'you':meta[f].by)}${meta[f].at?' · '+fmtLong(new Date(meta[f].at)):''}</div>`:'';
+  const by=f=>meta[f]&&meta[f].by?`<div class="tiny muted" style="margin-top:3px">Set by ${esc(meta[f].by===ME.user?'you':pn(meta[f].by))}${meta[f].at?' · '+fmtLong(new Date(meta[f].at)):''}</div>`:'';
   const p=priOf(b);
   const pos=posOf(b);
   return `<aside class="side"><h3>Office information</h3><div class="tiny muted">Shared with the office${isAdmin()||P().scope==='all'?'':' (your account sees some bills)'}.</div>
@@ -1145,7 +1170,7 @@ function route(soft){
   const h=decodeURIComponent(location.hash.slice(1))||'updates'; const parts=h.split('-'); const view=parts[0];
   const y=scrollY; let html;
   if(view==='updates') html=pageUpdates();
-  else if(view==='bills') html=pageBills();
+  else if(view==='bills'){if(parts[1]&&showOptions().some(o=>o[0]===parts[1])){Object.assign(FLT,{show:parts[1],find:'',dept:[],div:[],desig:[],pri:[],pos:'',sponsor:'',sug:''});PAGE=1;saveFLT();location.replace('#bills');return}html=pageBills()}
   else if(view==='hearings'){location.replace('#updates');return}
   else if(view==='legislators'){const id=parts.slice(1).join('-');if(!id){location.replace('#learn-members');return}html=pageLearn('members',typeof legProfile==='function'?legProfile(id):'')}
   else if(view==='budget') html=pageBudget();
@@ -1156,7 +1181,8 @@ function route(soft){
   else if(view==='admin') html=pageAdmin();
   else if(view==='email') html=pageEmail(parts.slice(1).join('-'));
   else if(view==='fiscal') html=pageFiscal(parts.slice(1).join('-'));
-  else if(view==='outreach') html=typeof pageOutreach==='function'?pageOutreach(parts.slice(1).join('-')):shell('',`<div class="card"><h2>Not found</h2></div>`);
+  else if(view==='outreach'){const sub=parts.slice(1).join('-');if(/^(wish|interim)$/.test(sub)){location.replace(sub==='wish'?'#interim-wish':'#interim-study');return}html=typeof pageOutreach==='function'?pageOutreach(sub):shell('',`<div class="card"><h2>Not found</h2></div>`)}
+  else if(view==='interim') html=typeof pageInterim==='function'?pageInterim(parts.slice(1).join('-')):shell('',`<div class="card"><h2>Not found</h2></div>`);
   else if(view==='learn') html=pageLearn(parts.slice(1).join('-'));
   else if(view==='postsession') html=pageWrap(parts.slice(1).join('-'));
   else if(view==='packet') html=pagePacket(parts[1],parts.slice(2).join('-'));
@@ -1164,7 +1190,7 @@ function route(soft){
   else html=shell('',`<div class="card"><h2>Not found</h2></div>`);
   app.innerHTML=html; bind();
   if(soft) scrollTo(0,y);
-  const titles={features:'What Deseret Docket does',about:'About',fiscal:'Fiscal Hive',outreach:'Outreach',learn:'Learn the Legislature',postsession:'Session wrap-up',packet:'Prep packet',updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
+  const titles={features:'What Deseret Docket does',about:'About',fiscal:'Fiscal Hive',outreach:'Outreach',interim:'Interim',learn:'Learn the Legislature',postsession:'Session wrap-up',packet:'Prep packet',updates:'Updates',bills:'Bills',hearings:'Hearings',legislators:'Legislators',budget:'Budget',watchlist:'Watch list',account:'Account',admin:'Admin',email:'Email settings',bill:view==='bill'?(parts[2]==='F'?'Bill file':shortNum(parts.slice(2).join('-'))):''};
   document.title=(titles[view]?titles[view]+' · ':'')+'Deseret Docket';
 }
 const on=(id,ev,fn)=>{const el=$(id);if(el)el[ev]=fn};
@@ -1174,6 +1200,8 @@ function bind(){
   on('sessSel','onchange',async e=>{pickSession(e.target.value);PAGE=1;await loadSession(UI.session);if(location.hash.startsWith('#bill-'))location.hash='#bills';else route()});
   // bills
   on('fShow','onchange',e=>{FLT.show=e.target.value;PAGE=1;saveFLT();route()});
+  on('fLeg','onchange',e=>{FLT.sponsor=e.target.value;PAGE=1;saveFLT();route()});
+  on('fSort','onchange',e=>{FLT.sort={col:e.target.value,dir:1};PAGE=1;saveFLT();route()});
   on('fPri','onchange',e=>{FLT.pri=e.target.value?[e.target.value]:[];PAGE=1;saveFLT();route()});
   const ff=$('fFind'); if(ff){ff.onchange=()=>{FLT.find=ff.value;PAGE=1;saveFLT();route()};ff.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();ff.blur()}}}
   on('clearSp','onclick',()=>{FLT.sponsor='';saveFLT();route()});
@@ -1218,7 +1246,7 @@ function bind(){
   app.querySelectorAll('[data-note]').forEach(btn=>btn.onclick=()=>{const b=BYKEY[btn.dataset.note];let dlg=$('noteDlg');if(!dlg){dlg=document.createElement('dialog');dlg.id='noteDlg';document.body.appendChild(dlg)}
     dlg.innerHTML=`<form method="dialog"><h2>Note for ${esc(billLabel(b))}</h2><p class="small muted">${esc(b.title)}</p><textarea id="dlgNote" style="min-height:140px">${esc(noteOf(b))}</textarea><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button type="button" class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgSave">Save note</button></div></form>`;
     dlg.showModal();$('dlgCancel').onclick=()=>dlg.close();$('dlgSave').onclick=async e=>{e.preventDefault();const v=$('dlgNote').value.trim();if(await saveBill(b,{note:v})){toast('Note saved');dlg.close();route(true)}}});
-  app.querySelectorAll('[data-goshow]').forEach(a=>a.onclick=async()=>{FLT.show=a.dataset.goshow;FLT.find='';PAGE=1;saveFLT();if(a.dataset.gosess&&a.dataset.gosess!==UI.session){UI.session=a.dataset.gosess;saveUI();await loadSession(UI.session);route()}});
+  app.querySelectorAll('[data-goshow]').forEach(a=>a.onclick=async()=>{FLT.show=a.dataset.goshow;FLT.find='';if(a.dataset.goclear)Object.assign(FLT,{dept:[],div:[],desig:[],pri:[],pos:'',sponsor:'',sug:''});PAGE=1;saveFLT();if(a.dataset.gosess&&a.dataset.gosess!==UI.session){UI.session=a.dataset.gosess;saveUI();await loadSession(UI.session);route()}});
   // updates and email
   app.querySelectorAll('[data-upd]').forEach(b=>b.onclick=()=>{updScope=b.dataset.upd;route(true)});
   app.querySelectorAll('[data-side]').forEach(b=>b.onclick=()=>{SIDETAB=b.dataset.side;route(true)});
@@ -1273,10 +1301,10 @@ function bind(){
       const lab={departments:'departments',divisions:'divisions',designations:'designations',assignees:'assignments',priority:'priority',division:'division',flag:'flag'}[f]||f;
       const val=(v||'').split(',').filter(Boolean).map(x=>f==='departments'||f==='division'?deptName(x):f==='divisions'?divName(x):f==='priority'||f==='flag'?priName(x)||x:x).join(', ');
       return v==='none'?`cleared ${lab}`:`set ${lab} to ${val}`};
-    try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':x.by)} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
+    try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':pn(x.by))} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
     catch(e){$('teamLogBody').textContent='History didn’t load.';delete tl.dataset.done}});
   // page modules in their own files
-  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind','outBind','wishBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
+  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind','outBind','wishBind','intBind','meetBind','tablesBind','aboutBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
 }
 const curKey=()=>{const p=decodeURIComponent(location.hash.slice(1)).split('-');return p[1]+'/'+p.slice(2).join('-')};
 let lastPull=0;
@@ -1288,7 +1316,7 @@ window.addEventListener('hashchange',()=>{route();scrollTo(0,0);if(ME&&Date.now(
     const meP=fetch('/api/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():{user:null}).catch(()=>({user:null}));
     [INDEX,CONFIG]=await Promise.all([getJSON('data/index.json'),getJSON('config.json')]);
     const me=await meP;
-    if(me&&me.user){ME={user:me.user,display:me.display,email:me.email||'',first:me.first||'',last:me.last||'',title:me.title||'',phone:me.phone||'',role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{},tracker:me.tracker||null};PEOPLE=me.people||[]}
+    if(me&&me.user){ME={user:me.user,display:me.display,email:me.email||'',first:me.first||'',last:me.last||'',title:me.title||'',phone:me.phone||'',role:me.role,perms:me.perms,source:me.source,people:me.people,section:me.section||'',prefs:me.prefs||{},flags:me.flags||{},tracker:me.tracker||null};PEOPLE=me.people||[];NAMES=me.names||{}}
     loadCols();
     Promise.all([getJSON('data/legislators.json'),getJSON('geo/where.json').catch(()=>null)]).then(([l,w])=>{WHERE=w;LEGS=l;if(booted&&/^#(legislators|learn)/.test(location.hash))route(true)}).catch(()=>{LEGS=[]});
     const ids=INDEX.sessions.map(s=>s.id);
@@ -1464,6 +1492,6 @@ function sampleHearingHTML(){
   const h=SAMPLE_H;
   return `<div class="hearing sample"><div class="when"><span class="samplebadge">${ic('spark')}Test</span><b>${fmtTime(h.d)}</b><span>${esc(h.place)}</span><span class="tiny muted">${WD[h.d.getDay()]}, ${fmtLong(h.d)}</span></div><div><h4>${comInfo(h.committee)}</h4>
     <p class="small muted" style="margin:0 0 8px">This is a test hearing, not a real meeting, so you can see how hearings look and try “Add to calendar.” It goes away as soon as the Legislature posts real hearings. The bills are real; the meeting isn’t.</p>
-    ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(a)}</span>`).join('')}${b.agm&&typeof agTip==='function'?`<a class="pill solid tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|hearings|discussed" data-full="${esc(agTip(b))}">${ic('scale')}AG mentioned</a>`:''}</div>`).join('')}
+    ${h.bills.map(b=>`<div class="hb"><a class="billnum" href="${billHref(b)}">${esc(shortNum(b.num))}</a><span class="serif">${esc(b.title)}</span>${priOf(b)?`<span class="pri" style="--c:${priColor(priOf(b))}">${esc(priName(priOf(b)))}</span>`:''}${assignOf(b).map(a=>`<span class="chip">${esc(pn(a))}</span>`).join('')}${b.agm&&typeof agTip==='function'?`<a class="pill solid tagx" href="${billHref(b)}" data-jump="${esc(b.key)}|hearings|discussed" data-full="${esc(agTip(b))}">${ic('scale')}AG mentioned</a>`:''}</div>`).join('')}
     <div class="hlinks"><a class="small" href="${esc(h.url)}" target="_blank" rel="noopener">Agenda on le.utah.gov</a><button type="button" class="btn sm calbtn" data-cal="${esc(UI.session)}|SAMPLE">${ic('calendar')}Add to calendar</button></div></div></div>`;
 }
