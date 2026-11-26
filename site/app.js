@@ -951,6 +951,7 @@ function pageAdmin(){
    </tbody></table></div></div>
    ${typeof adminTrackerHTML==='function'?adminTrackerHTML():''}
    ${typeof adminExtraHTML==='function'?adminExtraHTML():''}
+   ${typeof adminInternsHTML==='function'?adminInternsHTML():''}
    <div class="card"><h2>People for “Assigned to”</h2><p class="desc">Everyone with an account is already in the list, by name (${esc(ADMIN.people.all.filter(n=>!ADMIN.people.extra.includes(n)).map(pn).join(', ')||'nobody yet')}). Add anyone else here, one name per line.</p>
     <textarea id="peopleIn" aria-label="Extra people, one per line">${esc(ADMIN.people.extra.join('\n'))}</textarea><p><button class="btn primary" id="savePeople">Save names</button></p></div>
    <dialog id="userDlg"></dialog>`);
@@ -1304,7 +1305,7 @@ function bind(){
     try{const r=await api('log?key='+encodeURIComponent(tl.dataset.key));$('teamLogBody').innerHTML=r.log.length?'<ul style="padding-left:18px;margin:6px 0">'+r.log.map(x=>`<li>${esc(x.by===ME.user?'You':pn(x.by))} ${esc(nice(x.what))} · ${fmtLong(new Date(x.at))}</li>`).join('')+'</ul>':'No changes yet.'}
     catch(e){$('teamLogBody').textContent='History didn’t load.';delete tl.dataset.done}});
   // page modules in their own files
-  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind','outBind','wishBind','intBind','meetBind','tablesBind','aboutBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
+  ['fhBind','learnBind','wrapBind','billExtraBind','adminExtraBind','legisBind','trackerBind','hearShareBind','agkBind','outBind','wishBind','intBind','meetBind','internsBind','tablesBind','aboutBind'].forEach(n=>{if(typeof window[n]==='function')window[n]()});
 }
 const curKey=()=>{const p=decodeURIComponent(location.hash.slice(1)).split('-');return p[1]+'/'+p.slice(2).join('-')};
 let lastPull=0;

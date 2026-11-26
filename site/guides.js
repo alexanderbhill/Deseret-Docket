@@ -42,6 +42,7 @@ function guideProcess(){
   const lane=k=>k==='H'?'First house':k==='S'?'Second house':k==='gov'?'Governor':'Both';
   return `<div class="card guide"><h2>How a bill becomes law in Utah</h2>
    <p class="desc">The general session runs 45 days, from late January to midnight on sine die in early March. Most of the work happens before it starts. Tap anything to read more.</p>
+   <a class="guide-video" href="https://www.youtube.com/watch?v=MMEweniYYDY" target="_blank" rel="noopener"><span class="gv-thumb"><img src="https://img.youtube.com/vi/MMEweniYYDY/mqdefault.jpg" alt="" loading="lazy" onerror="this.remove()"><span class="gv-play" aria-hidden="true">▶</span></span><span class="gv-txt"><span class="kicker">Watch first</span><b>How a bill becomes law (video)</b><span class="small muted">Opens on YouTube</span></span></a>
    <nav class="guide-toc">${[['g-ideas','💡 Ideas'],['g-staff','🧑‍💼 Staff'],['g-path','🛤️ The path'],['g-fn','💵 Fiscal notes'],['g-budget','🏦 The budget'],['g-die','🪦 Where bills die']].map(([i,l])=>`<a href="#learn-process" data-gto="${i}">${l}</a>`).join('')}</nav></div>
 
   <div class="card guide" id="g-ideas"><h2>1. Where bill ideas come from</h2><p class="desc">Anyone can bring a legislator an idea, but only a legislator can open a bill file. <b>Click any card</b> to see how that kind of idea becomes a bill.</p>

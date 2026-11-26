@@ -38,7 +38,7 @@ function gameMeet(){
     <div class="field"><label for="meetSort">Sort</label><select id="meetSort">${[['name','Last name'],['district','District'],['recent','Most recently met']].map(([k,l])=>`<option value="${k}" ${MEETF.sort===k?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="field grow"><label for="meetQ">Find</label><input type="search" id="meetQ" value="${esc(MEETF.q)}" placeholder="Name, city or county"></div></div>
    <div class="meet-grid">${L.map(l=>{const m=mine[l.id];return `<button type="button" class="meet-face ${m?'met':''}" data-meet="${esc(l.id)}" aria-pressed="${!!m}" title="${m?'Met '+esc(fmtLong(new Date(m.at)))+'. Tap to undo.':'Tap once you’ve met them'}"><span class="mf-img"><img src="${esc(legPhoto(l))}" alt="" loading="lazy">${m?`<span class="mf-ok">${ic('check')}</span>`:''}</span><b>${esc(l.name)}</b><span class="tiny">${l.house==='H'?'Rep.':'Sen.'} · ${esc(l.party||'')} · ${l.house==='H'?'HD':'SD'} ${esc(l.district)}</span>${m?`<span class="tiny mf-when">Met ${esc(fmtMD(new Date(m.at)))}</span>`:''}</button>`}).join('')||`<p class="empty">${MEETF.show==='left'&&!left.length?'Nobody left. You’ve met them all!':'No one matches.'}</p>`}</div></div>
-   <div class="card"><h2>${ic('trophy','h')}Who’s met the most</h2>${board.length?`<ol class="meet-board">${board.map((x,i)=>`<li class="${x.u===ME.user?'me':''}"><span class="r">${i+1}</span><span class="n">${esc(x.n)}${x.u===ME.user?' (you)':''}</span><i><b style="width:${x.c/all.length*100}%"></b></i><span class="c">${x.c}</span></li>`).join('')}</ol>`:'<p class="empty">No one has marked anyone yet. Be the first.</p>'}</div>`;
+   <div class="card"><h2>${ic('trophy','h')}Who’s met the most</h2>${board.length?`<ol class="meet-board">${board.map((x,i)=>`<li class="${x.u===ME.user?'me':''}"><span class="r">${i+1}</span><span class="n">${esc(x.n)}${x.u===ME.user?' (you)':''}</span><i><b style="width:${x.c/all.length*100}%"></b></i><span class="c">${x.c}</span></li>`).join('')}</ol>`:'<p class="empty">No one has marked anyone yet. Be the first.</p>'}<p class="small" style="margin:10px 0 0"><a href="#learn-board" data-lgb-meet>See it on the office leaderboard</a></p></div>`;
 }
 // A conversation starter from what's public about them: their district, their bills this session, their committees.
 function meetStarter(l){
@@ -66,7 +66,7 @@ function meetPick(){const mine=myMet();const left=LEGS.filter(l=>l.id&&!mine[l.i
 let BD=null;
 function loadBD(){if(BD===null&&ME){BD=undefined;api('bdays').then(j=>{BD=j.bdays||{};route(true)}).catch(()=>{BD={}})}return BD||null}
 const BD_MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
-const bdText=x=>{const [m,d]=x.md.split('-').map(Number);return `${BD_MON[m-1]} ${d}${x.year?', '+x.year:''}`};
+const bdText=x=>{const [m,d]=x.md.split('-').map(Number);return `${BD_MON[m-1]} ${d}`};
 const bdOf=l=>(loadBD()||{})[legBK(l)]||null;
 function gameBdays(){
   if(!ME)return `<div class="card"><h2>🎂 Birthday hunt</h2><p class="desc">Sign in to help find legislators’ birthdays.</p></div>`;
@@ -76,7 +76,7 @@ function gameBdays(){
   const pct=all.length?Math.round(have.length/all.length*100):0;
   const soon=have.map(l=>{const x=bdOf(l);const [m,d]=x.md.split('-').map(Number);let t=new Date(TODAY.getFullYear(),m-1,d);if(t<TODAY&&ymd(t)!==todayStr)t=new Date(TODAY.getFullYear()+1,m-1,d);return {l,x,t}}).filter(o=>(o.t-TODAY)/864e5<=30).sort((a,b)=>a.t-b.t);
   const src=s=>/^https?:\/\//.test(s)?`<a href="${esc(s)}" target="_blank" rel="noopener">${esc(s.replace(/^https?:\/\/(www\.)?/,'').slice(0,48))}${s.length>60?'…':''}</a>`:esc(s);
-  return `<div class="card bd"><div class="bd-top"><div><h2>🎂 Birthday hunt</h2><p class="desc">A team project, not a game: help find the birthdays of the legislators the office doesn’t have yet. Tap a face, add the month and day, and say where you found it (a link to a post or article, their office, or who told you) so anyone can check it.</p></div>
+  return `<div class="card bd"><div class="bd-top"><div><h2>🎂 Birthday hunt</h2><p class="desc">A team effort, so there are no points and it’s not on the leaderboard: help find the birthdays of the legislators the office doesn’t have yet. Tap a face, add the month and day, and say where you found it (a link to a post or article, their office, or who told you) so anyone can check it.</p></div>
      ${isAdmin()?`<label class="btn sm">${ic('file')}Load the office’s list<input type="file" id="bdImp" accept=".xlsx,.xls" hidden></label>`:''}</div>
     <div class="bd-prog"><i><b style="width:${pct}%"></b></i><span><b>${have.length}</b> of ${all.length} found · <b>${miss.length}</b> to go</span></div>
     ${waiting.length?`<p class="tiny muted">Also ${plural(waiting.length,'birthday')} for incoming legislators, waiting for the Legislature’s list to include them.</p>`:''}</div>
@@ -91,7 +91,6 @@ function bdDialog(id){
   dlg.innerHTML=`<form method="dialog" id="bdForm"><div style="display:flex;gap:14px;align-items:center"><img src="${esc(legPhoto(l))}" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover"><div><h2 style="margin:0">${esc(legTitle(l))}</h2><div class="small muted">${l.house==='H'?'House':'Senate'} District ${esc(l.district)}</div></div></div>
    <div class="grid2" style="gap:10px;margin-top:14px"><div class="field"><label for="bdM">Month</label><select id="bdM" required><option value="">—</option>${BD_MON.map((n,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${m===String(i+1).padStart(2,'0')?'selected':''}>${n}</option>`).join('')}</select></div>
     <div class="field"><label for="bdD">Day</label><select id="bdD" required><option value="">—</option>${Array.from({length:31},(_,i)=>String(i+1).padStart(2,'0')).map(v=>`<option ${d===v?'selected':''}>${v}</option>`).join('')}</select></div></div>
-   <div class="field" style="margin-top:10px"><label for="bdY">Year <span class="tiny muted">(only if it’s public)</span></label><input id="bdY" inputmode="numeric" maxlength="4" value="${esc(x.year||'')}" placeholder="optional"></div>
    <div class="field" style="margin-top:10px"><label for="bdS">Where you found it</label><textarea id="bdS" rows="2" required placeholder="A link to the post or article, “their office told me,” “said so in committee on Jan. 20”…">${esc(x.src||'')}</textarea></div>
    ${x.by?`<p class="tiny muted">Added by ${esc(x.by)}${x.at?' on '+esc(fmtLong(new Date(x.at))):''}.</p>`:''}
    <div style="display:flex;gap:10px;justify-content:space-between;margin-top:14px"><span>${x.md&&(isAdmin()||x.byUser===ME.user)?'<button type="button" class="btn danger" id="bdDel">Remove</button>':''}</span><span style="display:flex;gap:10px"><button type="button" class="btn" id="bdCancel">Cancel</button><button class="btn primary">Save</button></span></div></form>`;
@@ -99,7 +98,7 @@ function bdDialog(id){
   if($('bdDel'))$('bdDel').onclick=async()=>{if(!confirm('Remove this birthday?'))return;try{const j=await api('bdays',{action:'delete',k:legBK(l)});BD=j.bdays;dlg.close();route(true)}catch(e){toast(e.message)}};
   $('bdForm').onsubmit=async e=>{e.preventDefault();const md=`${$('bdM').value}-${$('bdD').value}`;
     const [mm,dd]=md.split('-').map(Number);if(dd>new Date(2000,mm,0).getDate()){toast(`${BD_MON[mm-1]} doesn’t have ${dd} days.`);return}
-    try{const j=await api('bdays',{k:legBK(l),name:l.name,md,year:$('bdY').value.trim(),src:$('bdS').value.trim()});BD=j.bdays;dlg.close();toast(`Saved. Thanks for finding ${l.name}’s birthday!`);route(true)}catch(err){toast(err.message)}};
+    try{const j=await api('bdays',{k:legBK(l),name:l.name,md,src:$('bdS').value.trim()});BD=j.bdays;dlg.close();toast(`Saved. Thanks for finding ${l.name}’s birthday!`);route(true)}catch(err){toast(err.message)}};
 }
 // Admin: read the Elected Officials Contacts workbook. Only the House and Senate sheets' district, names and birthday are read.
 async function bdImport(file){
@@ -108,10 +107,10 @@ async function bdImport(file){
       const rows=X.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:''});const hi=rows.findIndex(r=>r.some(c=>/^district$/i.test(String(c).trim())));if(hi<0)continue;
       const H=rows[hi].map(c=>String(c).trim().toLowerCase()),ci=k=>H.findIndex(h=>h===k);const cD=ci('district'),cF=ci('first name'),cL=ci('last name'),cB=ci('birthday');if([cD,cL,cB].some(i=>i<0))continue;
       for(const r of rows.slice(hi+1)){const dist=parseInt(r[cD],10),last=String(r[cL]||'').trim(),b=r[cB];if(!dist||!last||b===''||b==null)continue;
-        let mo,da,yr='';if(typeof b==='number'){const p=X.SSF.parse_date_code(b);mo=p.m;da=p.d;yr=p.y}else{const t=new Date(String(b));if(isNaN(t))continue;mo=t.getMonth()+1;da=t.getDate();yr=t.getFullYear()}
-        items.push({k:`${house}-${dist}-${lastNameOf(last)}`,name:`${String(r[cF]||'').trim()} ${last}`.trim(),md:`${String(mo).padStart(2,'0')}-${String(da).padStart(2,'0')}`,year:yr&&yr!==2000&&yr<2010?String(yr):'',src:'Office contacts workbook'})}}
+        let mo,da;if(typeof b==='number'){const p=X.SSF.parse_date_code(b);mo=p.m;da=p.d}else{const t=new Date(String(b));if(isNaN(t))continue;mo=t.getMonth()+1;da=t.getDate()}
+        items.push({k:`${house}-${dist}-${lastNameOf(last)}`,name:`${String(r[cF]||'').trim()} ${last}`.trim(),md:`${String(mo).padStart(2,'0')}-${String(da).padStart(2,'0')}`,src:'Office contacts workbook'})}}
     if(!items.length){toast('No birthdays found. The workbook needs House and Senate sheets with District, Last Name and Birthday columns.');return}
-    if(!confirm(`Load ${plural(items.length,'birthday')} from “${file.name}”? Only names, districts and birthdays are read. Birthdays someone already added aren’t changed.`))return;
+    if(!confirm(`Load ${plural(items.length,'birthday')} from “${file.name}”? Only names, districts and birthdays (month and day) are read. Birthdays someone already added aren’t changed.`))return;
     const j=await api('bdays',{action:'import',items});BD=j.bdays;toast(`Loaded ${plural(j.added,'new birthday')}`);route(true)}
   catch(e){toast(e.message)}
 }
@@ -122,6 +121,7 @@ document.addEventListener('click',e=>{
 });
 function meetBind(){
   if(!location.hash.startsWith('#learn'))return;
+  app.querySelectorAll('[data-lgb-meet]').forEach(a=>a.onclick=()=>{if(typeof LGBGAME!=='undefined')LGBGAME='meet'});
   on('meetSug','onclick',meetPick);on('meetSug2','onclick',meetPick);
   on('meetH','onchange',e=>{MEETF.house=e.target.value;route(true)});on('meetSort','onchange',e=>{MEETF.sort=e.target.value;route(true)});
   const q=$('meetQ');if(q)q.oninput=()=>{MEETF.q=q.value;clearTimeout(q._t);q._t=setTimeout(()=>{q.blur();route(true);const n=$('meetQ');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}},250)};

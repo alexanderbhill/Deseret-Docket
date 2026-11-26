@@ -978,17 +978,18 @@ export async function onRequest(context) {
     }
     // ---------------- Learn: the birthday hunt (everyone signed in finds legislators' birthdays together)
     // Stored by chamber, district and last name, so a birthday found for an incoming legislator attaches to them
-    // as soon as the Legislature's data lists them. { "H-3-belmont": { name, house, district, md: "04-21", year, src, by, at } }
+    // as soon as the Legislature's data lists them. { "H-3-belmont": { name, house, district, md: "04-21", src, by, at } }
+    // Month and day only: no birth year is collected or shown (any year saved earlier is dropped on read).
     if (route === "bdays") {
       const f = await db.prepare("SELECT v FROM settings WHERE k = 'bdays'").first();
       const all = f ? obj(f.v) : {};
+      for (const v of Object.values(all)) { delete v.year; if (v.prev) delete v.prev.year; }
       if (method === "GET") return json({ bdays: all });
       const K_RE = /^[HS]-\d{1,2}-[a-z'-]{2,40}$/;
       const clean = (x) => {
         const k = String(x.k || ""), md = String(x.md || "");
         if (!K_RE.test(k) || !/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(md)) return null;
-        const year = /^(19[2-9]\d|200\d)$/.test(String(x.year || "")) ? String(x.year) : "";
-        return { k, v: { name: String(x.name || "").trim().slice(0, 80), house: k[0], district: k.split("-")[1], md, year, src: String(x.src || "").trim().slice(0, 400) } };
+        return { k, v: { name: String(x.name || "").trim().slice(0, 80), house: k[0], district: k.split("-")[1], md, src: String(x.src || "").trim().slice(0, 400) } };
       };
       if (body.action === "import") {
         if (user.role !== "admin") return bad("Only an admin can import birthdays.", 403);
@@ -1016,6 +1017,50 @@ export async function onRequest(context) {
       }
       await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('bdays', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(all), user.name, new Date().toISOString()).run();
       return json({ ok: true, bdays: all });
+    }
+    // ---------------- Legislators: each legislator's intern(s), from the list the Legislature sends each session.
+    // Signed-in people can read it (guests can't). Only an admin can upload or change it. Stored by chamber, district
+    // and last name, like the birthdays: { list: { "H-3-belmont": [{ name, email, phone }] }, file, by, at }
+    if (route === "interns") {
+      const f = await db.prepare("SELECT v FROM settings WHERE k = 'interns'").first();
+      const all = f ? obj(f.v) : {};
+      all.list = all.list && typeof all.list === "object" ? all.list : {};
+      if (method === "GET") return json(all);
+      if (user.role !== "admin") return bad("Only an admin can change intern contacts.", 403);
+      const K_RE = /^[HS]-\d{1,2}-[a-z'-]{2,40}$/;
+      const one = (x) => {
+        const name = String((x && x.name) || "").trim().slice(0, 80);
+        let email = String((x && x.email) || "").trim().toLowerCase().slice(0, 120);
+        if (email && !/^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/.test(email)) email = "";
+        const phone = String((x && x.phone) || "").replace(/[^0-9()+.\-x ]/gi, "").trim().slice(0, 30);
+        return name || email || phone ? { name, email, phone } : null;
+      };
+      const stamp = () => { all.by = user.display || user.name; all.at = new Date().toISOString(); };
+      if (body.action === "import") {
+        const next = body.replace ? {} : { ...all.list };
+        const touched = new Set();
+        let n = 0;
+        for (const x of (Array.isArray(body.items) ? body.items : []).slice(0, 600)) {
+          const k = String(x.k || ""), c = one(x);
+          if (!K_RE.test(k) || !c) continue;
+          // A new upload replaces what that legislator had before; several rows for one legislator are all kept.
+          if (!touched.has(k)) { next[k] = []; touched.add(k); }
+          if (next[k].length < 6) { next[k].push(c); n++; }
+        }
+        all.list = next; all.file = String(body.file || "").slice(0, 120); stamp();
+        await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('interns', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(all), user.name, new Date().toISOString()).run();
+        return json({ ...all, added: n });
+      }
+      if (body.action === "clear") { all.list = {}; all.file = ""; stamp(); }
+      else {
+        const k = String(body.k || "");
+        if (!K_RE.test(k)) return bad("Pick a legislator.");
+        const list = (Array.isArray(body.interns) ? body.interns : []).map(one).filter(Boolean).slice(0, 6);
+        if (list.length) all.list[k] = list; else delete all.list[k];
+        stamp();
+      }
+      await db.prepare("INSERT INTO settings (k, v, by, at) VALUES ('interns', ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, by=excluded.by, at=excluded.at").bind(JSON.stringify(all), user.name, new Date().toISOString()).run();
+      return json(all);
     }
     // ---------------- Learn: Meet the Legislature (each person marks the legislators they've talked with)
     if (route === "lgmet") {

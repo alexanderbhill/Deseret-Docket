@@ -44,7 +44,7 @@ function legProfile(id){
     ${Object.keys(groups).length?Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,list])=>`<h4 class="lp-g">${esc(k)} <span class="tiny muted">${list.length}</span></h4>${list.sort(SORTS.num).map(b=>`<div class="lp-b"><a class="billnum" href="${billHref(b)}">${esc(billLabel(b))}</a><span class="serif">${esc(b.title)}</span>${outcome(b)?`<span class="pill ${outcome(b).k}">${esc(outcome(b).l)}</span>`:''}${posOf(b)?`<span class="pos" style="--c:${posColor(posOf(b))}">${esc(posName(posOf(b)))}</span>`:''}${cposChips(b)}</div>`).join('')}`).join(''):'<p class="empty">No bills this session yet.</p>'}
    </div>
    ${typeof outLegHTML==='function'?outLegHTML(l.id):''}
-   <div class="lp-actions"><a class="btn" href="#bills" data-sponsor="${esc(l.id)}">Open ${pron(l).p} bills in the table</a>${legEmail(l)?`<a class="btn" href="mailto:${esc(legEmail(l))}">Email</a>`:''}</div>
+   <div class="lp-actions"><a class="btn" href="#bills" data-sponsor="${esc(l.id)}">Open ${pron(l).p} bills in the table</a>${legEmail(l)?`<a class="btn" href="mailto:${esc(legEmail(l))}">Email</a>`:''}${typeof internBtnHTML==='function'?internBtnHTML(l):''}</div>
   </div></div>`;
 }
 function lpAlignHTML(l){

@@ -3,6 +3,10 @@
    only, never names, and only for signed-in accounts. */
 'use strict';
 const CHANGES=[
+ ['2026-11-26','Intern contacts, and Learn tweaks',[
+   'Each legislator’s profile can show a <b>Contact their intern</b> button (email, phone, copy). An admin uploads the Legislature’s intern list on the Admin tab, checks how each row matched, and imports it; one-off fixes can be made from the profile. Guests never see intern contacts.',
+   '<b>Meet the Legislature</b> now counts on the Learn leaderboard. The <b>Birthday hunt</b> sits with the games but stays off the leaderboard, and it records month and day only, never a birth year.',
+   '<b>How a bill becomes law</b> opens with a link to a short video walk-through.']],
  ['2026-11-26','Interim tab, rumor bills and an activity log that writes itself',[
    'A new <b>Interim</b> tab holds the wish list, interim study items and a new <b>Rumor bills</b> board for bills people say are coming. When a bill file opens with the same sponsor or the same words, the site offers it as a match to link in one click. Rumors, like wish list ideas, can go to the divisions through Draft review.',
    'Outreach is rebuilt around a short <b>Needs you</b> list, <b>Quick log</b> (one line after a call, email or hallway conversation) and a <b>Legislators</b> view showing when the office last talked with each one.',

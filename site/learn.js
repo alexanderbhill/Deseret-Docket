@@ -24,18 +24,29 @@ function loadBoard(){if(LGB===null&&ME){LGB=undefined;api('lgboard').then(j=>{LG
 // The "All games" total: each game counts up to 100 points, your best as a share of the office's best in that game,
 // so piling up one game can't outweigh the others.
 const LGB_CAP=100;
+// What the leaderboard ranks: every scored game, plus Meet the Legislature (how many legislators each person has
+// met, from the `lgmet` setting). The Birthday hunt is a team effort and is never on the board.
+const BOARD_GAMES=[...GAMES,['meet','🤝 Meet the Legislature']];
+function boardWithMeet(B){
+  const M=typeof loadMet==='function'?loadMet():null;if(!M)return B.board;
+  const ids=new Set(LEGS.filter(l=>l.id).map(l=>l.id)), out={};
+  for(const [u,x] of Object.entries(B.board))out[u]={...x,s:{...(x.s||{})}};
+  for(const [u,x] of Object.entries(M)){const c=Object.keys(x.m||{}).filter(id=>ids.has(id)).length;if(!c)continue;
+    const r=out[u]||(out[u]={n:x.n||u,s:{}});if(!r.n)r.n=x.n||u;r.s.meet=c}
+  return out}
 function boardHTML(){
   if(!ME)return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">Sign in to put your scores on the office leaderboard.</p></div>`;
   const B=loadBoard();if(!B)return '<div class="card"><p>Loading the leaderboard…</p></div>';
-  const top={};for(const x of Object.values(B.board))for(const [k,v] of Object.entries(x.s||{}))top[k]=Math.max(top[k]||0,v);
+  const BD=boardWithMeet(B);
+  const top={};for(const x of Object.values(BD))for(const [k,v] of Object.entries(x.s||{}))top[k]=Math.max(top[k]||0,v);
   const pts=(s,k)=>s&&top[k]?Math.round(LGB_CAP*s/top[k]):0;
-  const g=LGBGAME, rows=Object.entries(B.board).map(([u,x])=>({u,n:x.n||u,v:g==='all'?GAMES.reduce((a,[k])=>a+pts((x.s||{})[k],k),0):((x.s||{})[g]||0),s:x.s||{}})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v||a.n.localeCompare(b.n));
+  const g=LGBGAME, rows=Object.entries(BD).map(([u,x])=>({u,n:x.n||u,v:g==='all'?BOARD_GAMES.reduce((a,[k])=>a+pts((x.s||{})[k],k),0):((x.s||{})[g]||0),s:x.s||{}})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v||a.n.localeCompare(b.n));
   let rank=0,prev=null;rows.forEach((r,i)=>{if(r.v!==prev){rank=i+1;prev=r.v}r.rank=rank});
   const medal=n=>n===1?'🥇':n===2?'🥈':n===3?'🥉':n;
-  const unit=g==='agquiz'?'Best score':'Best streak';
-  return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">${g==='all'?`Every game counts the same: each is worth up to ${LGB_CAP} points, your best compared with the office’s best in that game. Playing one game over and over can’t earn more than ${LGB_CAP}, so the top spot goes to whoever does well across all ${GAMES.length}.`:`Everyone’s ${unit.toLowerCase()} in this game.`}</p>
-   <div class="seg lgb-seg" role="group" aria-label="Game">${[['all','All games'],...GAMES].map(([k,l])=>`<button type="button" data-lgb="${k}" class="${g===k?'on':''}">${l}</button>`).join('')}</div>
-   ${rows.length?`<table class="lgb"><thead><tr><th>#</th><th>Player</th>${g==='all'?GAMES.map(([k,l])=>`<th class="n hide-m" title="${esc(l.replace(/^\S+\s/,''))}">${l.split(' ')[0]}</th>`).join(''):''}<th class="n">${g==='all'?`Total <span class="tiny muted">of ${GAMES.length*LGB_CAP}</span>`:unit}</th></tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr class="${r.u===B.me?'me':''}"><td>${medal(r.rank)}</td><td>${esc(r.n)}${r.u===B.me?' <span class="tiny muted">(you)</span>':''}</td>${g==='all'?GAMES.map(([k])=>`<td class="n hide-m" ${r.s[k]?`title="Your best: ${r.s[k].toLocaleString()} · office best: ${(top[k]||0).toLocaleString()}"`:''}>${r.s[k]?pts(r.s[k],k):''}</td>`).join(''):''}<td class="n"><b>${r.v.toLocaleString()}</b></td></tr>`).join('')}</tbody></table>`:'<p class="empty">No scores yet. Play a game to get on the board.</p>'}</div>`;
+  const unit=g==='agquiz'?'Best score':g==='meet'?'Legislators met':'Best streak';
+  return `<div class="card"><h2>🏆 Leaderboard</h2><p class="desc">${g==='all'?`Every game counts the same: each is worth up to ${LGB_CAP} points, your best compared with the office’s best in that game. Playing one game over and over can’t earn more than ${LGB_CAP}, so the top spot goes to whoever does well across all ${BOARD_GAMES.length}, including how many legislators you’ve met.`:g==='meet'?'How many legislators each person has met, from Meet the Legislature.':`Everyone’s ${unit.toLowerCase()} in this game.`}</p>
+   <div class="seg lgb-seg" role="group" aria-label="Game">${[['all','All games'],...BOARD_GAMES].map(([k,l])=>`<button type="button" data-lgb="${k}" class="${g===k?'on':''}">${l}</button>`).join('')}</div>
+   ${rows.length?`<table class="lgb"><thead><tr><th>#</th><th>Player</th>${g==='all'?BOARD_GAMES.map(([k,l])=>`<th class="n hide-m" title="${esc(l.replace(/^\S+\s/,''))}">${l.split(' ')[0]}</th>`).join(''):''}<th class="n">${g==='all'?`Total <span class="tiny muted">of ${BOARD_GAMES.length*LGB_CAP}</span>`:unit}</th></tr></thead><tbody>${rows.slice(0,50).map(r=>`<tr class="${r.u===B.me?'me':''}"><td>${medal(r.rank)}</td><td>${esc(r.n)}${r.u===B.me?' <span class="tiny muted">(you)</span>':''}</td>${g==='all'?BOARD_GAMES.map(([k])=>`<td class="n hide-m" ${r.s[k]?`title="Your best: ${r.s[k].toLocaleString()} · office best: ${(top[k]||0).toLocaleString()}"`:''}>${r.s[k]?pts(r.s[k],k):''}</td>`).join(''):''}<td class="n"><b>${r.v.toLocaleString()}</b></td></tr>`).join('')}</tbody></table>`:'<p class="empty">No scores yet. Play a game to get on the board.</p>'}</div>`;
 }
 // ---------- keyboard: 1–4 (or R and D) to answer, Enter, space or → for the next card
 document.addEventListener('keydown',e=>{
@@ -89,10 +100,11 @@ const LEARN_PLAY=[['faces','🧑‍⚖️','Face match','See a photo, pick the l
  ['redo','🏛️','Capitol quirks','Jell-O, the state dinosaur, a 45-day session: odd bills and fun facts from Utah’s Legislature.'],
  ['terms','📖','Floor vocabulary','Circled, sine die, concurrence… learn the words you’ll hear on day one.'],
  ['agquiz','⚡','AG Office Showdown','A fast, timed quiz on the Attorney General’s Office: its history, leaders, big cases and priorities.'],
- ['meet','🤝','Meet the Legislature','Tap each legislator’s face once you’ve talked with them. See who’s left and how you stack up.'],
- ['board','🏆','Leaderboard','See who in the office has the longest streak in each game.']];
-// Projects everyone works on together (no points).
-const LEARN_TEAM=[['bdays','🎂','Birthday hunt','Help find the birthdays of the legislators the office doesn’t have yet, and where each one came from.']];
+ ['meet','🤝','Meet the Legislature','Tap each legislator’s face once you’ve talked with them. See who’s left and how you stack up on the leaderboard.'],
+ ['bdays','🎂','Birthday hunt','Help find the birthdays of the legislators the office doesn’t have yet. A team effort, so it isn’t on the leaderboard.'],
+ ['board','🏆','Leaderboard','See who in the office leads each game, and who’s met the most legislators.']];
+// Projects everyone works on together (no points). The Birthday hunt moved into the games list; kept for later ones.
+const LEARN_TEAM=[];
 const LEARN_READ=[['process','🛤️','How a bill becomes law','Where bill ideas come from, who drafts and prices them, every step to the governor, and how the budget gets built.'],
  ['ag','⚖️','The AG’s Office, explained','Counselors, protectors and stewards: the org chart, what each division does, the office in the news, and fun facts.'],
  ['districts','📍','Where every legislator is','A map of Utah with a dot for each senator or representative, colored by party.'],
@@ -109,7 +121,7 @@ function pageLearn(sub,extra=''){
    <nav class="learn-nav" aria-label="Learn"><a href="#learn" class="${cur===''?'on':''}">🏠 Start</a></nav>
    <div class="learn-navs"><nav class="learn-nav" aria-label="Games"><span class="nav-l">Play</span>${LEARN_PLAY.map(chip).join('')}</nav>
    <nav class="learn-nav" aria-label="Guides"><span class="nav-l">Learn</span>${LEARN_READ.map(chip).join('')}</nav>
-   ${ME?`<nav class="learn-nav" aria-label="Together"><span class="nav-l">Together</span>${LEARN_TEAM.map(chip).join('')}</nav>`:''}</div></div>`;
+   ${ME&&LEARN_TEAM.length?`<nav class="learn-nav" aria-label="Together"><span class="nav-l">Together</span>${LEARN_TEAM.map(chip).join('')}</nav>`:''}</div></div>`;
   const pick={faces:gameFaces,party:gameParty,redo:gameRedo,facts:gameFacts,quotes:gameQuotes,terms:gameTerms,map:()=>typeof gameMap==='function'?gameMap():'',agquiz:()=>typeof gameAG==='function'?gameAG():''};
   let body='';
   if(pick[sub])body=pick[sub]();else if(sub==='process')body=guideProcess();else if(sub==='members')body=memberGrid();else if(sub==='board')body=boardHTML();
@@ -120,11 +132,11 @@ function pageLearn(sub,extra=''){
   const qid=qidOf(sub,LG.q), mine=qid&&ME&&(loadFlags()[qid]||[]).includes(ME.user);
   if(qid&&ME&&body.startsWith('<div class="card lg"'))body=body.slice(0,-6)+`<p class="lg-flag">${mine?'<span class="tiny muted">🚩 You flagged this question. It’s removed once someone else flags it too.</span> <button type="button" class="linkbtn tiny" data-lgunflag="'+esc(qid)+'">Undo</button>':'<button type="button" class="linkbtn tiny" data-lgflag="'+esc(qid)+'" title="Wrong, confusing or has more than one right answer? Two flags remove it.">🚩 Flag this question</button>'}</p></div>`;
   if(body.startsWith('<div class="card lg"')&&body.endsWith('</div>')&&!(sub==='map'&&LG.q&&LG.q.mode==='where'))body=body.slice(0,-6)+(sub==='party'?`<p class="tiny muted lg-keys">Keys: <kbd>R</kbd> or <kbd>D</kbd> to answer · <kbd>Enter</kbd> for the next one</p>`:keyHint())+'</div>';
-  if(!body) body=`<h3 class="learn-sec">${typeof ic==='function'?ic('trophy'):''} Play</h3><p class="small muted learn-sec-d">Quick games to learn faces, districts and the vocabulary. Your best streaks go on the office leaderboard.</p>
+  if(!body) body=`<h3 class="learn-sec">${typeof ic==='function'?ic('trophy'):''} Play</h3><p class="small muted learn-sec-d">Quick games to learn faces, districts and the vocabulary. Your best streaks, and how many legislators you’ve met, go on the office leaderboard. The Birthday hunt is a team effort, so it isn’t scored.</p>
    <div class="learn-grid">${LEARN_PLAY.map(learnTile).join('')}</div>
    <h3 class="learn-sec">${typeof ic==='function'?ic('book'):''} Learn</h3><p class="small muted learn-sec-d">Guides and references to read at your own pace.</p>
    <div class="learn-grid">${LEARN_READ.map(learnTile).join('')}</div>
-   ${ME?`<h3 class="learn-sec">${typeof ic==='function'?ic('users'):''} Together</h3><p class="small muted learn-sec-d">Projects the whole office works on. No points, just progress.</p>
+   ${ME&&LEARN_TEAM.length?`<h3 class="learn-sec">${typeof ic==='function'?ic('users'):''} Together</h3><p class="small muted learn-sec-d">Projects the whole office works on. No points, just progress.</p>
    <div class="learn-grid">${LEARN_TEAM.map(learnTile).join('')}</div>`:''}`;
   return shell('learn',head+body+extra);
 }

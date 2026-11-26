@@ -1460,3 +1460,24 @@ tr.grp-row .tiny{font-weight:400;color:var(--muted);margin-left:6px}
 @media (max-width:640px){.chg-e{grid-template-columns:1fr;gap:4px}}
 #outDlg{width:min(760px,94vw)}#outDlg .out-form{min-width:0}
 .cpk-box{position:relative}
+
+/* How a bill becomes law: the video link */
+.guide-video{display:flex;gap:14px;align-items:center;margin:12px 0 4px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--row-alt);text-decoration:none;color:var(--ink);max-width:560px}
+.guide-video:hover{border-color:var(--steel)}
+.guide-video .gv-thumb{position:relative;flex:0 0 160px;height:90px;border-radius:8px;overflow:hidden;background:var(--navy)}
+.guide-video .gv-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.guide-video .gv-play{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:30px;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+.guide-video .gv-txt{display:flex;flex-direction:column;gap:2px}.guide-video .gv-txt b{color:var(--navy);font-size:17px}
+@media (max-width:520px){.guide-video .gv-thumb{flex-basis:110px;height:62px}}
+
+/* Legislator profile: contact their intern */
+.lp-intern{flex-basis:100%}
+.lp-intern>summary{list-style:none;display:inline-flex;cursor:pointer}.lp-intern>summary::-webkit-details-marker{display:none}
+.lp-int-box{margin-top:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.lp-int{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;padding:6px 0}
+.lp-int+.lp-int{border-top:1px solid var(--line)}
+.lp-int-b{display:flex;gap:6px;flex-wrap:wrap}
+.int-row{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:8px;margin-bottom:8px}.int-row input{width:100%}
+@media (max-width:560px){.int-row{grid-template-columns:1fr}}
+dialog.wide{max-width:min(980px,calc(100vw - 32px))}
+tr.int-miss td{background:var(--red-bg)}
